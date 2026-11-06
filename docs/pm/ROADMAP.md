@@ -10,7 +10,7 @@
 | Milestone | Goal | Depends on | Status | Issues (done/total) | Tag |
 |---|---|---|---|---|---|
 | **Setup** | Repo, docs, Claude Code config, GitHub workflow | — | ✅ Done | — | — |
-| **M0** | Foundation and risk spikes: packaged Electron app with SQLite, IPC, Pixi, React Flow | Setup | ⏳ Planned | 0/8 | — |
+| **M0** | Foundation and risk spikes: packaged Electron app with SQLite, IPC, Pixi, React Flow | Setup | ⏳ Planned | 0/8 (#4–#11) | — |
 | **M1** | Profiles, worlds, project persistence (list UI, no canvas) | M0 | 📋 Backlog | — | — |
 | **M2** | Isometric world, placement, hotbar, library, Atlas shell | M1 | 📋 Backlog | — | — |
 | **M3** | Bundled resources, permission broker, artifacts, import commit | M1 (∥ M2) | 📋 Backlog | — | — |

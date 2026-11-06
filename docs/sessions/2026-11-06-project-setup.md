@@ -38,4 +38,4 @@
 Package manager, Electron build tooling, SQLite binding, license. Each will be asked via AskUserQuestion and recorded as an ADR.
 
 ## Next step
-Run `/start-task <M0-1 issue#>` in a new session.
+Run `/start-task 4` (M0-1) in a new session. Also review and merge the 3 Dependabot PRs (#1–#3) as a first practice with PR review.
