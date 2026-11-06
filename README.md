@@ -18,7 +18,7 @@ Start at **[docs/README.md](docs/README.md)**. It's a map of every document with
 |---|---|
 | Understand the product | [docs/product/PRD.md](docs/product/PRD.md) |
 | Know the rules that must never break | [docs/product/PRODUCT_RULES.md](docs/product/PRODUCT_RULES.md) |
-| See progress and what's next | [docs/pm/ROADMAP.md](docs/pm/ROADMAP.md) · [GitHub Project board](https://github.com/jash-aeio/AtlasRealm/projects) |
+| See progress and what's next | [docs/pm/ROADMAP.md](docs/pm/ROADMAP.md) · [GitHub Project board](https://github.com/users/jash-aeio/projects/1) |
 | Learn how we work with Claude | [docs/process/DEVELOPMENT_WORKFLOW.md](docs/process/DEVELOPMENT_WORKFLOW.md) |
 | Learn the concepts | [docs/learning/LEARNING_LOG.md](docs/learning/LEARNING_LOG.md) |
 
