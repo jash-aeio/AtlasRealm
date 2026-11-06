@@ -33,7 +33,7 @@ jobs:
 
       # Enabled automatically once M0-1 adds package.json. M0-1 should finalize these steps
       # (package manager per ADR, cache, exact script names).
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: steps.app.outputs.present == 'true' && hashFiles('pnpm-lock.yaml') != ''
       - uses: actions/setup-node@v4
         if: steps.app.outputs.present == 'true'
