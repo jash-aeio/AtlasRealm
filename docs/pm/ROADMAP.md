@@ -1,6 +1,6 @@
 # Roadmap & progress
 
-> This is the **Markdown mirror** of the GitHub Milestones and Project board. GitHub is the source of truth for issue status. Run `/sync-pm` to refresh this file.
+> This is the **Markdown mirror** of the GitHub Milestones and [Project board](https://github.com/users/jash-aeio/projects/1). GitHub is the source of truth for issue status. Run `/sync-pm` to refresh this file.
 > Full milestone specs (build, checks, exit criteria): [ROADMAP_SPEC.md](ROADMAP_SPEC.md) · Task-level dependency graphs: [DEPENDENCIES.md](DEPENDENCIES.md)
 
 **Last synced:** 2026-11-06 · **Current milestone:** M0 (not started)
