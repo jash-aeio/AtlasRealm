@@ -1,0 +1,44 @@
+# Dependencies & build output
+node_modules/
+dist/
+out/
+release/
+build/
+coverage/
+*.tsbuildinfo
+.vite/
+
+# Environment & secrets (never commit these)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local / personal Claude Code settings
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
+
+# Logs & OS clutter
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# Test artifacts
+playwright-report/
+test-results/
+
+# Asset staging (unreviewed generated art never gets committed)
+resources/assets/_staging/

@@ -1,0 +1,9 @@
+{
+  "_comment": "Copy to .claude/settings.local.json (gitignored) for personal overrides that shouldn't be shared, e.g. extra allowed commands or turning learning mode off when you're in a hurry.",
+  "permissions": {
+    "allow": []
+  },
+  "enabledPlugins": {
+    "learning-output-style@claude-plugins-official": true
+  }
+}

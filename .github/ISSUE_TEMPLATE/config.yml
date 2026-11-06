@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Product spec and docs map
+    url: https://github.com/jash-aeio/AtlasRealm/blob/main/docs/README.md
+    about: Check the spec before filing. Many questions are already answered there.

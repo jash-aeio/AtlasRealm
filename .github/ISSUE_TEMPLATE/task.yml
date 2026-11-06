@@ -1,0 +1,45 @@
+name: Task
+description: A unit of planned work (½–1 day), usually part of a milestone
+title: "Mx-n: "
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What outcome, and why it matters (1–2 sentences)
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checkable statements. Include relevant spec §22.2 scenarios.
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: input
+    id: depends
+    attributes:
+      label: Depends on
+      placeholder: "#12, #13 (or 'none')"
+  - type: textarea
+    id: files
+    attributes:
+      label: Files owned
+      description: Paths this task will change (used to decide parallel safety)
+  - type: textarea
+    id: docs
+    attributes:
+      label: Docs to read
+      placeholder: docs/architecture/DATA_MODEL.md §9.2
+  - type: dropdown
+    id: parallel
+    attributes:
+      label: Parallel-safe?
+      options: ["No", "Yes"]
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / decisions needed

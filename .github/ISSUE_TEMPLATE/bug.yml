@@ -1,0 +1,29 @@
+name: Bug
+description: Something doesn't work as specified
+title: "bug: "
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened vs. what was expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: dev or packaged build, commit/tag, Windows version
+  - type: textarea
+    id: rule
+    attributes:
+      label: Related spec rule (if any)
+      placeholder: PRODUCT_RULES §3.1 "Removing a building returns its project to an unplaced state"
