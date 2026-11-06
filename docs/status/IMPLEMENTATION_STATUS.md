@@ -33,5 +33,5 @@ Setup ✅ complete → **M0 — Foundation and risk spikes** (not started)
 - ADR-0001 … ADR-0006 (stack defaults and approved Nov 6 product decisions)
 
 ## Next task
-- **M0-1 Tooling scaffold**: run `/start-task <issue#>` (see `gh issue list --milestone M0`).
+- **M0-1 Tooling scaffold**: run `/start-task 4` (issue #4).
   Acceptance: `pnpm install && pnpm typecheck && pnpm lint && pnpm test` pass locally and in CI; TS strict; README and CLAUDE.md commands filled in. Start by asking about package manager and license (AskUserQuestion → ADR).
