@@ -38,4 +38,9 @@
 Package manager, Electron build tooling, SQLite binding, license. Each will be asked via AskUserQuestion and recorded as an ADR.
 
 ## Next step
-Run `/start-task <M0-1 issue#>` in a new session.
+Run `/start-task 4` (M0-1) in a new session. Also review and merge the 3 Dependabot PRs (#1–#3) as a first practice with PR review.
+
+## Follow-up: project board
+- You added the `project` scope to the gh login (`gh auth refresh -h github.com -s project`). The `-h github.com` was needed because the command ran outside an interactive terminal.
+- Created **[Atlas Realm Roadmap](https://github.com/users/jash-aeio/projects/1)**, linked to the repo. Status columns: Backlog / Ready / In Progress / In Review / Done. Custom fields: **Lane** (A/B/C/D/Integrator) and **Parallel-safe** (Yes/No).
+- Issues #4–#11 and PR #12 are on the board. #4 (M0-1) and #11 (M0-8) are **Ready**: their dependencies are done. The rest are in Backlog until M0-1 merges.
