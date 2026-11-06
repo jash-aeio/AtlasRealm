@@ -35,7 +35,7 @@ jobs:
       # (package manager per ADR, cache, exact script names).
       - uses: pnpm/action-setup@v4
         if: steps.app.outputs.present == 'true' && hashFiles('pnpm-lock.yaml') != ''
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.app.outputs.present == 'true'
         with:
           node-version: 24
