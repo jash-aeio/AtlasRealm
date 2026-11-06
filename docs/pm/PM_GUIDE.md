@@ -8,7 +8,7 @@ How Atlas Realm is managed, and why each practice is used in real teams.
 | **Issues** | One unit of work (a task, bug, or spike) | GitHub → Issues |
 | **Milestones** | A group of issues that together deliver a demo-able outcome | GitHub → Issues → Milestones |
 | **Labels** | Tags for filtering (`type:`, `area:`, `parallel-safe`, `blocked`…) | GitHub → Labels |
-| **Project board** | A Kanban view of all issues: Backlog → Ready → In Progress → In Review → Done | GitHub → Projects → "Atlas Realm Roadmap" |
+| **Project board** | A Kanban view of all issues: Backlog → Ready → In Progress → In Review → Done, plus **Lane** and **Parallel-safe** fields | [Atlas Realm Roadmap](https://github.com/users/jash-aeio/projects/1) |
 | **Markdown mirror** | `docs/pm/ROADMAP.md`, so you (and Claude) can see progress offline and in the repo | `/sync-pm` |
 | **Dependency graph** | What blocks what, and so what can run in parallel | `docs/pm/DEPENDENCIES.md` |
 

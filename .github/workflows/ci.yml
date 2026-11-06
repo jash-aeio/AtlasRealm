@@ -17,7 +17,7 @@ jobs:
     name: checks
     runs-on: windows-latest # the app targets Windows first; native modules must build here
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Validate repo config (JSON + hook scripts)
         shell: bash
