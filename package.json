@@ -1,0 +1,19 @@
+{
+  "name": "atlas-realm",
+  "version": "0.0.0",
+  "description": "Local-first Windows desktop app where projects are buildings in a fantasy isometric world.",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "6.0.3"
+  }
+}

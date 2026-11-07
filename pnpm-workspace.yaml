@@ -1,0 +1,4 @@
+# pnpm settings (pnpm 10+ keeps them here even for a single-package repo).
+# Dependency install scripts are blocked unless listed below with `true`.
+# Every allowance needs a reason in its commit message (ADR-0007).
+allowBuilds: {}
