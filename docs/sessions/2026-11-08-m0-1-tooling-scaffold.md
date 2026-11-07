@@ -21,7 +21,23 @@ Create the tooling foundation: package manager, TypeScript strict, ESLint/Pretti
 6. `docs`: README "Getting started" + "License", CLAUDE.md "Commands".
 
 ## Done
-_(filled in as slices land)_
+- ADR-0007, ADR-0008 and `LICENSE` written.
+- `package.json` (pnpm 12.18.0 via `packageManager`), `pnpm-workspace.yaml` (empty `allowBuilds`), strict `tsconfig.json`, first source file `src/common/errors/assert-never.ts`.
+- ESLint flat config (typescript-eslint `strictTypeChecked`) + Prettier. Prettier applied once to existing hooks/settings/YAML (formatting only). One empty `catch {}` fixed.
+- Vitest 5 + Vite 8 (Vite is a required peer of Vitest 5). The `assertNever` tests are `it.todo` with a `TODO(you)`.
+- CI runs install → typecheck → lint → format:check → test on windows-latest.
+- README "Getting started"/"License" and CLAUDE.md "Commands" filled in.
+
+## Verification evidence
+- `typecheck` passes clean and fails (exit 2) on a deliberate type error, including passing a non-`never` value to `assertNever`.
+- `lint` initially caught a real issue (an empty catch block in `session-context.mjs`).
+- The `format.mjs` hook reformatted a deliberately messy `.ts` file after a Write.
+- `guard-bash.mjs` still blocks `git push origin main` (exit 2) after reformatting. The live hook even blocked a test command containing `--no-verify`.
+- `test` exits 1 on a deliberately failing probe test and 0 otherwise.
+
+## Things to know
+- `corepack enable` failed with EPERM because Node lives in `D:\Node` (a protected folder). Run `corepack enable pnpm` once in an **admin** terminal, or prefix commands with `corepack`.
+- Node 25+ no longer ships corepack (noted in ADR-0007).
 
 ## Open questions
-- None yet.
+- Electron build tooling (electron-vite vs Forge): decide at the start of M0-2. Check its Vite 8 support.
