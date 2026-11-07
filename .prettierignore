@@ -1,0 +1,11 @@
+# Generated
+pnpm-lock.yaml
+coverage/
+dist/
+out/
+release/
+build/
+
+# Docs are prose (some verbatim from the spec): don't reformat them
+docs/
+*.md

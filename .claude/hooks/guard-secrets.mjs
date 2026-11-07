@@ -8,14 +8,19 @@ const filePath = String(ti.file_path ?? '').replace(/\\/g, '/');
 const name = filePath.split('/').pop() ?? '';
 
 if (/^\.env(\..+)?$/.test(name) && name !== '.env.example') {
-  block(`Writing ${name} is not allowed. Secrets go in the OS credential vault (app) or your own local env, never via Claude. Use .env.example for placeholders.`);
+  block(
+    `Writing ${name} is not allowed. Secrets go in the OS credential vault (app) or your own local env, never via Claude. Use .env.example for placeholders.`,
+  );
 }
 if (/\.(pem|key|p12|pfx)$/i.test(name) || /^id_(rsa|ed25519|ecdsa)/.test(name)) {
   block(`Writing key material (${name}) is not allowed.`);
 }
 
-const texts = [ti.content, ti.new_string, ...(Array.isArray(ti.edits) ? ti.edits.map((e) => e?.new_string) : [])]
-  .filter((t) => typeof t === 'string');
+const texts = [
+  ti.content,
+  ti.new_string,
+  ...(Array.isArray(ti.edits) ? ti.edits.map((e) => e?.new_string) : []),
+].filter((t) => typeof t === 'string');
 
 const patterns = [
   [/sk-ant-[A-Za-z0-9_-]{20,}/, 'an Anthropic API key'],
@@ -29,7 +34,9 @@ const patterns = [
 for (const text of texts) {
   for (const [re, label] of patterns) {
     if (re.test(text)) {
-      block(`Content looks like ${label}. Never put real credentials in files. Use a placeholder such as "<YOUR_KEY>" instead.`);
+      block(
+        `Content looks like ${label}. Never put real credentials in files. Use a placeholder such as "<YOUR_KEY>" instead.`,
+      );
     }
   }
 }
