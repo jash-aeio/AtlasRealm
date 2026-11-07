@@ -5,6 +5,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | # | Lesson | Milestone | Concepts |
 |---|---|---|---|
 | 001 | [AI-assisted development workflow](lessons/001-ai-assisted-dev-workflow.md) | Setup | spec-driven development, CLAUDE.md, skills, hooks, subagents, MCP, PR flow |
+| 002 | [The quality toolchain](lessons/002-the-quality-toolchain.md) | M0 | package manager, lockfile, type check, lint, format, tests, CI, exhaustiveness checks |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map

@@ -26,6 +26,8 @@ Create the tooling foundation: package manager, TypeScript strict, ESLint/Pretti
 - ESLint flat config (typescript-eslint `strictTypeChecked`) + Prettier. Prettier applied once to existing hooks/settings/YAML (formatting only). One empty `catch {}` fixed.
 - Vitest 5 + Vite 8 (Vite is a required peer of Vitest 5). The `assertNever` tests are `it.todo` with a `TODO(you)`.
 - CI runs install → typecheck → lint → format:check → test on windows-latest.
+- `assertNever` tests written. The user asked Claude to write them instead of doing the `TODO(you)`. The compile-time test was proven: handling every case makes typecheck fail with TS2578 "Unused '@ts-expect-error' directive".
+- Shipped: status, roadmap, glossary (8 new terms), lesson 002, changelog updated. Invariant review run (see PR).
 - README "Getting started"/"License" and CLAUDE.md "Commands" filled in.
 
 ## Verification evidence
