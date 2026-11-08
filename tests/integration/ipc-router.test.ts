@@ -133,6 +133,7 @@ describe('trustRendererEntry', () => {
     ['another app:// host', 'app://evil/index.html'],
     ['another custom scheme', 'evil://atlas/index.html'],
     ['a port on our host', 'app://atlas:1/index.html'],
+    ['credentials before our host', 'app://x@atlas/index.html'],
     ['a local file', 'file:///C:/Users/me/Downloads/evil.html'],
     [
       'the old built file:// entry',
@@ -147,6 +148,7 @@ describe('trustRendererEntry', () => {
   it('refuses to build a check for a file:// or other unsupported entry', () => {
     expect(() => trustRendererEntry('file:///C:/app/index.html')).toThrow(/Unsupported/);
     expect(() => trustRendererEntry('https://atlas.example/')).toThrow(/Unsupported/);
+    expect(() => trustRendererEntry('app://other/index.html')).toThrow(/Unsupported/);
   });
 
   it('rejects subframes, missing frames and unparseable URLs', () => {

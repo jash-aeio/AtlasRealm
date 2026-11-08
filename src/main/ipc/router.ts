@@ -10,7 +10,7 @@ import type { z } from 'zod';
 
 import type { Channel } from '../../common/contracts/channels';
 import type { IpcError, IpcErrorCode, IpcResult } from '../../common/contracts/ipc-result';
-import { APP_SCHEME } from '../bootstrap/app-origin';
+import { isAppOrigin } from '../bootstrap/app-origin';
 
 /** Largest accepted payload, measured as UTF-8 JSON. Generous for commands, tiny for abuse. */
 export const MAX_PAYLOAD_BYTES = 64 * 1024;
@@ -39,7 +39,7 @@ export type CommandHandler<I extends z.ZodType, O extends z.ZodType> = (
  */
 export function trustRendererEntry(entryUrl: string): SenderCheck {
   const entry = new URL(entryUrl);
-  const isAppEntry = entry.protocol === `${APP_SCHEME}:`;
+  const isAppEntry = isAppOrigin(entry);
   if (!isAppEntry && entry.protocol !== 'http:') {
     throw new Error(`Unsupported renderer entry scheme: ${entry.protocol}`);
   }
@@ -51,9 +51,10 @@ export function trustRendererEntry(entryUrl: string): SenderCheck {
     } catch {
       return false;
     }
-    // Node's URL reports origin "null" for custom schemes, so compare the parts instead:
-    // comparing two "null" origins would trust every custom-scheme page.
-    if (isAppEntry) return url.protocol === entry.protocol && url.host === entry.host;
+    // Not URL.origin: Node reports "null" for custom schemes, and "null" === "null" would
+    // trust every custom-scheme page. The whole origin is trusted, not just index.html:
+    // same-origin history.pushState can change the path anyway.
+    if (isAppEntry) return isAppOrigin(url);
     return url.origin === entry.origin;
   };
 }

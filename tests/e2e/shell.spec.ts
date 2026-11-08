@@ -160,12 +160,19 @@ test('file: scripts and images are blocked from the app:// page', async () => {
     const imgResult = load(img);
     document.body.append(img);
 
-    const results = { script: await scriptResult, img: await imgResult };
+    // The #16 threat: a network-share image that would make Windows send the NTLM hash.
+    const uncImg = document.createElement('img');
+    uncImg.src = 'file://127.0.0.1/c$/Windows/Web/Screen/img100.jpg';
+    const uncResult = load(uncImg);
+    document.body.append(uncImg);
+
+    const results = { script: await scriptResult, img: await imgResult, unc: await uncResult };
     script.remove();
     img.remove();
+    uncImg.remove();
     return results;
   });
-  expect(outcome).toEqual({ script: 'blocked', img: 'blocked' });
+  expect(outcome).toEqual({ script: 'blocked', img: 'blocked', unc: 'blocked' });
 });
 
 test('app:// handler refuses paths outside the renderer folder', async () => {

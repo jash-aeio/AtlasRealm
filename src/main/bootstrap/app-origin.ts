@@ -8,6 +8,20 @@ export const APP_HOST = 'atlas';
 export const APP_ENTRY_URL = `${APP_SCHEME}://${APP_HOST}/index.html`;
 
 /**
+ * True for URLs of our app://atlas origin. Shared by the protocol handler and the IPC sender
+ * check so they can't disagree. Node's URL.host leaves out user:password@, so check it too.
+ * (URL.origin is no help: Node reports "null" for every custom scheme.)
+ */
+export function isAppOrigin(url: URL): boolean {
+  return (
+    url.protocol === `${APP_SCHEME}:` &&
+    url.host === APP_HOST &&
+    url.username === '' &&
+    url.password === ''
+  );
+}
+
+/**
  * Maps an `app://atlas/...` request to a file inside `rootDir`, or returns undefined if the
  * request must be refused. Path confinement: after decoding, the resolved file must stay
  * inside rootDir, so `..`, encoded `%2e%2e`/`%2f`/`%5c`, drive letters and UNC paths can't
@@ -20,14 +34,7 @@ export function resolveAppRequestPath(rootDir: string, requestUrl: string): stri
   } catch {
     return undefined;
   }
-  if (
-    url.protocol !== `${APP_SCHEME}:` ||
-    url.host !== APP_HOST ||
-    url.username !== '' ||
-    url.password !== ''
-  ) {
-    return undefined;
-  }
+  if (!isAppOrigin(url)) return undefined;
 
   let pathname: string;
   try {

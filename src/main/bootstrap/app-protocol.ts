@@ -16,14 +16,22 @@ export function registerAppScheme(): void {
   ]);
 }
 
-/** Serves read-only files from `rootDir` (out/renderer) under app://atlas/. Call after ready. */
+/**
+ * Serves read-only files from `rootDir` (out/renderer) under app://atlas/. Call after ready.
+ *
+ * Rule: only our own build output may ever be served from app://atlas, because the IPC
+ * sender check trusts that whole origin. User files, imports or generated assets need a
+ * different host or scheme with no IPC trust.
+ */
 export function serveAppProtocol(rootDir: string): void {
   protocol.handle(APP_SCHEME, async (request) => {
     if (request.method !== 'GET') return new Response(null, { status: 405 });
     const filePath = resolveAppRequestPath(rootDir, request.url);
     if (filePath === undefined) return new Response(null, { status: 404 });
     try {
-      return await net.fetch(pathToFileURL(filePath).href);
+      // Bypass custom handlers so a future file: blocker (packaging, #10) can't intercept or
+      // break the UI's own asset reads.
+      return await net.fetch(pathToFileURL(filePath).href, { bypassCustomProtocolHandlers: true });
     } catch {
       // Missing file or a folder. Don't echo the path: it contains the install location.
       return new Response(null, { status: 404 });
