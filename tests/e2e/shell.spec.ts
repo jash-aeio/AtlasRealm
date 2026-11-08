@@ -115,3 +115,74 @@ test('new windows and navigation away are blocked', async () => {
   expect(page.url()).toBe(startUrl);
   expect(app.windows()).toHaveLength(1);
 });
+
+test('built UI loads from the app://atlas origin, not file://', async () => {
+  expect(page.url()).toBe('app://atlas/index.html');
+  // Assets resolve relative to the page, so they come from app:// too.
+  const scripts = await page.evaluate(() =>
+    // Skip inline scripts (no src), e.g. the one the CSP test injects.
+    Array.from(document.scripts)
+      .filter((script) => script.src !== '')
+      .map((script) => new URL(script.src).protocol),
+  );
+  expect(scripts.length).toBeGreaterThan(0);
+  expect(new Set(scripts)).toEqual(new Set(['app:']));
+});
+
+// On the old file:// page, 'self' matched file: URLs, so these loads were allowed (and a UNC
+// img could leak the NTLM hash). From app://atlas, Chromium refuses file: resources outright
+// ("Not allowed to load local resource") before CSP is even consulted, and 'self' no longer
+// covers file: either. We assert the outcome: neither load succeeds.
+test('file: scripts and images are blocked from the app:// page', async () => {
+  const outcome = await page.evaluate(async () => {
+    // Real files that exist on every Windows machine, so a block can't be a 404 in disguise.
+    const target = 'file:///C:/Windows/System32/drivers/etc/hosts';
+    const load = (element: HTMLScriptElement | HTMLImageElement): Promise<string> =>
+      new Promise((resolve) => {
+        element.addEventListener('load', () => {
+          resolve('loaded');
+        });
+        element.addEventListener('error', () => {
+          resolve('blocked');
+        });
+        setTimeout(() => {
+          resolve('timeout');
+        }, 2000);
+      });
+
+    const script = document.createElement('script');
+    script.src = target;
+    const scriptResult = load(script);
+    document.head.append(script);
+
+    const img = document.createElement('img');
+    img.src = 'file:///C:/Windows/Web/Screen/img100.jpg';
+    const imgResult = load(img);
+    document.body.append(img);
+
+    const results = { script: await scriptResult, img: await imgResult };
+    script.remove();
+    img.remove();
+    return results;
+  });
+  expect(outcome).toEqual({ script: 'blocked', img: 'blocked' });
+});
+
+test('app:// handler refuses paths outside the renderer folder', async () => {
+  // The renderer can't fetch() app:// (we don't grant supportFetchAPI), so drive the real
+  // protocol.handle handler from the main process: net.fetch goes through it too.
+  const statuses = await app.evaluate(async ({ net }) => {
+    const probe = async (url: string, method = 'GET'): Promise<number> =>
+      (await net.fetch(url, { method })).status;
+    return Promise.all([
+      probe('app://atlas/index.html'), // control: a real file comes back
+      probe('app://atlas/..%2F..%2Fpackage.json'),
+      probe('app://atlas/..%5C..%5Cpackage.json'),
+      probe('app://atlas/..%2Fmain%2Findex.js'),
+      probe('app://atlas/C%3A%5CWindows%5Cwin.ini'),
+      probe('app://atlas/does-not-exist.js'),
+      probe('app://atlas/index.html', 'POST'),
+    ]);
+  });
+  expect(statuses).toEqual([200, 404, 404, 404, 404, 404, 405]);
+});
