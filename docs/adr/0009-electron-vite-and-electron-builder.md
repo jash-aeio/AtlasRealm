@@ -22,7 +22,7 @@ We chose **electron-vite (build and dev server) + electron-builder (packaging)**
 ## Consequences
 - `electron.vite.config.ts` defines the main, preload and renderer builds. `pnpm dev` runs `electron-vite dev`.
 - electron-builder is added in M0-7, not M0-2, so we only add dependencies when they're needed.
-- Electron's postinstall downloads its binary. It must be listed under `allowBuilds` in `pnpm-workspace.yaml` (ADR-0007).
+- Electron 45 has no install script, so it doesn't need an `allowBuilds` entry (ADR-0007). It downloads its binary from GitHub Releases on first launch, checked against bundled checksums. CI runs `install-electron` up front with retries. (Corrected 2026-11-08: this line first said a postinstall needed `allowBuilds`.)
 - **Signals to revisit:** electron-vite stops releasing versions for new Vite/Electron majors. electron-builder can't package the pnpm layout or the native SQLite module in M0-7. Forge's Vite plugin leaves experimental status and becomes clearly better supported.
 
 ## Learning note

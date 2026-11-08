@@ -24,7 +24,7 @@
   - Build tooling: electron-vite 6 (ADR-0009). Packaging (electron-builder) is not set up yet.
 
 ## Changed components
-- M0-2: `electron.vite.config.ts`, `playwright.config.ts`, `tsconfig.{base,node,web,e2e}.json` (tsconfig split per environment), `pnpm-workspace.yaml` (`allowBuilds: electron`), `package.json` scripts
+- M0-2: `electron.vite.config.ts`, `playwright.config.ts`, `tsconfig.{base,node,web,e2e}.json` (tsconfig split per environment), `package.json` scripts
 - `src/main/` (bootstrap, ipc), `src/preload/`, `src/renderer/`, `src/common/contracts/`, `src/common/security/`
 - `tests/integration/`, `tests/security/`, `tests/e2e/`; CI gains an E2E step
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`

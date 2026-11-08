@@ -39,6 +39,11 @@ Learning-mode piece for the user: the `PingInput` Zod schema (rules are spelled 
   - The router runs the Zod schema before measuring size, so a huge binary payload is rejected by shape without being serialized (test).
 - **Deferred:** serve the built UI from a custom `app://` protocol instead of `file://` (on a file page, CSP `'self'` covers other local and UNC files). Tracked as [#16](https://github.com/jash-aeio/AtlasRealm/issues/16) (created after the user allowed `gh issue create`).
 
+## CI fix (after the PR opened)
+- The second CI run failed: GitHub returned **504 Gateway Time-out** while downloading the Electron binary, so the app couldn't launch (1 E2E failed, 7 didn't run). Not a code bug: the run before it passed 8/8.
+- Fix: CI now downloads Electron in its own step with 3 retries (`pnpm exec install-electron`).
+- Correction found while investigating: Electron 45 has **no install script** (it downloads lazily on first launch). So `allowBuilds: electron` was unnecessary and has been removed. The earlier `chore(deps)` commit message and ADR-0009 said otherwise; the ADR now carries a correction note.
+
 ## Open questions
 - The renderer bundle isn't minified (electron-vite's default, ~567 kB). Revisit in M0-7 packaging.
 - `react` / `react-dom` are in `dependencies` although they're bundled into the renderer. M0-7 should decide what electron-builder ships.
