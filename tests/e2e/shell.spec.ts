@@ -5,11 +5,16 @@ import {
   type ElectronApplication,
   type Page,
 } from '@playwright/test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // Smoke + security probes against the built app (out/). Launched without
 // ELECTRON_RENDERER_URL, so it loads the production index.html and production CSP.
 let app: ElectronApplication;
 let page: Page;
+// Throwaway userData, so tests never touch the developer's real profile database.
+const userDataDir = mkdtempSync(join(tmpdir(), 'atlas-e2e-shell-'));
 
 test.beforeAll(async () => {
   const env = Object.fromEntries(
@@ -18,13 +23,14 @@ test.beforeAll(async () => {
         entry[1] !== undefined && entry[0] !== 'ELECTRON_RENDERER_URL',
     ),
   );
-  app = await electron.launch({ args: ['.'], env });
+  app = await electron.launch({ args: ['.', `--user-data-dir=${userDataDir}`], env });
   page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
 });
 
 test.afterAll(async () => {
   await app.close();
+  rmSync(userDataDir, { recursive: true, force: true });
 });
 
 test('opens a window titled "Atlas Realm"', async () => {
