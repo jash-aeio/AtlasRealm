@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ### Added
+- Local database (M0-3, #6): the app keeps a SQLite database in its user-data folder (built-in `node:sqlite`, ADR-0010). It has versioned migrations that run in transactions, an automatic backup before upgrading an existing database, and a clear error (no silent reset) if the database can't be opened. For now it stores only launch facts. Only one copy of the app can run at a time.
 - Electron app shell (M0-2, #5): a window titled "Atlas Realm" with a sandboxed, isolated renderer, a strict CSP, and blocked navigation and pop-ups. A single Zod-validated IPC command (`app.ping`, an M0 spike) round-trips from the UI to the main process. Covered by unit tests and Playwright E2E tests. Build tooling: electron-vite (ADR-0009).
 - Developer tooling (M0-1, #4): pnpm via corepack, strict TypeScript, ESLint + Prettier, Vitest, and CI running all checks on Windows. No runnable app yet.
 - License: proprietary, all rights reserved (ADR-0008).

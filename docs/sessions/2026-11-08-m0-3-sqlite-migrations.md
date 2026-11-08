@@ -26,10 +26,12 @@ See the plan in the conversation / PR. Slices:
 - `migrations/index.ts`: migration 0001 `app_meta`. `repositories/app-meta-repository.ts` has typed keys and `recordLaunch()`.
 - `app-database.ts` + `src/main/index.ts`: startup opens `userData/profiles/default/app.sqlite`, migrates and counts the launch. On failure it shows an error box and quits, with no silent empty database.
 - **Learning piece:** offered `assertMigrationsAreValid` as a `TODO(you)`; the user asked Claude to write it. One rule (`version === index + 1`) covers gaps, duplicates, order, start and fractions; 9 tests.
+- **Review fixes (/ship):** the invariant review found no violations. The security review found no Critical or High issues. Fixed: a single-instance lock (Medium: two instances could race through migrations; E2E-tested and shown to fail without the lock), a fixed error-dialog text with no raw paths, and `trusted_schema = OFF` + defensive mode for future restore/import files. Not fixed: backup pruning (M7 retention).
+- Lesson [004](../learning/lessons/004-migrations-transactions-backups.md) written. Glossary: binding, online backup, repository, rollback, transaction, WAL.
 - Both E2E specs now launch with a temporary `--user-data-dir`, so tests never write to the real profile.
 
 ## Verification (local Windows 11, 2026-11-08)
-- typecheck, lint and format:check pass. Unit/integration: 69 passed. E2E 9/9.
+- typecheck, lint and format:check pass. Unit/integration: 70 passed. E2E 10/10.
 - The E2E restart test (`tests/e2e/storage.spec.ts`) starts the built app twice and reads `launch_count = 2` from the file. Mutation check: with launch recording removed, it failed (`Received: undefined`).
 - Found and fixed while testing: the first backup version left `-wal`/`-shm` side files next to the copy.
 - Not yet tested automatically: the error box on a failed migration at startup (the logic underneath is covered by integration tests).
