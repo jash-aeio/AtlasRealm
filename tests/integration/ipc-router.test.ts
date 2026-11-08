@@ -49,9 +49,10 @@ describe('createCommandHandler', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it('rejects a payload over the size limit before schema validation', async () => {
+  it('rejects a schema-valid payload that is over the size limit', async () => {
     const handler = vi.fn(() => ({ echoed: 'never' }));
-    const handle = createCommandHandler(echo, handler, isTrusted);
+    const unbounded = { ...echo, input: z.strictObject({ text: z.string() }) };
+    const handle = createCommandHandler(unbounded, handler, isTrusted);
 
     const result = await handle(trustedSender, { text: 'x'.repeat(MAX_PAYLOAD_BYTES) });
 
@@ -59,8 +60,20 @@ describe('createCommandHandler', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it('rejects data that is not JSON-serializable', async () => {
+  it('rejects a huge binary payload by shape, without serializing it', async () => {
     const handle = createCommandHandler(echo, () => ({ echoed: '' }), isTrusted);
+    const stringify = vi.spyOn(JSON, 'stringify');
+
+    const result = await handle(trustedSender, new Uint8Array(10 * 1024 * 1024));
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'invalid_payload' } });
+    expect(stringify).not.toHaveBeenCalled();
+    stringify.mockRestore();
+  });
+
+  it('rejects data that is not JSON-serializable', async () => {
+    const loose = { ...echo, input: z.strictObject({ text: z.unknown() }) };
+    const handle = createCommandHandler(loose, () => ({ echoed: '' }), isTrusted);
     await expect(handle(trustedSender, { text: 1n })).resolves.toMatchObject({
       ok: false,
       error: { code: 'invalid_payload' },
@@ -113,6 +126,12 @@ describe('trustRendererEntry', () => {
     expect(isTrusted(senderAt(ENTRY))).toBe(true);
     expect(isTrusted(senderAt(`${ENTRY}#/world`))).toBe(true);
     expect(isTrusted(senderAt('file:///C:/Users/me/Downloads/evil.html'))).toBe(false);
+  });
+
+  it('rejects a UNC (network share) URL even when its path matches', () => {
+    const unc = ENTRY.replace('file:///', 'file://attacker/');
+    expect(new URL(unc).pathname).toBe(new URL(ENTRY).pathname);
+    expect(isTrusted(senderAt(unc))).toBe(false);
   });
 
   it('rejects subframes, missing frames and unparseable URLs', () => {

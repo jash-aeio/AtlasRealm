@@ -3,6 +3,8 @@ import { pathToFileURL } from 'node:url';
 
 import { app, BrowserWindow, session } from 'electron';
 
+import { assertLocalDevServerUrl } from './dev-server-url';
+
 // The bundled main process lives in out/main/, next to out/preload/ and out/renderer/.
 const PRELOAD_PATH = join(import.meta.dirname, '../preload/index.cjs');
 const RENDERER_HTML_PATH = join(import.meta.dirname, '../renderer/index.html');
@@ -13,7 +15,7 @@ const RENDERER_HTML_PATH = join(import.meta.dirname, '../renderer/index.html');
  */
 export function rendererEntryUrl(): string {
   const devUrl = process.env['ELECTRON_RENDERER_URL'];
-  if (!app.isPackaged && devUrl !== undefined) return devUrl;
+  if (!app.isPackaged && devUrl !== undefined) return assertLocalDevServerUrl(devUrl);
   return pathToFileURL(RENDERER_HTML_PATH).href;
 }
 

@@ -1,8 +1,10 @@
 // Command router core: every IPC command passes these checks, in this order, before
 // any handler code runs (ARCHITECTURE.md §7.2, §16.1):
 //   1. sender check: the request comes from our own UI's main frame
-//   2. size check: the payload is bounded
-//   3. schema check: the payload matches the command's Zod input schema
+//   2. schema check: the payload matches the command's Zod input schema. This runs before
+//      measuring size because it fails fast on wrong shapes (e.g. a 50 MB typed array)
+//      without serializing them
+//   3. size check: the validated payload is bounded
 // Nothing here imports Electron at runtime, so it is unit-tested with fake senders.
 import type { z } from 'zod';
 
@@ -31,7 +33,8 @@ export type CommandHandler<I extends z.ZodType, O extends z.ZodType> = (
 
 /**
  * Returns a sender check that only trusts the main frame of the page we loaded ourselves.
- * Dev server URLs match by origin; built `file://` pages must be exactly our index.html.
+ * Dev server URLs match by origin. Built `file://` pages must be exactly our index.html on
+ * this machine: a UNC URL (file://server/...) has a host and is rejected even if its path matches.
  */
 export function trustRendererEntry(entryUrl: string): SenderCheck {
   const entry = new URL(entryUrl);
@@ -44,7 +47,7 @@ export function trustRendererEntry(entryUrl: string): SenderCheck {
       return false;
     }
     if (entry.protocol === 'file:') {
-      return url.protocol === 'file:' && url.pathname === entry.pathname;
+      return url.protocol === 'file:' && url.host === entry.host && url.pathname === entry.pathname;
     }
     return url.origin === entry.origin;
   };
@@ -70,17 +73,17 @@ export function createCommandHandler<I extends z.ZodType, O extends z.ZodType>(
       return fail('forbidden_sender', 'Request rejected: unknown sender.');
     }
 
-    const size = payloadBytes(raw);
+    const parsed = definition.input.safeParse(raw);
+    if (!parsed.success) {
+      return fail('invalid_payload', `Request rejected: invalid ${definition.channel} payload.`);
+    }
+
+    const size = payloadBytes(parsed.data);
     if (size === undefined) {
       return fail('invalid_payload', 'Request rejected: payload is not plain data.');
     }
     if (size > MAX_PAYLOAD_BYTES) {
       return fail('payload_too_large', 'Request rejected: payload is too large.');
-    }
-
-    const parsed = definition.input.safeParse(raw);
-    if (!parsed.success) {
-      return fail('invalid_payload', `Request rejected: invalid ${definition.channel} payload.`);
     }
 
     try {
