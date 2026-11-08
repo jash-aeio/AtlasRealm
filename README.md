@@ -2,7 +2,7 @@
 
 A beginner-friendly, **local-first Windows desktop app** where your projects are buildings in a fantasy isometric world. You can enter a building's 2.5D interior, look at how things connect in the Realm Atlas, assign AI agents with skills and tools, supervise their work, and turn workflows into automations.
 
-> **Status:** M0 in progress. Tooling (TypeScript, ESLint, Prettier, Vitest, CI) is set up; there is no app to run yet.
+> **Status:** M0 in progress. Tooling and a secure Electron shell exist. The window shows only an IPC test panel: no world, projects or data yet.
 > See [docs/status/IMPLEMENTATION_STATUS.md](docs/status/IMPLEMENTATION_STATUS.md) for where things stand right now.
 
 ## Planned stack (confirmed during M0)
@@ -21,11 +21,12 @@ pnpm typecheck        # TypeScript type check (strict)
 pnpm lint             # ESLint
 pnpm format:check     # Prettier check (`pnpm format` fixes formatting)
 pnpm test             # Vitest, once (`pnpm test:watch` re-runs on save)
+pnpm dev              # run the app with hot reload (electron-vite)
+pnpm build            # build main/preload/renderer into out/
+pnpm test:e2e         # build, then Playwright launches the real app
 ```
 
 Can't run `corepack enable`? Prefix the commands with `corepack` instead, e.g. `corepack pnpm install`.
-
-> There is no app to launch yet: the Electron shell arrives in M0-2 ([#5](https://github.com/jash-aeio/AtlasRealm/issues/5)).
 
 ## Documentation
 Start at **[docs/README.md](docs/README.md)**. It's a map of every document with a "read this when…" guide.

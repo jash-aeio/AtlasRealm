@@ -12,7 +12,9 @@ pnpm typecheck          # tsc --noEmit, strict
 pnpm lint               # eslint . (lint:fix to autofix)
 pnpm format:check       # prettier --check . (format to write)
 pnpm test               # vitest run (test:watch for watch mode)
-# dev:      (M0-2, Electron shell)
+pnpm dev                # electron-vite dev (hot reload)
+pnpm build              # electron-vite build → out/
+pnpm test:e2e           # build + Playwright Electron E2E (tests/e2e/*.spec.ts)
 # package:  (M0-7, Windows packaging)
 ```
 New dependency build scripts must be allowed explicitly under `allowBuilds` in `pnpm-workspace.yaml`, with a reason.

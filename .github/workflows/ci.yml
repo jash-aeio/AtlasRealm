@@ -48,3 +48,21 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      # Electron downloads its binary from GitHub Releases on first launch (checked against
+      # the checksums shipped in the package). Do it up front with retries, so a transient
+      # 5xx from the release server doesn't fail the E2E step (happened on PR #15).
+      - name: Download Electron binary
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            pnpm exec install-electron && exit 0
+            echo "Electron download failed (attempt $attempt of 3), retrying in 20s..."
+            sleep 20
+          done
+          exit 1
+
+      # Builds the app and launches the real Electron window (windows-latest has a desktop
+      # session, so no virtual display is needed). Probes the renderer's security boundary.
+      - name: E2E (Playwright + Electron)
+        run: pnpm test:e2e

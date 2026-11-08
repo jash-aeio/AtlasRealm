@@ -1,0 +1,11 @@
+{
+  // Renderer (the web page). DOM types only, no Node types: `require` or `process`
+  // in renderer code is a compile error, matching the runtime sandbox.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "jsx": "react-jsx"
+  },
+  "include": ["src/renderer", "src/common"]
+}

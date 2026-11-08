@@ -14,7 +14,7 @@ Atlas Realm is a local-first Windows desktop app (portable later to macOS/Linux)
 | Tauri | Small binary, Rust backend | Two languages; spec defers it as a later evaluation |
 
 ## Decision
-Electron + React + TypeScript (strict) + Vite, as recommended by the spec. Still open for M0: the exact Electron build tooling (electron-vite + electron-builder vs Forge) and the package manager.
+Electron + React + TypeScript (strict) + Vite, as recommended by the spec. Still open for M0: the exact Electron build tooling (electron-vite + electron-builder vs Forge) and the package manager. (Build tooling resolved by ADR-0009; package manager by ADR-0007.)
 
 ## Consequences
 - Must follow the Electron security checklist: no Node in the renderer, context isolation, sandbox, CSP, validated IPC.

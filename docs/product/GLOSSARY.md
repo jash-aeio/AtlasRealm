@@ -23,8 +23,12 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **ADR** | Architecture Decision Record: a short file explaining one important decision and why | `docs/adr/` |
 | **Branch / PR** | A separate line of work / a request to merge it into `main`, with review | GitHub |
 | **CI** | Continuous Integration: automatic checks on every push or PR | `.github/workflows/ci.yml` |
+| **Context isolation** | Electron setting that runs the preload in a separate JavaScript world from the page, so the page can't tamper with it | `src/main/bootstrap/window.ts` |
+| **contextBridge** | The Electron API a preload uses to hand specific functions to the page (`window.atlas`) | `src/preload/index.ts` |
 | **Conventional Commits** | A commit message format: `type(scope): summary` | `process/GIT_WORKFLOW.md` |
 | **Corepack** | A tool bundled with Node 24 that downloads the exact package-manager version named in `package.json` | ADR-0007 |
+| **CSP (Content Security Policy)** | A rule list telling the browser engine which scripts, styles and connections a page may load. Blocks injected scripts | `src/common/security/csp.ts` |
+| **E2E test** | End-to-end test: drives the real built app like a user would (we use Playwright) | `tests/e2e/` |
 | **Electron main / preload / renderer** | The privileged Node process / a tiny bridge script / the web page UI (no privileges) | `architecture/ARCHITECTURE.md` §7.2 |
 | **Exhaustiveness check** | Making the compiler prove every case of a union is handled, using `assertNever` in a `switch` default | `src/common/errors/assert-never.ts` |
 | **Formatter** | A tool that rewrites code layout (quotes, spacing) without changing behavior. We use Prettier. | `.prettierrc.json` |
@@ -38,6 +42,7 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Migration** | A versioned script that changes the database schema safely | §9 |
 | **Mock** | A fake implementation used in tests (must be labeled as such) | providers |
 | **Peer dependency** | A library a package expects *you* to install alongside it (Vitest 5 needs Vite) | `package.json` |
+| **Sandbox (Electron)** | Runs the renderer inside Chromium's OS-level sandbox with no Node.js access | `src/main/bootstrap/window.ts` |
 | **Skill (Claude Code)** | A packaged procedure Claude runs on request, e.g. `/ship` | `.claude/skills/` |
 | **Spike** | A short experiment to reduce risk before committing to a design | M0 |
 | **Strict mode (TypeScript)** | A group of compiler checks, e.g. no implicit `any` and null-safety | `tsconfig.json` |

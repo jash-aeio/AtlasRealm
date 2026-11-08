@@ -9,7 +9,17 @@ import tseslint from 'typescript-eslint';
 export default defineConfig(
   {
     // Replaces the old .eslintignore file. docs/ holds no code; build output is generated.
-    ignores: ['node_modules/', 'dist/', 'out/', 'release/', 'build/', 'coverage/', 'docs/'],
+    ignores: [
+      'node_modules/',
+      'dist/',
+      'out/',
+      'release/',
+      'build/',
+      'coverage/',
+      'docs/',
+      'test-results/',
+      'playwright-report/',
+    ],
   },
   {
     files: ['**/*.{ts,tsx,js,mjs,cjs}'],
@@ -25,6 +35,11 @@ export default defineConfig(
         tsconfigRootDir: import.meta.dirname,
       },
     },
+  },
+  {
+    // The renderer is a web page: browser globals only, no Node (matches tsconfig.web.json).
+    files: ['src/renderer/**/*.{ts,tsx}'],
+    languageOptions: { globals: globals.browser },
   },
   {
     // Plain JS files (configs, Claude hooks) aren't type-checked, so drop the type-aware rules.

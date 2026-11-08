@@ -5,6 +5,8 @@ dist/
 out/
 release/
 build/
+test-results/
+playwright-report/
 
 # Docs are prose (some verbatim from the spec): don't reformat them
 docs/
