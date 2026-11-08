@@ -38,6 +38,10 @@ describe('openDatabase', () => {
   it('uses write-ahead logging', () => {
     expect(db.prepare('PRAGMA journal_mode').get()).toEqual({ journal_mode: 'wal' });
   });
+
+  it('does not trust code stored in the schema (views/triggers)', () => {
+    expect(db.prepare('PRAGMA trusted_schema').get()).toEqual({ trusted_schema: 0 });
+  });
 });
 
 describe('withTransaction', () => {

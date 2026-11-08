@@ -11,6 +11,19 @@ export type Database = DatabaseSync;
 const BUSY_TIMEOUT_MS = 5_000;
 
 /**
+ * Settings for every connection, including ones to files we didn't create (restores, imports):
+ * - defensive: ordinary SQL can't deliberately corrupt the file (explicit, though the default)
+ * - trusted_schema OFF: functions with side effects can't run from views or triggers stored
+ *   in the file, so a crafted database can't make the app do things just by being queried
+ * Extensions stay disabled (`allowExtension` is never set).
+ */
+const SAFE_CONNECTION = { defensive: true } as const;
+
+function hardenConnection(db: Database): void {
+  db.exec('PRAGMA trusted_schema = OFF;');
+}
+
+/**
  * Opens (creating if needed) the SQLite file at `path` with the app's standard settings:
  * foreign keys enforced (DATA_MODEL §9.2) and write-ahead logging, which keeps the file
  * consistent if the app crashes mid-write and lets readers run while one writer writes.
@@ -18,10 +31,12 @@ const BUSY_TIMEOUT_MS = 5_000;
 export function openDatabase(path: string): Database {
   mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path, {
+    ...SAFE_CONNECTION,
     enableForeignKeyConstraints: true,
     timeout: BUSY_TIMEOUT_MS,
   });
   try {
+    hardenConnection(db);
     db.exec('PRAGMA journal_mode = WAL;');
     // Safe with WAL: a crash can lose the last commit but never corrupts the database.
     db.exec('PRAGMA synchronous = NORMAL;');
@@ -34,7 +49,14 @@ export function openDatabase(path: string): Database {
 
 /** Opens an existing database file for reading only (used to check backups). */
 export function openDatabaseReadOnly(path: string): Database {
-  return new DatabaseSync(path, { readOnly: true });
+  const db = new DatabaseSync(path, { ...SAFE_CONNECTION, readOnly: true });
+  try {
+    hardenConnection(db);
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+  return db;
 }
 
 /**
@@ -44,7 +66,7 @@ export function openDatabaseReadOnly(path: string): Database {
  */
 export async function backupDatabase(db: Database, path: string): Promise<void> {
   await backup(db, path);
-  const copy = new DatabaseSync(path);
+  const copy = new DatabaseSync(path, SAFE_CONNECTION);
   try {
     copy.exec('PRAGMA journal_mode = DELETE;');
   } finally {
