@@ -3,7 +3,7 @@
 // release candidate) or a switch to another binding stays contained here.
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { backup, DatabaseSync } from 'node:sqlite';
 
 export type Database = DatabaseSync;
 
@@ -30,6 +30,26 @@ export function openDatabase(path: string): Database {
     throw error;
   }
   return db;
+}
+
+/** Opens an existing database file for reading only (used to check backups). */
+export function openDatabaseReadOnly(path: string): Database {
+  return new DatabaseSync(path, { readOnly: true });
+}
+
+/**
+ * Writes a consistent copy of a live database to `path` using SQLite's online backup API.
+ * Copying the .sqlite file directly could miss writes still sitting in the WAL file.
+ * The copy is switched out of WAL mode so it stays one self-contained file.
+ */
+export async function backupDatabase(db: Database, path: string): Promise<void> {
+  await backup(db, path);
+  const copy = new DatabaseSync(path);
+  try {
+    copy.exec('PRAGMA journal_mode = DELETE;');
+  } finally {
+    copy.close();
+  }
 }
 
 /** Reads the live flag (a plain property read would be narrowed by TypeScript to its old value). */
