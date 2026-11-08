@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { PingInput, PingOutput } from '../../src/common/contracts/app-ping';
+import {
+  PING_MESSAGE_MAX_LENGTH,
+  PingInput,
+  PingOutput,
+} from '../../src/common/contracts/app-ping';
 import { handleAppPing } from '../../src/main/ipc/commands/app-ping';
 
 describe('app.ping contract (baseline)', () => {
@@ -18,9 +22,7 @@ describe('app.ping contract (baseline)', () => {
   });
 });
 
-// TODO(you): implement these rules in src/common/contracts/app-ping.ts, then change
-// `describe.skip` to `describe` and run `pnpm test`. All of them should pass.
-describe.skip('app.ping input rules (your schema)', () => {
+describe('app.ping input rules', () => {
   it('trims surrounding whitespace', () => {
     expect(PingInput.parse({ message: '  hi  ' })).toEqual({ message: 'hi' });
   });
@@ -29,9 +31,13 @@ describe.skip('app.ping input rules (your schema)', () => {
     expect(PingInput.safeParse({ message }).success).toBe(false);
   });
 
-  it('accepts 200 characters and rejects 201', () => {
-    expect(PingInput.safeParse({ message: 'x'.repeat(200) }).success).toBe(true);
-    expect(PingInput.safeParse({ message: 'x'.repeat(201) }).success).toBe(false);
+  it('accepts the max length and rejects one more', () => {
+    expect(PingInput.safeParse({ message: 'x'.repeat(PING_MESSAGE_MAX_LENGTH) }).success).toBe(
+      true,
+    );
+    expect(PingInput.safeParse({ message: 'x'.repeat(PING_MESSAGE_MAX_LENGTH + 1) }).success).toBe(
+      false,
+    );
   });
 
   it('rejects unknown keys instead of silently dropping them', () => {
