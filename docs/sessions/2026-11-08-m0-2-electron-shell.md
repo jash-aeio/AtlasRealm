@@ -16,7 +16,7 @@ Prove the boundary between the privileged main process and the unprivileged rend
 4. `feat(ipc)`: `app.ping` contract (Zod) in `src/common/contracts`, main-process command router (sender check + payload validation + typed result), preload API `window.atlas.app.ping`. Unit tests.
 5. `test(e2e)`: Playwright launches the built app: title, round-trip, invalid payload rejected, `require`/`process` unreachable, `window.open` blocked. CI step.
 
-Learning-mode piece for the user: the `PingInput` Zod schema (rules are spelled out by tests written first).
+Learning-mode piece for the user: the `PingInput` Zod schema (rules are spelled out by tests written first). **Outcome:** the user asked Claude to write it instead. Claude implemented it in `b4c7233` and explained the two design questions (trim before `min(1)`; why reject unknown keys).
 
 ## Done
 - Branch created, issue moved to In Progress, ADR-0009 written.
@@ -25,11 +25,19 @@ Learning-mode piece for the user: the `PingInput` Zod schema (rules are spelled 
 - Didn't rely on `webContents.getLastWebPreferences()`: it isn't in Electron's typings (internal API). The sandbox check uses the documented `app.getAppMetrics()[].sandboxed` instead.
 
 ## Verification (2026-11-08, local Windows 11)
-- typecheck (node + web + e2e), lint and format:check pass. Unit tests: 26 passed, 5 skipped (the user's exercise).
+- typecheck (node + web + e2e), lint and format:check pass. Unit tests: 42 passed, 0 skipped (after the schema exercise and the review fixes).
 - E2E: 8/8 pass against the built app.
 - Negative check: with sandbox and isolation off, Node on, `unsafe-inline` and the guards removed, 7 of 8 E2E tests fail. So the probes really test the protections.
 - Dev mode: `pnpm dev` serves the dev CSP; a Playwright-driven dev window showed the title and a successful round-trip with no console errors.
 - CI: not run yet (runs on the PR).
+
+## Reviews (/ship)
+- **invariant-reviewer:** no violations. Flagged a stale test count in this log (fixed).
+- **security-auditor:** no Critical or High issues. Fixed in this PR:
+  - The IPC sender check now compares the `file://` host too, so a UNC URL (`file://server/…`) with a matching path is rejected. Unit test added; proven to fail without the fix.
+  - `ELECTRON_RENDERER_URL` is only accepted as `http://localhost:<port>` or `http://127.0.0.1:<port>` (`src/main/bootstrap/dev-server-url.ts`, tests).
+  - The router runs the Zod schema before measuring size, so a huge binary payload is rejected by shape without being serialized (test).
+- **Deferred:** serve the built UI from a custom `app://` protocol instead of `file://` (on a file page, CSP `'self'` covers other local and UNC files). Issue draft prepared; creating it was blocked by the session's permission settings, so the user needs to create it.
 
 ## Open questions
 - The renderer bundle isn't minified (electron-vite's default, ~567 kB). Revisit in M0-7 packaging.
