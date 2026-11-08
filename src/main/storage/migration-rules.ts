@@ -19,16 +19,16 @@ export interface Migration {
  * different schemas, which is the bug migrations exist to prevent.
  */
 export function assertMigrationsAreValid(migrations: readonly Migration[]): void {
-  // TODO(you): implement the checks. Tests: tests/integration/storage-migration-rules.test.ts
-  // (remove `.skip` there first, then run `corepack pnpm test storage-migration-rules`).
-  //
-  // Hints:
-  // - Loop with the index: `migrations.forEach((migration, index) => { ... })`.
-  //   The migration at `index` must have `version === index + 1`. That single rule already
-  //   rules out gaps, duplicates, wrong order and a list that doesn't start at 1.
-  // - Also reject a version that isn't a whole number (`Number.isInteger`).
-  // - Throw an `Error` whose message names the offending migration (version and name), e.g.
-  //   `Migration "add_x" has version 3, expected 2`. Future-you reads this message, not the code.
-  // - An empty list is valid: a brand-new app with no schema yet.
-  if (migrations.length === 0) return; // placeholder: replace with the real checks
+  // One rule covers every failure: the migration at position `index` must be version
+  // `index + 1`. That rules out gaps, duplicates, wrong order, a list not starting at 1 and
+  // fractional versions. An empty list passes: a new app with no schema yet.
+  migrations.forEach((migration, index) => {
+    const expected = index + 1;
+    if (migration.version !== expected) {
+      throw new Error(
+        `Migration "${migration.name}" has version ${String(migration.version)}, ` +
+          `expected ${String(expected)} (versions must be 1, 2, 3, ... in order).`,
+      );
+    }
+  });
 }

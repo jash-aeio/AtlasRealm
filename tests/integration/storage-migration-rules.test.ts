@@ -8,8 +8,7 @@ const m = (version: number, name = `m${String(version)}`): Migration => ({
   up: 'SELECT 1;',
 });
 
-// TODO(you): remove `.skip` once you start implementing assertMigrationsAreValid.
-describe.skip('assertMigrationsAreValid', () => {
+describe('assertMigrationsAreValid', () => {
   it.each([
     ['an empty list', []],
     ['one migration', [m(1)]],
