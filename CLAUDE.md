@@ -5,15 +5,17 @@ Atlas Realm is a **local-first Windows desktop app** (Electron + React + TypeScr
 The developer is a **student learning professional development**. Work to industry standards *and* teach along the way.
 
 ## Commands
-_Filled in during M0-1 (package manager decision pending)._
+pnpm via corepack (ADR-0007). If `pnpm` isn't on PATH, prefix with `corepack` (e.g. `corepack pnpm test`).
 ```
-# install:    (tbd)
-# dev:        (tbd)
-# typecheck:  (tbd)
-# lint:       (tbd)
-# test:       (tbd)
-# package:    (tbd)
+pnpm install            # install (CI: pnpm install --frozen-lockfile)
+pnpm typecheck          # tsc --noEmit, strict
+pnpm lint               # eslint . (lint:fix to autofix)
+pnpm format:check       # prettier --check . (format to write)
+pnpm test               # vitest run (test:watch for watch mode)
+# dev:      (M0-2, Electron shell)
+# package:  (M0-7, Windows packaging)
 ```
+New dependency build scripts must be allowed explicitly under `allowBuilds` in `pnpm-workspace.yaml`, with a reason.
 
 ## Session loop (always)
 1. **Orient:** read `docs/status/IMPLEMENTATION_STATUS.md`. Treat its claims as notes to verify against the code.

@@ -19,21 +19,29 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 ## Developer terms
 | Term | Meaning | Where it shows up |
 |---|---|---|
-| **ADR** | Architecture Decision Record: a short file explaining one important decision and why | `docs/adr/` |
 | **Acceptance criteria** | Checkable statements that define when a task is done | every issue |
+| **ADR** | Architecture Decision Record: a short file explaining one important decision and why | `docs/adr/` |
 | **Branch / PR** | A separate line of work / a request to merge it into `main`, with review | GitHub |
 | **CI** | Continuous Integration: automatic checks on every push or PR | `.github/workflows/ci.yml` |
 | **Conventional Commits** | A commit message format: `type(scope): summary` | `process/GIT_WORKFLOW.md` |
+| **Corepack** | A tool bundled with Node 24 that downloads the exact package-manager version named in `package.json` | ADR-0007 |
 | **Electron main / preload / renderer** | The privileged Node process / a tiny bridge script / the web page UI (no privileges) | `architecture/ARCHITECTURE.md` §7.2 |
-| **IPC** | Inter-Process Communication: messages between renderer and main | §16 |
+| **Exhaustiveness check** | Making the compiler prove every case of a union is handled, using `assertNever` in a `switch` default | `src/common/errors/assert-never.ts` |
+| **Formatter** | A tool that rewrites code layout (quotes, spacing) without changing behavior. We use Prettier. | `.prettierrc.json` |
 | **Hook (Claude Code)** | A script the harness runs automatically on events (before a tool runs, at session start…) | `.claude/hooks/` |
 | **Idempotent** | Doing it twice has the same effect as doing it once | workflow engine §12.6 |
 | **Invariant** | A rule that must *always* hold (e.g. "removing a building never deletes a project") | `PRODUCT_RULES.md` §3.1 |
+| **IPC** | Inter-Process Communication: messages between renderer and main | §16 |
+| **Linter** | A tool that flags suspicious code that still compiles (unawaited promises, empty catch). We use ESLint. | `eslint.config.js` |
+| **Lockfile** | A generated file recording the exact version of every installed dependency, so all machines match | `pnpm-lock.yaml` |
 | **MCP** | Model Context Protocol: a standard way to give AI tools access to external services | `.mcp.json` |
 | **Migration** | A versioned script that changes the database schema safely | §9 |
 | **Mock** | A fake implementation used in tests (must be labeled as such) | providers |
+| **Peer dependency** | A library a package expects *you* to install alongside it (Vitest 5 needs Vite) | `package.json` |
 | **Skill (Claude Code)** | A packaged procedure Claude runs on request, e.g. `/ship` | `.claude/skills/` |
 | **Spike** | A short experiment to reduce risk before committing to a design | M0 |
+| **Strict mode (TypeScript)** | A group of compiler checks, e.g. no implicit `any` and null-safety | `tsconfig.json` |
 | **Subagent** | A helper Claude with its own context, used for focused tasks | `.claude/agents/` |
+| **Type-aware linting** | Lint rules that ask the TypeScript compiler about types (e.g. "is this a promise?") | `eslint.config.js` |
 | **Worktree** | An extra checkout of the repo on another branch, used for parallel agents | `process/MULTI_AGENT_GUIDE.md` |
 | **Zod** | A TypeScript library that validates data at runtime | IPC contracts |

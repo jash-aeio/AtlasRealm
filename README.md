@@ -2,14 +2,30 @@
 
 A beginner-friendly, **local-first Windows desktop app** where your projects are buildings in a fantasy isometric world. You can enter a building's 2.5D interior, look at how things connect in the Realm Atlas, assign AI agents with skills and tools, supervise their work, and turn workflows into automations.
 
-> **Status:** Pre-M0. The repository and process are set up; no application code exists yet.
+> **Status:** M0 in progress. Tooling (TypeScript, ESLint, Prettier, Vitest, CI) is set up; there is no app to run yet.
 > See [docs/status/IMPLEMENTATION_STATUS.md](docs/status/IMPLEMENTATION_STATUS.md) for where things stand right now.
 
 ## Planned stack (confirmed during M0)
 Electron · React · TypeScript · Vite · PixiJS (world/interiors) · React Flow (Realm Atlas) · SQLite · Zod · Vitest · Playwright
 
 ## Getting started
-_Commands get added here in M0 once the app is scaffolded._
+**Prerequisites:** Windows 10/11, [Node.js 24](https://nodejs.org/) (it includes corepack), Git.
+
+```sh
+# One time: let corepack provide the exact pnpm version pinned in package.json.
+# If Node is installed in a protected folder, run this in an administrator terminal.
+corepack enable pnpm
+
+pnpm install          # install dependencies (exact versions from pnpm-lock.yaml)
+pnpm typecheck        # TypeScript type check (strict)
+pnpm lint             # ESLint
+pnpm format:check     # Prettier check (`pnpm format` fixes formatting)
+pnpm test             # Vitest, once (`pnpm test:watch` re-runs on save)
+```
+
+Can't run `corepack enable`? Prefix the commands with `corepack` instead, e.g. `corepack pnpm install`.
+
+> There is no app to launch yet: the Electron shell arrives in M0-2 ([#5](https://github.com/jash-aeio/AtlasRealm/issues/5)).
 
 ## Documentation
 Start at **[docs/README.md](docs/README.md)**. It's a map of every document with a "read this when…" guide.
@@ -31,4 +47,4 @@ Start at **[docs/README.md](docs/README.md)**. It's a map of every document with
 6. `/close-milestone` tags a release when a milestone's exit criteria are proven.
 
 ## License
-Not yet selected. This is a decision scheduled for M0 (see [ADR process](docs/adr/0000-template.md)).
+Proprietary, all rights reserved (see [LICENSE](LICENSE) and [ADR-0008](docs/adr/0008-proprietary-license-for-now.md)).

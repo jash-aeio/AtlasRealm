@@ -1,7 +1,7 @@
 name: Task
 description: A unit of planned work (½–1 day), usually part of a milestone
-title: "Mx-n: "
-labels: ["type:feature"]
+title: 'Mx-n: '
+labels: ['type:feature']
 body:
   - type: textarea
     id: goal
@@ -38,7 +38,7 @@ body:
     id: parallel
     attributes:
       label: Parallel-safe?
-      options: ["No", "Yes"]
+      options: ['No', 'Yes']
   - type: textarea
     id: notes
     attributes:

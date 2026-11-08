@@ -19,36 +19,32 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # pnpm version comes from the "packageManager" field in package.json (ADR-0007).
+      # It must be set up before setup-node so setup-node can cache the pnpm store.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24 # Electron 45 bundles Node 24
+          cache: pnpm
+
       - name: Validate repo config (JSON + hook scripts)
         shell: bash
         run: |
           for f in .claude/settings.json .mcp.json; do node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" && echo "ok $f"; done
           for f in .claude/hooks/*.mjs; do node --check "$f" && echo "ok $f"; done
 
-      - name: Detect app scaffold
-        id: app
-        shell: bash
-        run: |
-          if [ -f package.json ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; echo "No package.json yet (pre-M0-1): app checks skipped."; fi
-
-      # Enabled automatically once M0-1 adds package.json. M0-1 should finalize these steps
-      # (package manager per ADR, cache, exact script names).
-      - uses: pnpm/action-setup@v6
-        if: steps.app.outputs.present == 'true' && hashFiles('pnpm-lock.yaml') != ''
-      - uses: actions/setup-node@v7
-        if: steps.app.outputs.present == 'true'
-        with:
-          node-version: 24
       - name: Install
-        if: steps.app.outputs.present == 'true'
-        shell: bash
-        run: if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; else npm ci; fi
+        run: pnpm install --frozen-lockfile # fails if package.json and the lockfile disagree
+
       - name: Typecheck
-        if: steps.app.outputs.present == 'true'
-        run: npm run typecheck --if-present
+        run: pnpm typecheck
+
       - name: Lint
-        if: steps.app.outputs.present == 'true'
-        run: npm run lint --if-present
+        run: pnpm lint
+
+      - name: Format check
+        run: pnpm format:check
+
       - name: Test
-        if: steps.app.outputs.present == 'true'
-        run: npm test --if-present
+        run: pnpm test

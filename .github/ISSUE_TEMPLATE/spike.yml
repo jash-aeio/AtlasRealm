@@ -1,7 +1,7 @@
 name: Spike
 description: A time-boxed experiment to answer a risky question before committing to a design
-title: "spike: "
-labels: ["type:spike"]
+title: 'spike: '
+labels: ['type:spike']
 body:
   - type: textarea
     id: question
@@ -13,7 +13,7 @@ body:
     id: timebox
     attributes:
       label: Time box
-      placeholder: "4 hours"
+      placeholder: '4 hours'
   - type: textarea
     id: success
     attributes:

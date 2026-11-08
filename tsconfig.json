@@ -1,0 +1,26 @@
+{
+  // Base TypeScript config. M0-2 will split this per process (main / preload / renderer).
+  "compilerOptions": {
+    // Language and modules. Vite/electron-vite bundle the output, so tsc only type-checks.
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["node"],
+    "noEmit": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+
+    // Type safety. `strict` turns on the whole family (strictNullChecks, noImplicitAny, ...).
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "useUnknownInCatchVariables": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src", "tests", "*.config.ts"]
+}

@@ -16,7 +16,9 @@ const statusChanged = changed.some((f) => f === 'docs/status/IMPLEMENTATION_STAT
 const sessionLogged = changed.some((f) => f.startsWith('docs/sessions/'));
 
 if (codeChanged && (!statusChanged || !sessionLogged)) {
-  const missing = [!statusChanged && 'IMPLEMENTATION_STATUS.md', !sessionLogged && 'a session log'].filter(Boolean).join(' and ');
+  const missing = [!statusChanged && 'IMPLEMENTATION_STATUS.md', !sessionLogged && 'a session log']
+    .filter(Boolean)
+    .join(' and ');
   process.stdout.write(
     JSON.stringify({
       systemMessage: `Reminder: code has uncommitted changes but ${missing} wasn't updated. Run /ship when the slice is verified.`,

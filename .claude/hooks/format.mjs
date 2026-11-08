@@ -8,17 +8,28 @@ import { readInput } from './lib.mjs';
 const input = await readInput();
 const root = process.env.CLAUDE_PROJECT_DIR || input?.cwd || process.cwd();
 const file = input?.tool_input?.file_path;
-if (!file || !/\.(ts|tsx|js|jsx|mjs|cjs|json|css)$/.test(file) || !fs.existsSync(file)) process.exit(0);
+if (!file || !/\.(ts|tsx|js|jsx|mjs|cjs|json|css)$/.test(file) || !fs.existsSync(file))
+  process.exit(0);
 if (/[\\/](node_modules|docs[\\/]archive)[\\/]/.test(file)) process.exit(0);
 
 const bin = (name) => {
-  const p = path.join(root, 'node_modules', '.bin', process.platform === 'win32' ? `${name}.cmd` : name);
+  const p = path.join(
+    root,
+    'node_modules',
+    '.bin',
+    process.platform === 'win32' ? `${name}.cmd` : name,
+  );
   return fs.existsSync(p) ? p : null;
 };
 
 const run = (exe, args) => {
   try {
-    execFileSync(exe, args, { cwd: root, stdio: 'ignore', shell: process.platform === 'win32', timeout: 30000 });
+    execFileSync(exe, args, {
+      cwd: root,
+      stdio: 'ignore',
+      shell: process.platform === 'win32',
+      timeout: 30000,
+    });
   } catch {
     // Lint errors are reported by `lint`/CI; formatting must never block an edit.
   }
