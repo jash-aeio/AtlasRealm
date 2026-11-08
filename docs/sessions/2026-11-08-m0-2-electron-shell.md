@@ -37,7 +37,7 @@ Learning-mode piece for the user: the `PingInput` Zod schema (rules are spelled 
   - The IPC sender check now compares the `file://` host too, so a UNC URL (`file://server/…`) with a matching path is rejected. Unit test added; proven to fail without the fix.
   - `ELECTRON_RENDERER_URL` is only accepted as `http://localhost:<port>` or `http://127.0.0.1:<port>` (`src/main/bootstrap/dev-server-url.ts`, tests).
   - The router runs the Zod schema before measuring size, so a huge binary payload is rejected by shape without being serialized (test).
-- **Deferred:** serve the built UI from a custom `app://` protocol instead of `file://` (on a file page, CSP `'self'` covers other local and UNC files). Issue draft prepared; creating it was blocked by the session's permission settings, so the user needs to create it.
+- **Deferred:** serve the built UI from a custom `app://` protocol instead of `file://` (on a file page, CSP `'self'` covers other local and UNC files). Tracked as [#16](https://github.com/jash-aeio/AtlasRealm/issues/16) (created after the user allowed `gh issue create`).
 
 ## Open questions
 - The renderer bundle isn't minified (electron-vite's default, ~567 kB). Revisit in M0-7 packaging.

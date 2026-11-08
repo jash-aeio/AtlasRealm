@@ -38,7 +38,7 @@
 
 ## Known limitations
 - No product features yet: no DB, world, projects, Pixi or React Flow.
-- **Security follow-up (not yet an issue):** the built UI loads from `file://`. On a file page, CSP `'self'` covers other local and UNC files. Serve it from a custom `app://` protocol before rendering any untrusted content (security review of #5).
+- **Security follow-up ([#16](https://github.com/jash-aeio/AtlasRealm/issues/16)):** the built UI loads from `file://`. On a file page, CSP `'self'` covers other local and UNC files. Serve it from a custom `app://` protocol before rendering any untrusted content (security review of #5).
 - Renderer bundle isn't minified (~567 kB, electron-vite default). `react`/`react-dom` sit in `dependencies` although they're bundled. Decide both in M0-7 packaging.
 - No single-instance lock yet (ARCHITECTURE §7.4).
 - TypeScript is held at 6.0.x until typescript-eslint supports 7.x.
@@ -54,6 +54,6 @@
 - [ADR-0009](../adr/0009-electron-vite-and-electron-builder.md): electron-vite for builds, electron-builder for packaging
 
 ## Next task
-- After the #5 PR is merged: create the `app://` protocol follow-up issue (draft from the #5 session), then pick one of the now-unblocked M0 tasks:
+- After the #5 PR is merged: do the `app://` protocol follow-up (#16) before any untrusted content is rendered, then pick one of the now-unblocked M0 tasks:
   - **M0-3 SQLite + migrations (#6)**: decide better-sqlite3 vs `node:sqlite` first (AskUserQuestion → ADR; Electron 45 bundles Node 24).
   - M0-4 Pixi canvas (#7), M0-5 React Flow spike (#8), M0-6 worker messaging (#9), M0-8 art placeholders (#11).
