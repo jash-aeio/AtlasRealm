@@ -28,6 +28,7 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Conventional Commits** | A commit message format: `type(scope): summary` | `process/GIT_WORKFLOW.md` |
 | **Corepack** | A tool bundled with Node 24 that downloads the exact package-manager version named in `package.json` | ADR-0007 |
 | **CSP (Content Security Policy)** | A rule list telling the browser engine which scripts, styles and connections a page may load. Blocks injected scripts | `src/common/security/csp.ts` |
+| **Custom protocol (app://)** | A URL scheme the app registers and answers itself; we serve the built UI from `app://atlas/` instead of `file://` | `src/main/bootstrap/app-protocol.ts` |
 | **E2E test** | End-to-end test: drives the real built app like a user would (we use Playwright) | `tests/e2e/` |
 | **Electron main / preload / renderer** | The privileged Node process / a tiny bridge script / the web page UI (no privileges) | `architecture/ARCHITECTURE.md` §7.2 |
 | **Exhaustiveness check** | Making the compiler prove every case of a union is handled, using `assertNever` in a `switch` default | `src/common/errors/assert-never.ts` |
@@ -43,7 +44,10 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Migration** | A versioned script that changes the database schema safely | §9 |
 | **Online backup** | A consistent copy of a live SQLite database made by SQLite itself, not by copying the file | `src/main/storage/database.ts` |
 | **Mock** | A fake implementation used in tests (must be labeled as such) | providers |
+| **Origin** | A page's identity for security checks: scheme + host + port. CSP `'self'` means "same origin" | `src/main/bootstrap/app-origin.ts` |
+| **Path traversal** | An attack that uses `..` (often URL-encoded) to read files outside an allowed folder | `resolveAppRequestPath` |
 | **Peer dependency** | A library a package expects *you* to install alongside it (Vitest 5 needs Vite) | `package.json` |
+| **Positive control** | A test case that must succeed, proving the test can tell success from failure (not passing vacuously) | `tests/e2e/shell.spec.ts` |
 | **Repository** | The only code allowed to read/write a table; callers get typed methods instead of SQL | `src/main/storage/repositories/` |
 | **Rollback** | Undoing every write in a transaction that failed | `withTransaction` |
 | **Sandbox (Electron)** | Runs the renderer inside Chromium's OS-level sandbox with no Node.js access | `src/main/bootstrap/window.ts` |
