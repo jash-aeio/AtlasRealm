@@ -2,7 +2,8 @@
 // the database, files and providers. The renderer only gets what the preload exposes.
 import { app } from 'electron';
 
-import { createMainWindow, installNavigationGuards } from './bootstrap/window';
+import { createMainWindow, installNavigationGuards, rendererEntryUrl } from './bootstrap/window';
+import { registerIpcHandlers } from './ipc/register';
 
 app.on('window-all-closed', () => {
   app.quit();
@@ -10,5 +11,6 @@ app.on('window-all-closed', () => {
 
 void app.whenReady().then(() => {
   installNavigationGuards();
+  registerIpcHandlers(rendererEntryUrl());
   createMainWindow();
 });

@@ -19,3 +19,23 @@ body {
 .muted {
   color: #9a978e;
 }
+
+.panel {
+  margin-top: 2rem;
+  padding: 1rem;
+  border: 1px solid #3a3d48;
+  border-radius: 6px;
+}
+
+.panel output {
+  display: block;
+  margin-top: 0.75rem;
+}
+
+.ok {
+  color: #8fd18f;
+}
+
+.error {
+  color: #f08a7e;
+}
