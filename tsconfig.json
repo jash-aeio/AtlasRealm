@@ -1,26 +1,6 @@
 {
-  // Base TypeScript config. M0-2 will split this per process (main / preload / renderer).
-  "compilerOptions": {
-    // Language and modules. Vite/electron-vite bundle the output, so tsc only type-checks.
-    "target": "ES2023",
-    "lib": ["ES2023"],
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "types": ["node"],
-    "noEmit": true,
-    "verbatimModuleSyntax": true,
-    "isolatedModules": true,
-    "resolveJsonModule": true,
-    "skipLibCheck": true,
-
-    // Type safety. `strict` turns on the whole family (strictNullChecks, noImplicitAny, ...).
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true,
-    "noFallthroughCasesInSwitch": true,
-    "noPropertyAccessFromIndexSignature": true,
-    "useUnknownInCatchVariables": true,
-    "forceConsistentCasingInFileNames": true
-  },
-  "include": ["src", "tests", "*.config.ts"]
+  // "Solution" config: no files of its own, it points at one config per environment.
+  // Editors and typescript-eslint follow the references to pick the right one per file.
+  "files": [],
+  "references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.web.json" }]
 }

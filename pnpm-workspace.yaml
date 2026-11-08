@@ -1,4 +1,6 @@
 # pnpm settings (pnpm 10+ keeps them here even for a single-package repo).
 # Dependency install scripts are blocked unless listed below with `true`.
 # Every allowance needs a reason in its commit message (ADR-0007).
-allowBuilds: {}
+allowBuilds:
+  # postinstall downloads the pinned Electron binary from the official release (ADR-0009).
+  electron: true
