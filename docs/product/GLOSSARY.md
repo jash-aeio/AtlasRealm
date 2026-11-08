@@ -38,15 +38,21 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **IPC** | Inter-Process Communication: messages between renderer and main | §16 |
 | **Linter** | A tool that flags suspicious code that still compiles (unawaited promises, empty catch). We use ESLint. | `eslint.config.js` |
 | **Lockfile** | A generated file recording the exact version of every installed dependency, so all machines match | `pnpm-lock.yaml` |
+| **Binding (SQLite)** | The bridge library between JavaScript and SQLite's C code; ours is the built-in `node:sqlite` (ADR-0010) | `src/main/storage/database.ts` |
 | **MCP** | Model Context Protocol: a standard way to give AI tools access to external services | `.mcp.json` |
 | **Migration** | A versioned script that changes the database schema safely | §9 |
+| **Online backup** | A consistent copy of a live SQLite database made by SQLite itself, not by copying the file | `src/main/storage/database.ts` |
 | **Mock** | A fake implementation used in tests (must be labeled as such) | providers |
 | **Peer dependency** | A library a package expects *you* to install alongside it (Vitest 5 needs Vite) | `package.json` |
+| **Repository** | The only code allowed to read/write a table; callers get typed methods instead of SQL | `src/main/storage/repositories/` |
+| **Rollback** | Undoing every write in a transaction that failed | `withTransaction` |
 | **Sandbox (Electron)** | Runs the renderer inside Chromium's OS-level sandbox with no Node.js access | `src/main/bootstrap/window.ts` |
 | **Skill (Claude Code)** | A packaged procedure Claude runs on request, e.g. `/ship` | `.claude/skills/` |
 | **Spike** | A short experiment to reduce risk before committing to a design | M0 |
 | **Strict mode (TypeScript)** | A group of compiler checks, e.g. no implicit `any` and null-safety | `tsconfig.json` |
 | **Subagent** | A helper Claude with its own context, used for focused tasks | `.claude/agents/` |
+| **Transaction** | A group of database writes that succeed or fail together | `withTransaction` |
 | **Type-aware linting** | Lint rules that ask the TypeScript compiler about types (e.g. "is this a promise?") | `eslint.config.js` |
+| **WAL (write-ahead log)** | SQLite mode that writes changes to a side file first; crash-safe and lets reads run during a write | `openDatabase` |
 | **Worktree** | An extra checkout of the repo on another branch, used for parallel agents | `process/MULTI_AGENT_GUIDE.md` |
 | **Zod** | A TypeScript library that validates data at runtime | IPC contracts |

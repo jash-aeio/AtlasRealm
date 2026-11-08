@@ -1,0 +1,94 @@
+import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+
+import { _electron as electron, expect, test } from '@playwright/test';
+
+// The real built app, started twice against a throwaway userData folder: the database must
+// be created under userData, migrated, and still hold the first run's record on the second.
+let userDataDir: string;
+// The electron package's main export is the path to its executable.
+const electronBinary = createRequire(import.meta.url)('electron') as string;
+
+test.beforeAll(() => {
+  userDataDir = mkdtempSync(join(tmpdir(), 'atlas-e2e-userdata-'));
+});
+
+test.afterAll(() => {
+  rmSync(userDataDir, { recursive: true, force: true });
+});
+
+const cleanEnv = (): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] =>
+        entry[1] !== undefined && entry[0] !== 'ELECTRON_RENDERER_URL',
+    ),
+  );
+
+/** Starts the app, waits for its window, returns what userData resolved to, then quits. */
+async function launchOnce(): Promise<string> {
+  const app = await electron.launch({
+    args: ['.', `--user-data-dir=${userDataDir}`],
+    env: cleanEnv(),
+  });
+  try {
+    await app.firstWindow();
+    return await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'));
+  } finally {
+    await app.close();
+  }
+}
+
+test('the database lives under userData and its records survive a restart', async () => {
+  expect(await launchOnce()).toBe(userDataDir);
+  await launchOnce();
+
+  // Read the file the app wrote, after it has quit (read-only: the test never changes it).
+  const db = new DatabaseSync(join(userDataDir, 'profiles', 'default', 'app.sqlite'), {
+    readOnly: true,
+  });
+  try {
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 1 });
+    expect(db.prepare("SELECT value FROM app_meta WHERE key = 'launch_count'").get()).toEqual({
+      value: '2',
+    });
+    expect(db.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }]);
+  } finally {
+    db.close();
+  }
+});
+
+test('a second copy of the app quits without opening the database', async () => {
+  const lockDir = mkdtempSync(join(tmpdir(), 'atlas-e2e-lock-'));
+  const args = ['.', `--user-data-dir=${lockDir}`];
+  const first = await electron.launch({ args, env: cleanEnv() });
+  try {
+    await first.firstWindow();
+
+    // Started directly, not via Playwright: the second copy should exit before any window.
+    const second = spawn(electronBinary, args, { env: cleanEnv(), stdio: 'ignore' });
+    const exitCode = await new Promise<number | null>((resolve) => second.on('exit', resolve));
+    expect(exitCode).toBe(0);
+
+    const count = await first.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length);
+    expect(count).toBe(1);
+  } finally {
+    await first.close();
+  }
+
+  const db = new DatabaseSync(join(lockDir, 'profiles', 'default', 'app.sqlite'), {
+    readOnly: true,
+  });
+  try {
+    expect(db.prepare("SELECT value FROM app_meta WHERE key = 'launch_count'").get()).toEqual({
+      value: '1',
+    });
+  } finally {
+    db.close();
+    rmSync(lockDir, { recursive: true, force: true });
+  }
+});

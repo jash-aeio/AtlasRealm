@@ -1,6 +1,6 @@
 # ADR-0004: SQLite with versioned migrations for local-first storage
 
-- **Status:** Accepted (binding choice still open → decided in M0-3)
+- **Status:** Accepted (binding decided in [ADR-0010](0010-node-sqlite-binding.md): `node:sqlite`)
 - **Date:** 2026-11-06
 - **Milestone(s) affected:** M0 onward
 
