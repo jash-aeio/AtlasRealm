@@ -2,5 +2,9 @@
   // "Solution" config: no files of its own, it points at one config per environment.
   // Editors and typescript-eslint follow the references to pick the right one per file.
   "files": [],
-  "references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.web.json" }]
+  "references": [
+    { "path": "./tsconfig.node.json" },
+    { "path": "./tsconfig.web.json" },
+    { "path": "./tsconfig.e2e.json" }
+  ]
 }

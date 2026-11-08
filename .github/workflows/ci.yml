@@ -48,3 +48,8 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      # Builds the app and launches the real Electron window (windows-latest has a desktop
+      # session, so no virtual display is needed). Probes the renderer's security boundary.
+      - name: E2E (Playwright + Electron)
+        run: pnpm test:e2e
