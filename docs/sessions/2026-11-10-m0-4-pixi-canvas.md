@@ -61,3 +61,15 @@ Prove PixiJS can render inside the React layout as a pure view (ADR-0002):
 - Canvas2D was only forced in tests, not seen on a real GPU-less machine. CI runners have no GPU, so the CI run will show which renderer they pick. Either one is accepted.
 - Performance targets (§17.4: 100 buildings, 60 FPS) weren't measured. There are no buildings yet.
 - The packaged app wasn't re-run with the world view. The packaged E2E checks shell, storage and assets, and `pnpm test:e2e` covers the built `out/` that gets packaged.
+
+## Review (/ship)
+- **security-auditor: approve.**
+  - L2 fixed: the CSP-violation listener was added after page load, so it could miss a violation during startup. It now runs from an init script.
+  - L3 fixed: an ESLint rule keeps all Pixi imports in `grid-scene.ts`, next to the `unsafe-eval` polyfill. A probe file confirmed the rule fires.
+  - L1 noted for M0-8: Pixi's texture loader uses `blob:` workers, which our CSP blocks.
+- **invariant-reviewer: no invariant violations.**
+  - Lesson 007 had a wrong exercise answer: world (80, 60) is tile 3, 0. I had mixed it up with the screenshot case, where the offset is measured from the map centre. Fixed.
+  - The status doc it saw was stale because the `/ship` status update wasn't committed yet. It's updated now.
+
+## Open questions
+- None blocking. Next recommended task: M0-5 React Flow spike (#8).

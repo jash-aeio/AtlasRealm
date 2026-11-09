@@ -29,7 +29,7 @@ The product rules say layout is cosmetic and projects exist without buildings. I
 - **A test that can't fail.** Break the code on purpose (a mutation check) and watch the test go red.
 
 ## Try it (5–15 min exercise)
-1. Work out by hand which tile is at world `(80, 60)` with 64×32 tiles. Check your answer with a one-line test in `tests/domain/projection.test.ts`. (Answer: tile 35, 32.)
+1. Work out by hand which tile is at world `(80, 60)` with 64×32 tiles. Check your answer with a one-line test in `tests/domain/projection.test.ts`. (Answer: gx = 80/64 + 60/32 = 3.125 and gy = 60/32 − 80/64 = 0.625, so tile 3, 0.) Bonus: the same offset measured from the map centre (grid 32, 32) lands on tile 35, 32. That is what the app shows when you hover 40 px right and 30 px down of the centre at 50% zoom, because 40 / 0.5 = 80.
 2. In `WorldCanvas.tsx`, temporarily delete `created.destroy();` inside `if (disposed)`. Run `pnpm test:e2e` and see which test fails and why. Then undo the change.
 
 ## Learn more
