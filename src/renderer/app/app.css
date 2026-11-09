@@ -11,7 +11,7 @@ body {
 }
 
 .app {
-  max-width: 40rem;
+  max-width: 64rem;
   margin: 3rem auto;
   padding: 0 1rem;
 }
@@ -38,4 +38,59 @@ body {
 
 .error {
   color: #f08a7e;
+}
+
+/* World view (M0-4 spike). */
+.world {
+  margin-top: 1rem;
+}
+
+.world-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.world-toolbar h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.world-canvas {
+  position: relative;
+  height: clamp(240px, 50vh, 560px);
+  margin-top: 0.5rem;
+  overflow: hidden;
+  border: 1px solid #3a3d48;
+  border-radius: 6px;
+  background: #14161c;
+  /* The world handles wheel and middle-drag itself. */
+  touch-action: none;
+}
+
+.world-mount {
+  width: 100%;
+  height: 100%;
+}
+
+/* Pixi sets the canvas size inline (autoDensity) from the ResizeObserver. */
+.world-mount canvas {
+  display: block;
+}
+
+.world-message {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  padding: 1rem;
+  text-align: center;
+  background: #1b1d24;
+  color: #f08a7e;
+}
+
+.world p {
+  margin: 0.4rem 0 0;
 }

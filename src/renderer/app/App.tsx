@@ -3,11 +3,14 @@ import { useEffect, useState } from 'react';
 import type { LaunchInfoOutput } from '../../common/contracts/app-launch-info';
 import type { PingOutput } from '../../common/contracts/app-ping';
 import type { IpcResult } from '../../common/contracts/ipc-result';
+import { WorldCanvas } from '../world/WorldCanvas';
+import { WorldErrorBoundary } from '../world/WorldErrorBoundary';
 
 export function App() {
   const [message, setMessage] = useState('hello from the renderer');
   const [result, setResult] = useState<IpcResult<PingOutput> | null>(null);
   const [launch, setLaunch] = useState<IpcResult<LaunchInfoOutput> | null>(null);
+  const [showWorld, setShowWorld] = useState(true);
 
   useEffect(() => {
     void window.atlas.app.launchInfo().then(setLaunch);
@@ -20,7 +23,22 @@ export function App() {
   return (
     <main className="app">
       <h1>Atlas Realm</h1>
-      <p className="muted">M0 shell. No world or projects yet.</p>
+      <p className="muted">M0 shell. The world below is a placeholder grid; no projects yet.</p>
+
+      <button
+        type="button"
+        aria-pressed={!showWorld}
+        onClick={() => {
+          setShowWorld((shown) => !shown);
+        }}
+      >
+        {showWorld ? 'Hide world view' : 'Show world view'}
+      </button>
+      {showWorld && (
+        <WorldErrorBoundary>
+          <WorldCanvas />
+        </WorldErrorBoundary>
+      )}
 
       <section className="panel" aria-labelledby="storage-heading">
         <h2 id="storage-heading">Local database (M0 sample data)</h2>
