@@ -34,7 +34,7 @@ Routine, reversible choices: follow the spec defaults, don't ask, and mention th
 
 ## Learning mode
 - Explain the **why** behind non-obvious choices in 1–3 plain sentences. Define jargon on first use and add new terms to `docs/product/GLOSSARY.md`.
-- **At most once per task**, invite the user to write a small, meaningful piece themselves (a function, a test, a validation rule). Leave a `TODO(you):` with hints and explain what to look for. Skip this if the user says they're in a hurry.
+- Claude writes all the code itself. Don't leave `TODO(you):` stubs or hand pieces back to the user. If something is unclear, ask with AskUserQuestion.
 - When a task introduces a new concept, write a lesson with `/lesson`.
 - Every working session gets a summary in `docs/sessions/YYYY-MM-DD-<topic>.md` (decisions, what was done, open questions), written in plain language.
 

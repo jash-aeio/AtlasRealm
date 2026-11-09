@@ -29,7 +29,7 @@ Verify, and report any failure clearly:
 ## 5. Plan
 - Read only the docs listed on the issue plus the relevant code.
 - For non-trivial work, present a plan (files to change, slices/commits, tests, how each acceptance criterion will be shown to work) and wait for approval.
-- Pick at most **one** small, meaningful piece for the user to write themselves (learning mode) and point it out in the plan.
+- Claude implements everything in the plan; no pieces are set aside for the user to write. Raise open questions with AskUserQuestion.
 - Create or append the session log `docs/sessions/<YYYY-MM-DD>-<slug>.md` with: task, plan, and decisions so far.
 
 Then implement in small verified slices, one conventional commit each. Finish with `/ship`.
