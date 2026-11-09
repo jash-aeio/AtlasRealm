@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { LaunchInfoOutput } from '../../common/contracts/app-launch-info';
 import type { PingOutput } from '../../common/contracts/app-ping';
 import type { IpcResult } from '../../common/contracts/ipc-result';
+import { RealmAtlasPanel } from '../atlas/RealmAtlasPanel';
 import { WorldCanvas } from '../world/WorldCanvas';
 import { WorldErrorBoundary } from '../world/WorldErrorBoundary';
 
@@ -23,7 +24,10 @@ export function App() {
   return (
     <main className="app">
       <h1>Atlas Realm</h1>
-      <p className="muted">M0 shell. The world below is a placeholder grid; no projects yet.</p>
+      <p className="muted">
+        M0 shell. The world is a placeholder grid and the Realm Atlas shows mock entities; no real
+        projects yet.
+      </p>
 
       <button
         type="button"
@@ -34,11 +38,16 @@ export function App() {
       >
         {showWorld ? 'Hide world view' : 'Show world view'}
       </button>
-      {showWorld && (
-        <WorldErrorBoundary>
-          <WorldCanvas />
-        </WorldErrorBoundary>
-      )}
+      <div className="workspace">
+        <div className="workspace-main">
+          {showWorld && (
+            <WorldErrorBoundary>
+              <WorldCanvas />
+            </WorldErrorBoundary>
+          )}
+        </div>
+        <RealmAtlasPanel />
+      </div>
 
       <section className="panel" aria-labelledby="storage-heading">
         <h2 id="storage-heading">Local database (M0 sample data)</h2>

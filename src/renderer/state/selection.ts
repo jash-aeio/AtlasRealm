@@ -20,17 +20,19 @@ function sameSelection(a: Selection, b: Selection): boolean {
   return a.entityId === b.entityId && a.source === b.source;
 }
 
+// Function properties (not methods) so they can be passed as event handlers, e.g.
+// onClick={state.clear}, without losing `this` (they don't use it).
 export interface SelectionState {
   /** The mock dataset both views draw. */
   readonly graph: Store<SpikeGraph>;
   readonly selection: Store<Selection>;
   /** Selects an entity of the current graph. Unknown IDs are refused (returns false). */
-  select(entityId: string, source: SelectionSource): boolean;
-  clear(): void;
+  readonly select: (entityId: string, source: SelectionSource) => boolean;
+  readonly clear: () => void;
   /** Swaps the dataset. A selection that doesn't exist in the new graph is cleared. */
-  showGraph(graph: SpikeGraph): void;
+  readonly showGraph: (graph: SpikeGraph) => void;
   /** The selected entity, or null. */
-  selectedEntity(): SpikeEntity | null;
+  readonly selectedEntity: () => SpikeEntity | null;
 }
 
 export function createSelectionState(initialGraph: SpikeGraph = SMALL_SPIKE_GRAPH): SelectionState {
