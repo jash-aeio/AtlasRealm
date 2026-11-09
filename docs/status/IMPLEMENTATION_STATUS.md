@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-10 · **Branch:** spike/8-react-flow-selection (PR for #8)
+**Last updated:** 2026-11-10 · **Branch:** chore/24-dependabot-ignore-majors (PR for #24)
 
 ## Current milestone
-**M0 — Foundation and risk spikes** (🔨 in progress; M0-1, M0-2, M0-3, M0-4, M0-7, M0-9 done; M0-5 in review)
+**M0 — Foundation and risk spikes** (🔨 in progress; M0-1, M0-2, M0-3, M0-4, M0-5, M0-7, M0-9 done)
 
 ## Implemented and demonstrated
 - Repository and process setup (2026-11-06): spec docs, Claude Code config, GitHub workflow. See `docs/sessions/2026-11-06-project-setup.md`.
@@ -70,6 +70,7 @@
   - Hiding the world view keeps the entities and the selection, and showing it again draws the selection straight away.
 
 ## Changed components
+- #24 (chore): `.github/dependabot.yml` ignores major-version bumps of `typescript` and `@types/node`. They are upgraded by hand (see Known limitations).
 - M0-5: `src/renderer/state/` (new), `src/renderer/atlas/` (new), `src/renderer/world/{grid-scene.ts,WorldCanvas.tsx}`, `src/renderer/app/{App.tsx,app.css}`, `package.json` + lockfile; `tests/domain/selection-store.test.ts`, `tests/e2e/atlas.spec.ts` (new), `tests/e2e/world.spec.ts` (locators scoped to the world section)
 - M0-4: `src/renderer/world/` (new: `projection.ts`, `grid-scene.ts`, `WorldCanvas.tsx`, `WorldErrorBoundary.tsx`), `src/renderer/app/{App.tsx,app.css}`, `package.json` + lockfile (`pixi.js`); `tests/domain/projection.test.ts`, `tests/e2e/world.spec.ts` (new)
 - M0-7: `electron-builder.yml`, `scripts/electron-builder.ts` (new), `electron.vite.config.ts`, `package.json` (scripts, deps), `pnpm-workspace.yaml`, `tsconfig.{node,e2e}.json`, `playwright.packaged.config.ts` + `tests/e2e-packaged/` (new), `.github/workflows/ci.yml`; `src/main/bootstrap/app-protocol.ts`, `src/main/index.ts`, `src/main/ipc/{register.ts,commands/app-launch-info.ts}`, `src/common/contracts/{app-launch-info,channels,atlas-api}.ts`, `src/preload/index.ts`, `src/main/storage/repositories/app-meta-repository.ts`, `src/renderer/app/App.tsx`; `tests/integration/app-launch-info.test.ts`, `tests/e2e/{shell,storage}.spec.ts`
@@ -155,7 +156,7 @@
 - Pre-migration backups are never pruned (retention comes in M7, OFFLINE_AND_RECOVERY §20.4). Two backups in the same millisecond would share a name; the single-instance lock makes that practically impossible.
 - Unit tests on Node 24.13 print a harmless SQLite ExperimentalWarning.
 - The renderer can't `fetch()` `app://` URLs (no `supportFetchAPI`); grant it only if a feature needs it. Optional CSP + `nosniff` response headers on `app://` are still not added (the CSP is a meta tag).
-- TypeScript is held at 6.0.x until typescript-eslint supports 7.x.
+- TypeScript is held at 6.0.x until typescript-eslint supports 7.x. Dependabot no longer proposes major bumps for `typescript` or `@types/node` (#24). Upgrade TypeScript by hand when typescript-eslint supports TS 7 (typescript-eslint/typescript-eslint#10940), and upgrade `@types/node` when Electron's bundled Node changes major. Dependabot PR #14 (TS 7 + @types/node 26) failed lint and was closed.
 - On this machine, `corepack enable` needs an admin terminal (Node is in `D:Node`). `corepack pnpm …` works without it.
 
 ## Data/schema changes
@@ -171,7 +172,7 @@
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- After the #8 PR is merged, pick an unblocked M0 task:
+- After the #24 PR is merged, pick an unblocked M0 task:
   - **M0-6 worker messaging (#9)** or **M0-8 art placeholders (#11)**. M0-8 would replace the placeholder colours and default icon; follow the "For M0-8" note above about Pixi's asset loader under our CSP.
   - #20 (block Chromium switches) is a release gate before M3, not urgent for M0.
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.
