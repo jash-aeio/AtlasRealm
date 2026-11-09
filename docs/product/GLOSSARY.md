@@ -77,6 +77,8 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Mutation check** | Breaking the code on purpose to confirm a test fails; proves the test isn't passing vacuously | session logs |
 | **Single source of truth** | Keeping a value in exactly one place; every view reads it from there instead of keeping its own copy | `src/renderer/state/` |
 | **Store (external)** | An object outside React that holds a value, lets code change it and notifies subscribers. React reads it with `useSyncExternalStore` | `state/store.ts` |
+| **Semantic versioning (semver)** | Version numbers shaped `MAJOR.MINOR.PATCH`. A major bump (6 → 7) may break things; minor adds features; patch fixes bugs | `package.json` |
+| **Dependabot** | GitHub's bot that opens PRs to update dependencies. Groups bundle several updates into one PR; `ignore` rules skip some | `.github/dependabot.yml` |
 | **Controlled component** | A component that shows a value passed in from outside and only *reports* user actions, instead of keeping its own state | `ConnectionsGraph.tsx` |
 | **React Flow** | The library (`@xyflow/react`) that draws the Realm Atlas Connections graph as HTML/SVG nodes and edges (ADR-0003) | `src/renderer/atlas/` |
 | **Shared entity ID** | One stable ID used by every view of the same thing (world marker, graph node, list item), so selection can be shared | `spike-graph.ts` |
