@@ -112,6 +112,7 @@
 - [ADR-0008](../adr/0008-proprietary-license-for-now.md): proprietary license for now
 - [ADR-0009](../adr/0009-electron-vite-and-electron-builder.md): electron-vite for builds, electron-builder for packaging
 - [ADR-0010](../adr/0010-node-sqlite-binding.md): built-in `node:sqlite` as the SQLite binding
+- [ADR-0011](../adr/0011-plain-pixijs-webgl-canvas-fallback.md): plain `pixi.js` with our own React wrapper; WebGL, then Canvas2D
 
 ## Next task
 - After the #10 PR is merged, pick an unblocked M0 task:
