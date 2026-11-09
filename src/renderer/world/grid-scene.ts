@@ -30,6 +30,13 @@ const GRID_LINE = 0x22382a;
 const HOVER_FILL = 0xf2d16b;
 const HOVER_LINE = 0xf2d16b;
 const BACKGROUND = 0x14161c;
+const MARKER_FILL = 0xc9a26b;
+const MARKER_LINE = 0x5a4526;
+// Same colour as the selected node outline in the Realm Atlas (app.css).
+const SELECTED_FILL = 0x6bc6f2;
+const SELECTED_LINE = 0xe8f6ff;
+/** Markers are half-size diamonds centred in their tile, so the selection shows around them. */
+const MARKER_SCALE = 0.5;
 
 export interface WorldScene {
   /** The renderer Pixi actually picked ('webgl' or 'canvas'). */
@@ -37,6 +44,10 @@ export interface WorldScene {
   readonly canvas: HTMLCanvasElement;
   setCamera(camera: Camera): void;
   setHover(tile: GridPoint | null): void;
+  /** Placeholder markers for entities (M0-5 mock data). Replaces any previous markers. */
+  setMarkers(tiles: readonly GridPoint[]): void;
+  /** Highlights the selected entity's tile, or nothing. */
+  setSelected(tile: GridPoint | null): void;
   resize(width: number, height: number): void;
   destroy(): void;
 }
@@ -79,6 +90,27 @@ function drawHover(tile: TileSize): Graphics {
   return hover;
 }
 
+function drawSelected(tile: TileSize): Graphics {
+  const selected = new Graphics();
+  selected
+    .poly(diamond({ gx: 0, gy: 0 }, { columns: 1, rows: 1 }, tile))
+    .fill({ color: SELECTED_FILL })
+    .stroke({ width: 2, color: SELECTED_LINE, pixelLine: false });
+  selected.visible = false;
+  return selected;
+}
+
+/** Redraws all markers into one Graphics: one draw call however many entities there are. */
+function drawMarkers(markers: Graphics, tiles: readonly GridPoint[], tile: TileSize): void {
+  markers.clear();
+  const inset = (1 - MARKER_SCALE) / 2;
+  for (const at of tiles) {
+    const origin = { gx: at.gx + inset, gy: at.gy + inset };
+    markers.poly(diamond(origin, { columns: MARKER_SCALE, rows: MARKER_SCALE }, tile));
+  }
+  markers.fill({ color: MARKER_FILL }).stroke({ width: 1, color: MARKER_LINE, pixelLine: true });
+}
+
 /**
  * Creates the Pixi application and draws the grid. Rejects if no allowed renderer works;
  * the caller shows a message instead of the canvas.
@@ -118,7 +150,10 @@ export async function createWorldScene(
 
   const world = new Container();
   const hover = drawHover(tile);
-  world.addChild(drawGround(map, tile), hover);
+  const selected = drawSelected(tile);
+  const markers = new Graphics();
+  // Back to front: ground, selection, markers, hover outline.
+  world.addChild(drawGround(map, tile), selected, markers, hover);
   app.stage.addChild(world);
 
   let frame: number | null = null;
@@ -144,6 +179,18 @@ export async function createWorldScene(
       if (target !== null) {
         const at = gridToWorld(target, tile);
         hover.position.set(at.x, at.y);
+      }
+      requestRender();
+    },
+    setMarkers(tiles) {
+      drawMarkers(markers, tiles, tile);
+      requestRender();
+    },
+    setSelected(target) {
+      selected.visible = target !== null;
+      if (target !== null) {
+        const at = gridToWorld(target, tile);
+        selected.position.set(at.x, at.y);
       }
       requestRender();
     },
