@@ -8,6 +8,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 002 | [The quality toolchain](lessons/002-the-quality-toolchain.md) | M0 | package manager, lockfile, type check, lint, format, tests, CI, exhaustiveness checks |
 | 003 | [Electron process model and safe IPC](lessons/003-electron-process-model-and-ipc.md) | M0 | main/preload/renderer, sandbox, context isolation, contextBridge, CSP, validated IPC |
 | 004 | [Database migrations, transactions and safe backups](lessons/004-migrations-transactions-backups.md) | M0 | migrations, schema version, transactions, rollback, WAL, online backup, repositories |
+| 005 | [Origins, custom protocols and path traversal](lessons/005-origins-custom-protocols-path-traversal.md) | M0 | origin, custom protocol, app://, path traversal, positive control |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map

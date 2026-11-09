@@ -1,22 +1,22 @@
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
 import { app, BrowserWindow, session } from 'electron';
 
+import { APP_ENTRY_URL } from './app-origin';
 import { assertLocalDevServerUrl } from './dev-server-url';
 
 // The bundled main process lives in out/main/, next to out/preload/ and out/renderer/.
 const PRELOAD_PATH = join(import.meta.dirname, '../preload/index.cjs');
-const RENDERER_HTML_PATH = join(import.meta.dirname, '../renderer/index.html');
+export const RENDERER_DIR = join(import.meta.dirname, '../renderer');
 
 /**
  * Where trusted UI is loaded from. In `pnpm dev`, electron-vite serves the renderer and
- * sets ELECTRON_RENDERER_URL. In a build it's the local index.html file.
+ * sets ELECTRON_RENDERER_URL. In a build it's out/renderer, served as app://atlas/.
  */
 export function rendererEntryUrl(): string {
   const devUrl = process.env['ELECTRON_RENDERER_URL'];
   if (!app.isPackaged && devUrl !== undefined) return assertLocalDevServerUrl(devUrl);
-  return pathToFileURL(RENDERER_HTML_PATH).href;
+  return APP_ENTRY_URL;
 }
 
 /**

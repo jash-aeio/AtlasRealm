@@ -2,7 +2,14 @@
 // (later also files and providers). The renderer only gets what the preload exposes.
 import { app, BrowserWindow, dialog } from 'electron';
 
-import { createMainWindow, installNavigationGuards, rendererEntryUrl } from './bootstrap/window';
+import { APP_ENTRY_URL } from './bootstrap/app-origin';
+import { registerAppScheme, serveAppProtocol } from './bootstrap/app-protocol';
+import {
+  createMainWindow,
+  installNavigationGuards,
+  RENDERER_DIR,
+  rendererEntryUrl,
+} from './bootstrap/window';
 import { registerIpcHandlers } from './ipc/register';
 import { openAppDatabase } from './storage/app-database';
 import type { Database } from './storage/database';
@@ -41,7 +48,10 @@ async function start(): Promise<void> {
   }
 
   installNavigationGuards();
-  registerIpcHandlers(rendererEntryUrl());
+  const entryUrl = rendererEntryUrl();
+  // Only serve app:// when the build is in use; `pnpm dev` loads from the dev server.
+  if (entryUrl === APP_ENTRY_URL) serveAppProtocol(RENDERER_DIR);
+  registerIpcHandlers(entryUrl);
   createMainWindow();
 }
 
@@ -50,6 +60,7 @@ async function start(): Promise<void> {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  registerAppScheme(); // must happen before 'ready'
   app.on('second-instance', focusMainWindow);
   app.on('window-all-closed', () => {
     app.quit();

@@ -7,8 +7,9 @@ import {
   trustRendererEntry,
   type InvokeSender,
 } from '../../src/main/ipc/router';
+import { APP_ENTRY_URL } from '../../src/main/bootstrap/app-origin';
 
-const ENTRY = 'file:///C:/Program%20Files/Atlas%20Realm/out/renderer/index.html';
+const ENTRY = APP_ENTRY_URL;
 const isTrusted = trustRendererEntry(ENTRY);
 
 function senderAt(url: string, parent: unknown = null): InvokeSender {
@@ -122,16 +123,32 @@ describe('createCommandHandler', () => {
 });
 
 describe('trustRendererEntry', () => {
-  it('trusts only the exact built index.html (query and hash ignored)', () => {
-    expect(isTrusted(senderAt(ENTRY))).toBe(true);
-    expect(isTrusted(senderAt(`${ENTRY}#/world`))).toBe(true);
-    expect(isTrusted(senderAt('file:///C:/Users/me/Downloads/evil.html'))).toBe(false);
+  it('trusts any page of our app://atlas origin (path, query and hash ignored)', () => {
+    expect(isTrusted(senderAt('app://atlas/index.html'))).toBe(true);
+    expect(isTrusted(senderAt('app://atlas/index.html?x=1#/world'))).toBe(true);
+    expect(isTrusted(senderAt('app://atlas/'))).toBe(true);
   });
 
-  it('rejects a UNC (network share) URL even when its path matches', () => {
-    const unc = ENTRY.replace('file:///', 'file://attacker/');
-    expect(new URL(unc).pathname).toBe(new URL(ENTRY).pathname);
-    expect(isTrusted(senderAt(unc))).toBe(false);
+  it.each([
+    ['another app:// host', 'app://evil/index.html'],
+    ['another custom scheme', 'evil://atlas/index.html'],
+    ['a port on our host', 'app://atlas:1/index.html'],
+    ['credentials before our host', 'app://x@atlas/index.html'],
+    ['a local file', 'file:///C:/Users/me/Downloads/evil.html'],
+    [
+      'the old built file:// entry',
+      'file:///C:/Program%20Files/Atlas%20Realm/out/renderer/index.html',
+    ],
+    ['a UNC share', 'file://attacker/share/index.html'],
+    ['a web page', 'https://evil.example/'],
+  ])('rejects %s', (_label, url) => {
+    expect(isTrusted(senderAt(url))).toBe(false);
+  });
+
+  it('refuses to build a check for a file:// or other unsupported entry', () => {
+    expect(() => trustRendererEntry('file:///C:/app/index.html')).toThrow(/Unsupported/);
+    expect(() => trustRendererEntry('https://atlas.example/')).toThrow(/Unsupported/);
+    expect(() => trustRendererEntry('app://other/index.html')).toThrow(/Unsupported/);
   });
 
   it('rejects subframes, missing frames and unparseable URLs', () => {

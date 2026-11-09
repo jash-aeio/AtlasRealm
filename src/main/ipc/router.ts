@@ -10,6 +10,7 @@ import type { z } from 'zod';
 
 import type { Channel } from '../../common/contracts/channels';
 import type { IpcError, IpcErrorCode, IpcResult } from '../../common/contracts/ipc-result';
+import { isAppOrigin } from '../bootstrap/app-origin';
 
 /** Largest accepted payload, measured as UTF-8 JSON. Generous for commands, tiny for abuse. */
 export const MAX_PAYLOAD_BYTES = 64 * 1024;
@@ -33,11 +34,15 @@ export type CommandHandler<I extends z.ZodType, O extends z.ZodType> = (
 
 /**
  * Returns a sender check that only trusts the main frame of the page we loaded ourselves.
- * Dev server URLs match by origin. Built `file://` pages must be exactly our index.html on
- * this machine: a UNC URL (file://server/...) has a host and is rejected even if its path matches.
+ * Builds load from our own `app://atlas` origin (issue #16) and the dev server from
+ * http://localhost:<port>. Any other entry kind, including `file:`, is a programming error.
  */
 export function trustRendererEntry(entryUrl: string): SenderCheck {
   const entry = new URL(entryUrl);
+  const isAppEntry = isAppOrigin(entry);
+  if (!isAppEntry && entry.protocol !== 'http:') {
+    throw new Error(`Unsupported renderer entry scheme: ${entry.protocol}`);
+  }
   return ({ senderFrame }) => {
     if (senderFrame === null || senderFrame.parent !== null) return false;
     let url: URL;
@@ -46,9 +51,10 @@ export function trustRendererEntry(entryUrl: string): SenderCheck {
     } catch {
       return false;
     }
-    if (entry.protocol === 'file:') {
-      return url.protocol === 'file:' && url.host === entry.host && url.pathname === entry.pathname;
-    }
+    // Not URL.origin: Node reports "null" for custom schemes, and "null" === "null" would
+    // trust every custom-scheme page. The whole origin is trusted, not just index.html:
+    // same-origin history.pushState can change the path anyway.
+    if (isAppEntry) return isAppOrigin(url);
     return url.origin === entry.origin;
   };
 }
