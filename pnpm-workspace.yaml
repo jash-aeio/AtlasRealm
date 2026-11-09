@@ -3,4 +3,7 @@
 # Every allowance needs a reason in its commit message (ADR-0007).
 # Note: electron 45 has no install script; it downloads its binary on first launch
 # (CI does this explicitly with retries, see .github/workflows/ci.yml).
-allowBuilds: {}
+allowBuilds:
+  # Denied on purpose: pulled in by electron-builder for Squirrel.Windows installers, which we
+  # don't build (we use NSIS, #10). Its install script only prepares Squirrel's vendor files.
+  electron-winstaller: false
