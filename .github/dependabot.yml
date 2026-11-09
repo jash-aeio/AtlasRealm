@@ -10,6 +10,14 @@ updates:
     groups:
       dev-dependencies:
         dependency-type: development
+    # Major versions are upgraded by hand, not via the grouped PR:
+    # - typescript: typescript-eslint must support the new major first (TS 7 broke lint, see #24).
+    # - @types/node: must match the Node we run (engines >=24 / Electron's bundled Node).
+    ignore:
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     schedule:
