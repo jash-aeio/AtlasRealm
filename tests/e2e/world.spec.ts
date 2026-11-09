@@ -35,18 +35,19 @@ async function launch(initScript?: () => void): Promise<Launched> {
   const consoleLines: string[] = [];
   page.on('console', (message) => consoleLines.push(`${message.type()}: ${message.text()}`));
   await page.waitForLoadState('domcontentloaded');
-  if (initScript !== undefined) {
-    await app.context().addInitScript(initScript);
-    await page.reload();
-  }
-  // Record CSP violations so a test can assert none happened (Pixi + strict CSP).
-  await page.evaluate(() => {
+  // Record CSP violations from the very start of each load (before any app code), so a test
+  // can assert none happened while Pixi starts under the strict CSP.
+  await app.context().addInitScript(() => {
     const scope = window as unknown as { __cspViolations: string[] };
     scope.__cspViolations = [];
     document.addEventListener('securitypolicyviolation', (event) => {
       scope.__cspViolations.push(`${event.violatedDirective} ${event.blockedURI}`);
     });
   });
+  if (initScript !== undefined) await app.context().addInitScript(initScript);
+  // Reload so the init scripts run on a fresh page load.
+  await page.reload();
+  await page.waitForLoadState('domcontentloaded');
   return {
     app,
     page,

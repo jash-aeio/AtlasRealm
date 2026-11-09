@@ -42,6 +42,25 @@ export default defineConfig(
     languageOptions: { globals: globals.browser },
   },
   {
+    // Only grid-scene.ts may import Pixi: it loads 'pixi.js/unsafe-eval' first, which keeps
+    // our CSP free of 'unsafe-eval' (ADR-0011). A renderer created elsewhere would fail.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/renderer/world/grid-scene.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['pixi.js', 'pixi.js/*', '@pixi/*'],
+              message: 'Import Pixi only in src/renderer/world/grid-scene.ts (ADR-0011).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Plain JS files (configs, Claude hooks) aren't type-checked, so drop the type-aware rules.
     files: ['**/*.{js,mjs,cjs}'],
     extends: [tseslint.configs.disableTypeChecked],
