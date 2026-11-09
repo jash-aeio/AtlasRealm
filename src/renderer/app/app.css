@@ -11,7 +11,7 @@ body {
 }
 
 .app {
-  max-width: 64rem;
+  max-width: 90rem;
   margin: 3rem auto;
   padding: 0 1rem;
 }
@@ -93,4 +93,104 @@ body {
 
 .world p {
   margin: 0.4rem 0 0;
+}
+
+/* Workspace: world on the left, Realm Atlas in the upper-right corner (UI_SPEC §6.1). */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24rem;
+  align-items: start;
+  gap: 1rem;
+}
+
+/* Narrow windows stack the Atlas under the world (a real drawer comes later). */
+@media (max-width: 60rem) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Realm Atlas (M0-5 spike). */
+.atlas {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border: 1px solid #3a3d48;
+  border-radius: 6px;
+}
+
+.atlas-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.atlas h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.atlas h3 {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.tag {
+  padding: 0.1rem 0.4rem;
+  border: 1px solid #6b5a2e;
+  border-radius: 4px;
+  color: #f2d16b;
+  font-size: 0.8rem;
+}
+
+.atlas-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.atlas-tabs [aria-selected='true'] {
+  border-bottom: 2px solid #6bc6f2;
+}
+
+.atlas-meta {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+}
+
+.atlas-graph {
+  height: 320px;
+  border: 1px solid #3a3d48;
+  border-radius: 6px;
+}
+
+/* The selected node uses the same colour as the world's selection highlight. */
+.atlas-graph .react-flow__node.selected {
+  outline: 2px solid #6bc6f2;
+  outline-offset: 2px;
+}
+
+.atlas-selection {
+  display: block;
+  margin-top: 0.5rem;
+  min-height: 2.5em;
+}
+
+.atlas-actions {
+  margin-top: 0.5rem;
+}
+
+.atlas-list {
+  margin-top: 0.75rem;
+  max-height: 16rem;
+  overflow: auto;
+}
+
+.atlas-list ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.atlas-list [aria-pressed='true'] {
+  outline: 2px solid #6bc6f2;
 }

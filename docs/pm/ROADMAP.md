@@ -3,14 +3,14 @@
 > This is the **Markdown mirror** of the GitHub Milestones and [Project board](https://github.com/users/jash-aeio/projects/1). GitHub is the source of truth for issue status. Run `/sync-pm` to refresh this file.
 > Full milestone specs (build, checks, exit criteria): [ROADMAP_SPEC.md](ROADMAP_SPEC.md) · Task-level dependency graphs: [DEPENDENCIES.md](DEPENDENCIES.md)
 
-**Last synced:** 2026-11-10 · **Current milestone:** M0 (in progress: #4, #5, #6, #10, #16 done; #7 in review)
+**Last synced:** 2026-11-10 · **Current milestone:** M0 (in progress: #4, #5, #6, #7, #10, #16 done; #8 in review)
 
 ## Progress overview
 
 | Milestone | Goal | Depends on | Status | Issues (done/total) | Tag |
 |---|---|---|---|---|---|
 | **Setup** | Repo, docs, Claude Code config, GitHub workflow | — | ✅ Done | — | — |
-| **M0** | Foundation and risk spikes: packaged Electron app with SQLite, IPC, Pixi, React Flow | Setup | 🔨 In progress | 5/10 (#7 in review) | — |
+| **M0** | Foundation and risk spikes: packaged Electron app with SQLite, IPC, Pixi, React Flow | Setup | 🔨 In progress | 6/10 (#8 in review) | — |
 | **M1** | Profiles, worlds, project persistence (list UI, no canvas) | M0 | 📋 Backlog | — | — |
 | **M2** | Isometric world, placement, hotbar, library, Atlas shell | M1 | 📋 Backlog | — | — |
 | **M3** | Bundled resources, permission broker, artifacts, import commit | M1 (∥ M2) | 📋 Backlog | — | — |

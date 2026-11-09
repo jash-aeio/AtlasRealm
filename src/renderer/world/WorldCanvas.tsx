@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { spikeSelection, type SelectionState } from '../state/selection';
+import { useStore } from '../state/use-store';
 import { createWorldScene, type WorldScene } from './grid-scene';
 import {
   centeredCamera,
@@ -26,6 +28,10 @@ function localPoint(event: { clientX: number; clientY: number }, element: Elemen
   return { x: event.clientX - rect.left, y: event.clientY - rect.top };
 }
 
+function tileKey(tile: GridPoint): string {
+  return `${String(tile.gx)},${String(tile.gy)}`;
+}
+
 function sameTile(a: GridPoint | null, b: GridPoint | null): boolean {
   return a === b || (a !== null && b !== null && a.gx === b.gx && a.gy === b.gy);
 }
@@ -41,9 +47,10 @@ export function WorldUnavailable({ reason }: { reason: string }) {
 
 /**
  * Placeholder isometric world (M0 spike): a 64 × 64 grid with hover, wheel zoom and
- * middle-drag pan. A pure view: it reads no project data and stores nothing.
+ * middle-drag pan. A pure view: it draws the shared mock entities and selection (M0-5) and
+ * stores nothing itself. Left-clicking a marker selects that entity in the shared store.
  */
-export function WorldCanvas() {
+export function WorldCanvas({ state = spikeSelection }: { state?: SelectionState }) {
   const hostRef = useRef<HTMLDivElement>(null);
   // Pixi's canvas goes in its own element that React never renders children into.
   const mountRef = useRef<HTMLDivElement>(null);
@@ -54,6 +61,20 @@ export function WorldCanvas() {
   const [status, setStatus] = useState<WorldStatus>({ state: 'loading' });
   const [hover, setHover] = useState<GridPoint | null>(null);
   const [zoom, setZoom] = useState(INITIAL_ZOOM);
+  const graph = useStore(state.graph);
+  const selection = useStore(state.selection);
+  const entitiesByTile = useMemo(
+    () => new Map(graph.entities.map((entity) => [tileKey(entity.tile), entity])),
+    [graph],
+  );
+  const selectedEntity =
+    selection.entityId === null
+      ? null
+      : (graph.entities.find((entity) => entity.id === selection.entityId) ?? null);
+  const selectedTile = selectedEntity?.tile ?? null;
+  // The scene is created asynchronously, so keep the latest values where its init can read them.
+  const markersRef = useRef(graph.entities.map((entity) => entity.tile));
+  const selectedTileRef = useRef<GridPoint | null>(selectedTile);
 
   const applyCamera = useCallback((camera: Camera) => {
     cameraRef.current = camera;
@@ -104,6 +125,8 @@ export function WorldCanvas() {
         created.canvas.addEventListener('webglcontextlost', onContextLost);
         created.canvas.addEventListener('webglcontextrestored', onContextRestored);
         mount.appendChild(created.canvas);
+        created.setMarkers(markersRef.current);
+        created.setSelected(selectedTileRef.current);
         applyCamera(centeredCamera(host.clientWidth, host.clientHeight, INITIAL_ZOOM));
         // The container can change size without a window resize (panels, layout), so watch
         // the element itself rather than relying on window 'resize' events.
@@ -131,6 +154,17 @@ export function WorldCanvas() {
       sceneRef.current = null;
     };
   }, [applyCamera]);
+
+  // Shared store → Pixi. The scene never reads the store itself; it's only told what to draw.
+  useEffect(() => {
+    markersRef.current = graph.entities.map((entity) => entity.tile);
+    sceneRef.current?.setMarkers(markersRef.current);
+  }, [graph]);
+
+  useEffect(() => {
+    selectedTileRef.current = selectedTile;
+    sceneRef.current?.setSelected(selectedTile);
+  }, [selectedTile]);
 
   // React's onWheel listener is passive, so it can't stop the page scrolling; add our own.
   useEffect(() => {
@@ -173,6 +207,8 @@ export function WorldCanvas() {
       data-testid="world"
       data-state={status.state}
       data-renderer={renderer ?? undefined}
+      data-selected-entity={selectedEntity?.id}
+      data-selected-tile={selectedTile === null ? undefined : tileKey(selectedTile)}
     >
       <div className="world-toolbar">
         <h2 id="world-heading">World (M0 placeholder grid)</h2>
@@ -221,6 +257,16 @@ export function WorldCanvas() {
           }
           applyHover(pickTile(point, cameraRef.current, DEFAULT_MAP));
         }}
+        onClick={(event) => {
+          // Left click (UI_SPEC §6.2 "click building"): select the entity on that tile, or
+          // clear the selection when clicking empty ground.
+          const host = hostRef.current;
+          if (host === null || sceneRef.current === null) return;
+          const tile = pickTile(localPoint(event, host), cameraRef.current, DEFAULT_MAP);
+          const entity = tile === null ? undefined : entitiesByTile.get(tileKey(tile));
+          if (entity === undefined) state.clear();
+          else state.select(entity.id, 'world');
+        }}
         onPointerLeave={() => {
           applyHover(null);
         }}
@@ -256,6 +302,11 @@ export function WorldCanvas() {
         {hover === null
           ? 'Hover a tile to see its grid position.'
           : `Tile ${String(hover.gx)}, ${String(hover.gy)}`}
+      </p>
+      <p className="muted" data-testid="world-selection">
+        {selectedEntity === null
+          ? 'No entity selected in the world.'
+          : `Highlighted in world: ${selectedEntity.label} (${selectedEntity.id}) on tile ${tileKey(selectedEntity.tile)}`}
       </p>
     </section>
   );

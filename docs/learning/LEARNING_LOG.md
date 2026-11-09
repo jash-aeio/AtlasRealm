@@ -11,6 +11,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 005 | [Origins, custom protocols and path traversal](lessons/005-origins-custom-protocols-path-traversal.md) | M0 | origin, custom protocol, app://, path traversal, positive control |
 | 006 | [Packaging, asar and fuses](lessons/006-packaging-asar-and-fuses.md) | M0 | packaging, installer, NSIS, asar, asar integrity, fuses, CDP, code signing |
 | 007 | [Rendering as a pure view](lessons/007-rendering-as-a-pure-view.md) | M0 | isometric projection, inverse projection, camera, WebGL/Canvas2D, WebGL context, error boundary, StrictMode, mutation check |
+| 008 | [One store, many views](lessons/008-one-store-many-views.md) | M0 | single source of truth, external store, useSyncExternalStore, controlled component, React Flow |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map

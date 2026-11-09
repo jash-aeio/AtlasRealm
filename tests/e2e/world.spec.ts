@@ -144,7 +144,11 @@ test.describe('world view with graphics available', () => {
   test('draws real pixels: ground in the centre, background beyond the map edge', async () => {
     const { app, page } = launched;
     // At 0.5× the map covers the whole view; zoom out to ~0.26× so the corners are off-map.
-    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Zoom out' }).click();
+    for (let i = 0; i < 3; i++)
+      await page
+        .getByTestId('world')
+        .getByRole('button', { name: 'Zoom out', exact: true })
+        .click();
     await expect(page.getByTestId('world-status')).toContainText('Zoom 26%');
     const box = await hostBox(page);
     await expect
@@ -153,7 +157,10 @@ test.describe('world view with graphics available', () => {
       )
       .toBe(true);
     expect(isBackground(await pixelAt(app, box.x + 8, box.y + 8))).toBe(true);
-    await page.getByRole('button', { name: 'Reset view' }).click();
+    await page
+      .getByTestId('world')
+      .getByRole('button', { name: 'Reset view', exact: true })
+      .click();
     await expect(page.getByTestId('world-status')).toContainText('Zoom 50%');
   });
 
@@ -173,7 +180,10 @@ test.describe('world view with graphics available', () => {
     await page.mouse.move(x + 1, y);
     await page.mouse.move(x, y);
     await expect(page.getByTestId('world-hover')).toHaveText('Tile 32, 32');
-    await page.getByRole('button', { name: 'Reset view' }).click();
+    await page
+      .getByTestId('world')
+      .getByRole('button', { name: 'Reset view', exact: true })
+      .click();
 
     // Middle-drag 64 px right at 0.5× moves the world 128 px right, so the cursor now
     // points 128 world px further left: gx − 2, gy + 2.
@@ -189,7 +199,10 @@ test.describe('world view with graphics available', () => {
     await expect(page.getByTestId('world-hover')).toHaveText(
       'Hover a tile to see its grid position.',
     );
-    await page.getByRole('button', { name: 'Reset view' }).click();
+    await page
+      .getByTestId('world')
+      .getByRole('button', { name: 'Reset view', exact: true })
+      .click();
   });
 
   test('canvas follows its container when the window resizes', async () => {
@@ -365,7 +378,9 @@ test.describe('world view with no graphics at all', () => {
     await expect(page.getByTestId('world')).toHaveAttribute('data-state', 'failed');
     await expect(page.getByRole('alert')).toContainText('World view unavailable');
     await expect(page.getByTestId('world-status')).toHaveText('Renderer: none');
-    await expect(page.getByRole('button', { name: 'Zoom in' })).toBeDisabled();
+    await expect(
+      page.getByTestId('world').getByRole('button', { name: 'Zoom in', exact: true }),
+    ).toBeDisabled();
 
     await expect(page.getByTestId('launch-info')).toContainText('Launch #');
     await page.getByLabel('Message').fill('still works');
