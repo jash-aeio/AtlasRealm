@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-10 · **Branch:** spike/7-pixi-canvas (PR for #7)
+**Last updated:** 2026-11-10 · **Branch:** spike/8-react-flow-selection (PR for #8)
 
 ## Current milestone
-**M0 — Foundation and risk spikes** (🔨 in progress; M0-1, M0-2, M0-3, M0-7, M0-9 done; M0-4 in review)
+**M0 — Foundation and risk spikes** (🔨 in progress; M0-1, M0-2, M0-3, M0-4, M0-7, M0-9 done; M0-5 in review)
 
 ## Implemented and demonstrated
 - Repository and process setup (2026-11-06): spec docs, Claude Code config, GitHub workflow. See `docs/sessions/2026-11-06-project-setup.md`.
@@ -47,7 +47,7 @@
   - Placeholders: **unsigned** (SmartScreen warns) and Electron's **default icon**.
   - `scripts/electron-builder.ts`: electron-builder runs `pnpm list` from PATH. When pnpm exists only through corepack, the script makes temporary corepack shims for that one process.
 
-- **M0-4 PixiJS placeholder world (#7):** the window shows a "World (M0 placeholder grid)" section above the panels. It's a **mock world** with no projects, buildings or saved state.
+- **M0-4 PixiJS placeholder world (#7, merged):** the window shows a "World (M0 placeholder grid)" section above the panels. It's a **mock world** with no projects, buildings or saved state.
   - `pixi.js` 8.22.0 (exact pin), hosted by our own `WorldCanvas` component, not `@pixi/react` (ADR-0011). Renderer order: WebGL, then Canvas2D. WebGPU is excluded. The status line shows the renderer that's really in use.
   - `projection.ts`: the §17.1 grid ↔ world math, camera pan/zoom (`screen = world × zoom + pan`, zoom 0.25×–4×), and `pickTile` with a fixed edge rule (an edge belongs to the higher-index tile).
   - Grid: 64 × 64 tiles of 64 × 32 px, drawn as one fill plus 130 line segments. Rendering is on demand (no 60 FPS loop).
@@ -56,7 +56,21 @@
   - Failure handling: an init failure, a lost WebGL context or a render crash (`WorldErrorBoundary`) shows "World view unavailable…" in the world area. The rest of the UI keeps working.
   - Lifecycle: a `ResizeObserver` on the container resizes the canvas. Unmounting destroys the Pixi app, and an init that finishes after unmount destroys itself.
 
+- **M0-5 Realm Atlas selection-sharing spike (#8):** a "Realm Atlas" panel sits in the upper right of a new workspace grid, next to the world. Everything in it is **M0 mock data**, labelled "M0 spike · mock data".
+  - `@xyflow/react` 12.12.1 (exact pin, MIT). Its CSS is bundled into our stylesheet, and it adds no runtime `<style>` tags, so the CSP is unchanged.
+  - Shared selection (`src/renderer/state/`): a tiny external store (`store.ts` + `useStore` on `useSyncExternalStore`, no new dependency). `selection.ts` holds the current mock graph and the selected entity ID plus its source (`atlas` or `world`). Unknown IDs are refused, and swapping graphs drops a selection that no longer exists. Nothing is persisted.
+  - Mock data (`spike-graph.ts`): 8 mock projects, each with an ID, a grid tile and a cosmetic graph position, plus a deterministic stress graph (150 nodes / 300 edges by default).
+  - Connections graph (`src/renderer/atlas/ConnectionsGraph.tsx`): **controlled** selection. The store sets `selected`, and React Flow's "select" changes (from a click, or Enter/Space on a focused node) go to the store. Clicking the pane clears the selection. Dragging, connecting and deleting are off. Edge labels show up to 30 links.
+  - `RealmAtlasPanel.tsx` has:
+    - a disabled "Map (later)" tab and the Connections tab
+    - a selection readout ("chosen in Connections / world view")
+    - Clear selection and "Load stress graph (150 / 300)" (M0 spike) buttons
+    - a keyboard-usable list view of entities and links (§30.6)
+  - World: `grid-scene.ts` gains `setMarkers` (one Graphics for all markers) and `setSelected` (a light-blue tile under the marker). `WorldCanvas` reads the store and tells the scene what to draw, including on a newly created scene. Left-clicking a marker selects it, and clicking empty ground clears the selection. The camera never jumps on selection (§30.1).
+  - Hiding the world view keeps the entities and the selection, and showing it again draws the selection straight away.
+
 ## Changed components
+- M0-5: `src/renderer/state/` (new), `src/renderer/atlas/` (new), `src/renderer/world/{grid-scene.ts,WorldCanvas.tsx}`, `src/renderer/app/{App.tsx,app.css}`, `package.json` + lockfile; `tests/domain/selection-store.test.ts`, `tests/e2e/atlas.spec.ts` (new), `tests/e2e/world.spec.ts` (locators scoped to the world section)
 - M0-4: `src/renderer/world/` (new: `projection.ts`, `grid-scene.ts`, `WorldCanvas.tsx`, `WorldErrorBoundary.tsx`), `src/renderer/app/{App.tsx,app.css}`, `package.json` + lockfile (`pixi.js`); `tests/domain/projection.test.ts`, `tests/e2e/world.spec.ts` (new)
 - M0-7: `electron-builder.yml`, `scripts/electron-builder.ts` (new), `electron.vite.config.ts`, `package.json` (scripts, deps), `pnpm-workspace.yaml`, `tsconfig.{node,e2e}.json`, `playwright.packaged.config.ts` + `tests/e2e-packaged/` (new), `.github/workflows/ci.yml`; `src/main/bootstrap/app-protocol.ts`, `src/main/index.ts`, `src/main/ipc/{register.ts,commands/app-launch-info.ts}`, `src/common/contracts/{app-launch-info,channels,atlas-api}.ts`, `src/preload/index.ts`, `src/main/storage/repositories/app-meta-repository.ts`, `src/renderer/app/App.tsx`; `tests/integration/app-launch-info.test.ts`, `tests/e2e/{shell,storage}.spec.ts`
 - M0-9: `src/main/bootstrap/app-origin.ts` and `app-protocol.ts` (new), `window.ts`, `src/main/index.ts`, `src/main/ipc/router.ts`; `tests/security/app-protocol.test.ts` (new), `tests/integration/ipc-router.test.ts`, `tests/e2e/shell.spec.ts`
@@ -67,6 +81,19 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- M0-5, 2026-11-10, local Windows 11: typecheck, lint, format:check pass. Unit/integration 138/138 (13 new). E2E 29/29 (6 new in `atlas.spec.ts`, built app, production CSP).
+  - Graph click → world: `data-selected-entity` matches, and the pixel at the projected tile (beside the marker) turns selection blue. It was ground before (control) and goes back to ground when another node is selected.
+  - World click on a marker → the same graph node is `.selected` (exactly one). Clicking empty ground clears both views.
+  - Keyboard: Enter on a list-view button, and Enter on a focused React Flow node, both select through the store.
+  - Hiding the world, selecting, then showing it again: the new Pixi scene draws the highlight.
+  - No CSP violations or console errors. React Flow's CSS is applied.
+  - Performance at 150 / 300 (6 runs; on #8 and in ADR-0003):
+    - load 84–184 ms
+    - graph click → world ID 67–100 ms
+    - wheel-zoom frames: p50 6.9 ms, p95 7–14 ms, worst 14–35 ms
+    - E2E ceilings are loose (3 s / 500 ms) for CI.
+  - Mutation checks, each of which made a test fail: highlight off (2), no initial selection on a new scene (1), graph ignoring the store (4), click-only selection (1).
+  - Screenshots checked by eye. Not checked: `pnpm dev` by hand, a packaged run with the Atlas, screen readers.
 - M0-4, 2026-11-10, local Windows 11: typecheck, lint, format:check pass. Unit/integration 125/125 (17 new projection tests). E2E 23/23 (8 new in `world.spec.ts`, built app, production CSP). Renderer used locally: WebGL.
   - The grid draws real pixels: `webContents.capturePage` finds ground colour at the centre and background past the map edge. No CSP violations, no console errors.
   - Hover, wheel zoom and middle-drag pan give the expected tiles (e.g. "Tile 30, 34" after a 64 px pan).
@@ -109,7 +136,12 @@
 - CI: see the PR checks (first CI run with E2E on windows-latest).
 
 ## Known limitations
-- No product features yet: the world is a placeholder grid with no projects, buildings or React Flow. The DB holds only launch facts.
+- No product features yet: the world is a placeholder grid and the Realm Atlas shows mock entities; no real projects or buildings. The DB holds only launch facts.
+- Realm Atlas (M0-5): mock data only, with no Map tab, resize, pin, expand, search, filters or grouping.
+  - At "fit to view" the 150-node stress graph is too small to read. Readability, not speed, is the limit (§30.6 grouping/expansion).
+  - React Flow's attribution link can't open, because the shell blocks navigation. How to credit it is still open.
+  - The renderer bundle is ~684 kB. Vite warns about chunks over 500 kB; that's harmless for a local app.
+  - Selection latency (~70–100 ms at 150 nodes) should be profiled before the limits go up.
 - World view: WebGPU is off (ADR-0011). Canvas2D was only tested by forcing it. The CI runners have no GPU, so either renderer is accepted there. Performance with buildings is unmeasured. The world has no keyboard tile selection yet (the zoom buttons are keyboard-usable). A list equivalent comes with real projects (UI_SPEC §6.6).
 - Pixi's bundled "agent skills" (pnpm prompt) were not approved. They aren't needed.
 - **For M0-8 (textures):** Pixi's `Assets` loader uses `blob:` workers by default, and our CSP blocks them. Its support check has no error handler, so loading could hang silently. Set `preferWorkers = false` (check the docs first), don't add `blob:` to the CSP, and add an E2E test that loads a texture under the production CSP.
@@ -136,9 +168,10 @@
 - [ADR-0009](../adr/0009-electron-vite-and-electron-builder.md): electron-vite for builds, electron-builder for packaging
 - [ADR-0010](../adr/0010-node-sqlite-binding.md): built-in `node:sqlite` as the SQLite binding
 - [ADR-0011](../adr/0011-plain-pixijs-webgl-canvas-fallback.md): plain `pixi.js` with our own React wrapper; WebGL, then Canvas2D
+- [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- After the #7 PR is merged, pick an unblocked M0 task:
-  - **M0-5 React Flow spike (#8)** (recommended next: its acceptance criteria need shared selection that the Pixi view also reads, and the world now exists), M0-6 worker messaging (#9), or M0-8 art placeholders (#11, would replace the placeholder colours and default icon).
+- After the #8 PR is merged, pick an unblocked M0 task:
+  - **M0-6 worker messaging (#9)** or **M0-8 art placeholders (#11)**. M0-8 would replace the placeholder colours and default icon; follow the "For M0-8" note above about Pixi's asset loader under our CSP.
   - #20 (block Chromium switches) is a release gate before M3, not urgent for M0.
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.
