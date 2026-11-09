@@ -75,3 +75,8 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Error boundary** | A React component that catches a crash in its children and shows a fallback instead of blanking the whole app | `WorldErrorBoundary.tsx` |
 | **StrictMode (React)** | A development-only mode that mounts components twice to expose missing cleanup | `src/renderer/app/main.tsx` |
 | **Mutation check** | Breaking the code on purpose to confirm a test fails; proves the test isn't passing vacuously | session logs |
+| **Single source of truth** | Keeping a value in exactly one place; every view reads it from there instead of keeping its own copy | `src/renderer/state/` |
+| **Store (external)** | An object outside React that holds a value, lets code change it and notifies subscribers. React reads it with `useSyncExternalStore` | `state/store.ts` |
+| **Controlled component** | A component that shows a value passed in from outside and only *reports* user actions, instead of keeping its own state | `ConnectionsGraph.tsx` |
+| **React Flow** | The library (`@xyflow/react`) that draws the Realm Atlas Connections graph as HTML/SVG nodes and edges (ADR-0003) | `src/renderer/atlas/` |
+| **Shared entity ID** | One stable ID used by every view of the same thing (world marker, graph node, list item), so selection can be shared | `spike-graph.ts` |
