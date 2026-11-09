@@ -10,6 +10,7 @@ import { Channels } from '../common/contracts/channels';
 const api: AtlasApi = {
   app: {
     ping: (input) => ipcRenderer.invoke(Channels.appPing, input),
+    launchInfo: () => ipcRenderer.invoke(Channels.appLaunchInfo),
   },
 };
 

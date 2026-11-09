@@ -23,8 +23,13 @@ function contentSecurityPolicy(): Plugin {
 
 // One build per Electron process (ADR-0009). Entries follow electron-vite's defaults:
 // src/main/index.ts, src/preload/index.ts, src/renderer/index.html → out/<process>/.
+// Every build bundles its libraries, so the packaged app ships out/ and no node_modules (#10).
+// That's why all packages are devDependencies: none are needed at runtime.
 export default defineConfig({
-  main: {},
+  main: {
+    // Bundle zod etc. into out/main. Node built-ins (node:sqlite) and electron stay external.
+    build: { externalizeDeps: false },
+  },
   preload: {
     build: {
       // A sandboxed preload can't load ES modules or files from node_modules, so emit
@@ -37,5 +42,8 @@ export default defineConfig({
   },
   renderer: {
     plugins: [react(), contentSecurityPolicy()],
+    // Minify the UI bundle (electron-vite leaves it readable by default). Main and preload stay
+    // unminified so stack traces in local logs remain readable.
+    build: { minify: true },
   },
 });

@@ -36,6 +36,21 @@ export class AppMetaRepository {
       .run(key, value, at, at);
   }
 
+  /** The stored launch facts, or undefined if no launch was recorded yet. Read-only. */
+  readLaunch(): AppLaunchRecord | undefined {
+    const launchCount = this.get('launch_count');
+    const firstLaunchedAt = this.get('first_launched_at');
+    const lastLaunchedAt = this.get('last_launched_at');
+    if (
+      launchCount === undefined ||
+      firstLaunchedAt === undefined ||
+      lastLaunchedAt === undefined
+    ) {
+      return undefined;
+    }
+    return { launchCount: Number(launchCount), firstLaunchedAt, lastLaunchedAt };
+  }
+
   /** Counts this app start. Reads and writes in one transaction, so no launch is lost. */
   recordLaunch(): AppLaunchRecord {
     return withTransaction(this.db, () => {

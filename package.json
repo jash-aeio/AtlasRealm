@@ -2,6 +2,7 @@
   "name": "atlas-realm",
   "version": "0.0.0",
   "description": "Local-first Windows desktop app where projects are buildings in a fantasy isometric world.",
+  "author": "jash-aeio",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
@@ -20,7 +21,9 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "electron-vite build && playwright test"
+    "test:e2e": "electron-vite build && playwright test",
+    "package": "electron-vite build && node scripts/electron-builder.ts --win --publish never",
+    "test:e2e:packaged": "playwright test --config playwright.packaged.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -30,19 +33,18 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.2.1",
     "electron": "45.2.3",
+    "electron-builder": "26.18.0",
     "electron-vite": "6.0.0",
     "eslint": "10.14.0",
     "eslint-config-prettier": "10.1.8",
     "globals": "17.14.0",
     "prettier": "3.9.10",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.1",
     "vite": "8.3.6",
-    "vitest": "5.1.0"
-  },
-  "dependencies": {
-    "react": "19.3.1",
-    "react-dom": "19.3.1",
+    "vitest": "5.1.0",
     "zod": "4.6.7"
   },
   "main": "out/main/index.js"

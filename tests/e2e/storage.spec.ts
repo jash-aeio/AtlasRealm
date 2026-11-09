@@ -29,23 +29,31 @@ const cleanEnv = (): Record<string, string> =>
     ),
   );
 
-/** Starts the app, waits for its window, returns what userData resolved to, then quits. */
-async function launchOnce(): Promise<string> {
+/** Starts the app, waits for its window, returns userData and the UI's launch line, then quits. */
+async function launchOnce(): Promise<{ userData: string; launchText: string }> {
   const app = await electron.launch({
     args: ['.', `--user-data-dir=${userDataDir}`],
     env: cleanEnv(),
   });
   try {
-    await app.firstWindow();
-    return await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'));
+    const page = await app.firstWindow();
+    const launchInfo = page.getByTestId('launch-info');
+    await expect(launchInfo).toContainText('Launch #');
+    return {
+      userData: await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData')),
+      launchText: (await launchInfo.textContent()) ?? '',
+    };
   } finally {
     await app.close();
   }
 }
 
 test('the database lives under userData and its records survive a restart', async () => {
-  expect(await launchOnce()).toBe(userDataDir);
-  await launchOnce();
+  const first = await launchOnce();
+  expect(first.userData).toBe(userDataDir);
+  expect(first.launchText).toMatch(/^Launch #1 · .* · schema v1$/);
+  // The UI shows the stored count after a restart, not just the database file.
+  expect((await launchOnce()).launchText).toMatch(/^Launch #2 · .* · schema v1$/);
 
   // Read the file the app wrote, after it has quit (read-only: the test never changes it).
   const db = new DatabaseSync(join(userDataDir, 'profiles', 'default', 'app.sqlite'), {
