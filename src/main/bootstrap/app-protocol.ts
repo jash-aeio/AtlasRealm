@@ -38,3 +38,14 @@ export function serveAppProtocol(rootDir: string): void {
     }
   });
 }
+
+/**
+ * Answers every file: request with an empty 404. Call after ready. Nothing in the app needs
+ * file: URLs: the UI comes from app://atlas, whose handler reads its files with
+ * bypassCustomProtocolHandlers and so skips this block. Closing file: removes a whole class of
+ * leaks (local files, UNC network shares that send the Windows login hash) no matter which page,
+ * frame or main-process code asks (#16 security review follow-up, #10).
+ */
+export function blockFileProtocol(): void {
+  protocol.handle('file', () => new Response(null, { status: 404 }));
+}

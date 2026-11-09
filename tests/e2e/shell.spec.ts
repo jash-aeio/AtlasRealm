@@ -193,3 +193,18 @@ test('app:// handler refuses paths outside the renderer folder', async () => {
   });
   expect(statuses).toEqual([200, 404, 404, 404, 404, 404, 405]);
 });
+
+test('file: is blocked for every caller, but app:// still reads its own files', async () => {
+  // Main-process net.fetch goes through protocol handlers, so it sees the file: block too.
+  // The control fetch skips custom handlers like the app:// handler does, and must succeed:
+  // otherwise the 404 could just mean "file missing".
+  const statuses = await app.evaluate(async ({ net }) => {
+    const hosts = 'file:///C:/Windows/System32/drivers/etc/hosts';
+    return {
+      blocked: (await net.fetch(hosts)).status,
+      control: (await net.fetch(hosts, { bypassCustomProtocolHandlers: true })).status,
+      appOrigin: (await net.fetch('app://atlas/index.html')).status,
+    };
+  });
+  expect(statuses).toEqual({ blocked: 404, control: 200, appOrigin: 200 });
+});

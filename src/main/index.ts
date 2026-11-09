@@ -3,7 +3,7 @@
 import { app, BrowserWindow, dialog } from 'electron';
 
 import { APP_ENTRY_URL } from './bootstrap/app-origin';
-import { registerAppScheme, serveAppProtocol } from './bootstrap/app-protocol';
+import { blockFileProtocol, registerAppScheme, serveAppProtocol } from './bootstrap/app-protocol';
 import {
   createMainWindow,
   installNavigationGuards,
@@ -48,6 +48,7 @@ async function start(): Promise<void> {
   }
 
   installNavigationGuards();
+  blockFileProtocol();
   const entryUrl = rendererEntryUrl();
   // Only serve app:// when the build is in use; `pnpm dev` loads from the dev server.
   if (entryUrl === APP_ENTRY_URL) serveAppProtocol(RENDERER_DIR);
