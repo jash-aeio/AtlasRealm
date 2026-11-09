@@ -25,9 +25,11 @@ function focusMainWindow(): void {
 
 async function start(): Promise<void> {
   await app.whenReady();
+  let db: Database;
   try {
     const opened = await openAppDatabase(app.getPath('userData'));
-    database = opened.db;
+    db = opened.db;
+    database = db;
     console.info(
       `[storage] schema v${String(opened.migration.toVersion)}, launch #${String(opened.launch.launchCount)}`,
     );
@@ -52,7 +54,7 @@ async function start(): Promise<void> {
   const entryUrl = rendererEntryUrl();
   // Only serve app:// when the build is in use; `pnpm dev` loads from the dev server.
   if (entryUrl === APP_ENTRY_URL) serveAppProtocol(RENDERER_DIR);
-  registerIpcHandlers(entryUrl);
+  registerIpcHandlers(entryUrl, db);
   createMainWindow();
 }
 
