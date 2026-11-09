@@ -5,6 +5,6 @@
     "lib": ["ES2023"],
     "types": ["node", "electron-vite/node"]
   },
-  "include": ["src/main", "src/preload", "src/common", "tests", "*.config.ts"],
-  "exclude": ["tests/e2e"]
+  "include": ["src/main", "src/preload", "src/common", "tests", "scripts", "*.config.ts"],
+  "exclude": ["tests/e2e", "tests/e2e-packaged"]
 }

@@ -1,0 +1,54 @@
+# Windows packaging (M0-7, #10; ADR-0009). Run `pnpm package` → release/.
+# electron-vite builds out/ first; electron-builder wraps it with Electron into an installer.
+appId: io.github.jash-aeio.atlasrealm
+productName: Atlas Realm
+copyright: Copyright © 2026 jash-aeio
+# Written into the packaged package.json, so the installed app's name and data folder are
+# "Atlas Realm" (%APPDATA%\Atlas Realm). `pnpm dev` keeps "atlas-realm": dev builds with a newer
+# schema can't touch the installed app's database (a newer DB is refused, DATA_MODEL §9).
+extraMetadata:
+  productName: Atlas Realm
+
+directories:
+  output: release
+  # Icons and installer art go here once they exist (M0-8). Until then electron-builder uses
+  # Electron's default icon: a labeled placeholder, not final branding.
+  buildResources: resources/packaging
+
+# Only the bundled build output ships. All libraries are bundled into out/ (see
+# electron.vite.config.ts), so no node_modules folder is packaged.
+files:
+  - out/**/*
+  - package.json
+# Pack the app into app.asar, a single read-only archive. Asar integrity (below) checks it.
+asar: true
+# No native modules: SQLite is Electron's built-in node:sqlite (ADR-0010), so skip rebuilding.
+npmRebuild: false
+
+# Fuses are switches inside the Electron binary, flipped at package time. They turn off
+# features an attacker could use to run their code through our executable (#16 security
+# review; lesson 006). Asar integrity only becomes a real boundary once the .exe is
+# code-signed: unsigned, a local attacker can patch the stored hash too. Chromium switches
+# such as --remote-debugging-port have no fuse yet (follow-up issue, release gate).
+electronFuses:
+  runAsNode: false # ELECTRON_RUN_AS_NODE can't turn the app into a plain Node.js
+  enableNodeOptionsEnvironmentVariable: false # NODE_OPTIONS can't inject code
+  enableNodeCliInspectArguments: false # --inspect can't attach a debugger to main
+  enableEmbeddedAsarIntegrityValidation: true # a modified app.asar refuses to load
+  onlyLoadAppFromAsar: true # no loading a loose app/ folder next to the asar
+  grantFileProtocolExtraPrivileges: false # file: pages get no extra powers
+
+win:
+  target:
+    - target: nsis
+      arch: x64
+  # Unsigned for now: a code-signing certificate costs money. Windows SmartScreen will warn
+  # on first run. Signing is a release-gate decision, not an M0 one.
+
+nsis:
+  oneClick: false
+  perMachine: false # per-user install, no admin prompt
+  allowToChangeInstallationDirectory: true
+  # Uninstalling the app must never delete projects or the database (PRODUCT_RULES §3.1).
+  deleteAppDataOnUninstall: false
+  artifactName: AtlasRealm-Setup-${version}.${ext}

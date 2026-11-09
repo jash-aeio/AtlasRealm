@@ -66,3 +66,29 @@ jobs:
       # session, so no virtual display is needed). Probes the renderer's security boundary.
       - name: E2E (Playwright + Electron)
         run: pnpm test:e2e
+
+      # Windows packaging (#10). electron-builder downloads Electron and NSIS from GitHub
+      # Releases, so retry like the Electron download above.
+      - name: Package (electron-builder, NSIS)
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            pnpm package && exit 0
+            echo "Packaging failed (attempt $attempt of 3), retrying in 20s..."
+            sleep 20
+          done
+          exit 1
+
+      # Runs the packaged .exe from a path with spaces and non-ASCII characters, checks that
+      # data survives a restart, that assets load only from app://, and that the fuses hold.
+      - name: E2E (packaged app)
+        run: pnpm test:e2e:packaged
+
+      # The unsigned installer, for trying a PR build by hand. Not a release.
+      - name: Upload installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: AtlasRealm-Setup-unsigned
+          path: release/AtlasRealm-Setup-*.exe
+          retention-days: 7
+          if-no-files-found: error

@@ -70,7 +70,7 @@ test('preload exposes only the explicit API', async () => {
     top: Object.keys(window.atlas),
     app: Object.keys(window.atlas.app),
   }));
-  expect(shape).toEqual({ top: ['app'], app: ['ping'] });
+  expect(shape).toEqual({ top: ['app'], app: ['ping', 'launchInfo'] });
 });
 
 test('app.ping round-trips through the main process', async () => {
@@ -192,4 +192,31 @@ test('app:// handler refuses paths outside the renderer folder', async () => {
     ]);
   });
   expect(statuses).toEqual([200, 404, 404, 404, 404, 404, 405]);
+});
+
+test('file: is blocked for every caller, but app:// still reads its own files', async () => {
+  // Main-process net.fetch goes through protocol handlers, so it sees the file: block too.
+  // The control fetch skips custom handlers like the app:// handler does, and must succeed:
+  // otherwise the 404 could just mean "file missing".
+  const statuses = await app.evaluate(async ({ net }) => {
+    const hosts = 'file:///C:/Windows/System32/drivers/etc/hosts';
+    return {
+      blocked: (await net.fetch(hosts)).status,
+      control: (await net.fetch(hosts, { bypassCustomProtocolHandlers: true })).status,
+      appOrigin: (await net.fetch('app://atlas/index.html')).status,
+    };
+  });
+  expect(statuses).toEqual({ blocked: 404, control: 200, appOrigin: 200 });
+});
+
+test('app.launchInfo forwards no renderer payload to the main process', async () => {
+  // Bypass the typed preload function: call the bridge with an argument it should never take.
+  const result = await page.evaluate(() =>
+    (window.atlas.app.launchInfo as unknown as (arg: unknown) => Promise<unknown>)({
+      launchCount: 99,
+    }),
+  );
+  // The preload invokes with no payload, so the extra argument never reaches main (whose
+  // schema would reject it: see tests/integration/app-launch-info.test.ts).
+  expect(result).toMatchObject({ ok: true, data: { launchCount: 1 } });
 });
