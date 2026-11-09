@@ -67,3 +67,11 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **WAL (write-ahead log)** | SQLite mode that writes changes to a side file first; crash-safe and lets reads run during a write | `openDatabase` |
 | **Worktree** | An extra checkout of the repo on another branch, used for parallel agents | `process/MULTI_AGENT_GUIDE.md` |
 | **Zod** | A TypeScript library that validates data at runtime | IPC contracts |
+| **Isometric projection** | Drawing a flat grid as 2:1 diamonds so it looks tilted in 3D. Tile positions are stored as grid coordinates and converted to pixels only for display | `src/renderer/world/projection.ts` |
+| **Inverse projection** | The reverse conversion: from a pointer position on screen back to grid coordinates (after undoing the camera's pan and zoom) | `pickTile` |
+| **Camera (pan / zoom)** | The view transform from world pixels to screen pixels: `screen = world × zoom + pan`. Cosmetic: it never changes stored positions | `projection.ts` |
+| **WebGL / Canvas2D** | Two browser drawing APIs. WebGL uses the GPU and is fast; Canvas2D is a slower, simpler fallback. Pixi tries WebGL first (ADR-0011) | `grid-scene.ts` |
+| **WebGL context (lost)** | The page's connection to the GPU. Browsers cap how many exist and can take one away (driver reset); a context must be released when its canvas goes away | `WorldCanvas.tsx` |
+| **Error boundary** | A React component that catches a crash in its children and shows a fallback instead of blanking the whole app | `WorldErrorBoundary.tsx` |
+| **StrictMode (React)** | A development-only mode that mounts components twice to expose missing cleanup | `src/renderer/app/main.tsx` |
+| **Mutation check** | Breaking the code on purpose to confirm a test fails; proves the test isn't passing vacuously | session logs |

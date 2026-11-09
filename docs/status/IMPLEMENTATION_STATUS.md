@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-09 · **Branch:** feat/10-windows-packaging (PR for #10)
+**Last updated:** 2026-11-10 · **Branch:** spike/7-pixi-canvas (PR for #7)
 
 ## Current milestone
-**M0 — Foundation and risk spikes** (🔨 in progress; M0-1, M0-2, M0-3, M0-9 done; M0-7 in review)
+**M0 — Foundation and risk spikes** (🔨 in progress; M0-1, M0-2, M0-3, M0-7, M0-9 done; M0-4 in review)
 
 ## Implemented and demonstrated
 - Repository and process setup (2026-11-06): spec docs, Claude Code config, GitHub workflow. See `docs/sessions/2026-11-06-project-setup.md`.
@@ -37,7 +37,7 @@
   - IPC trusts only the `app://atlas` origin in builds (shared `isAppOrigin`, which also rejects `user:pw@`). The router refuses to build a check for a `file:` entry. `pnpm dev` still uses the localhost dev server.
   - Rule written in `app-protocol.ts`: only build output may be served under `app://atlas`, because IPC trusts that whole origin.
 
-- **M0-7 Windows packaging (#10):** `pnpm package` builds `release/AtlasRealm-Setup-0.0.0.exe` (NSIS) and `release/win-unpacked/`.
+- **M0-7 Windows packaging (#10, merged):** `pnpm package` builds `release/AtlasRealm-Setup-0.0.0.exe` (NSIS) and `release/win-unpacked/`.
   - electron-builder 26.18.0 (`electron-builder.yml`, ADR-0009). Only `out/**` and `package.json` go into `app.asar`, with no `node_modules`. Main bundles zod, and all packages are devDependencies. The renderer is minified (567 → 220 kB).
   - Fuses: RunAsNode, `NODE_OPTIONS` and `--inspect` are off. `file:` extra privileges are off. Embedded asar integrity and OnlyLoadAppFromAsar are on.
   - `file:` is blocked for every request in the default session (`blockFileProtocol`). The `app://` handler bypasses the block for its own files.
@@ -47,7 +47,17 @@
   - Placeholders: **unsigned** (SmartScreen warns) and Electron's **default icon**.
   - `scripts/electron-builder.ts`: electron-builder runs `pnpm list` from PATH. When pnpm exists only through corepack, the script makes temporary corepack shims for that one process.
 
+- **M0-4 PixiJS placeholder world (#7):** the window shows a "World (M0 placeholder grid)" section above the panels. It's a **mock world** with no projects, buildings or saved state.
+  - `pixi.js` 8.22.0 (exact pin), hosted by our own `WorldCanvas` component, not `@pixi/react` (ADR-0011). Renderer order: WebGL, then Canvas2D. WebGPU is excluded. The status line shows the renderer that's really in use.
+  - `projection.ts`: the §17.1 grid ↔ world math, camera pan/zoom (`screen = world × zoom + pan`, zoom 0.25×–4×), and `pickTile` with a fixed edge rule (an edge belongs to the higher-index tile).
+  - Grid: 64 × 64 tiles of 64 × 32 px, drawn as one fill plus 130 line segments. Rendering is on demand (no 60 FPS loop).
+  - Interaction: a hover readout ("Tile gx, gy"), wheel zoom around the cursor, middle-drag pan, and Zoom out / Zoom in / Reset view buttons. A "Hide world view" toggle (M0 spike) unmounts the view.
+  - CSP unchanged: `import 'pixi.js/unsafe-eval'` swaps out Pixi's `new Function()` code.
+  - Failure handling: an init failure, a lost WebGL context or a render crash (`WorldErrorBoundary`) shows "World view unavailable…" in the world area. The rest of the UI keeps working.
+  - Lifecycle: a `ResizeObserver` on the container resizes the canvas. Unmounting destroys the Pixi app, and an init that finishes after unmount destroys itself.
+
 ## Changed components
+- M0-4: `src/renderer/world/` (new: `projection.ts`, `grid-scene.ts`, `WorldCanvas.tsx`, `WorldErrorBoundary.tsx`), `src/renderer/app/{App.tsx,app.css}`, `package.json` + lockfile (`pixi.js`); `tests/domain/projection.test.ts`, `tests/e2e/world.spec.ts` (new)
 - M0-7: `electron-builder.yml`, `scripts/electron-builder.ts` (new), `electron.vite.config.ts`, `package.json` (scripts, deps), `pnpm-workspace.yaml`, `tsconfig.{node,e2e}.json`, `playwright.packaged.config.ts` + `tests/e2e-packaged/` (new), `.github/workflows/ci.yml`; `src/main/bootstrap/app-protocol.ts`, `src/main/index.ts`, `src/main/ipc/{register.ts,commands/app-launch-info.ts}`, `src/common/contracts/{app-launch-info,channels,atlas-api}.ts`, `src/preload/index.ts`, `src/main/storage/repositories/app-meta-repository.ts`, `src/renderer/app/App.tsx`; `tests/integration/app-launch-info.test.ts`, `tests/e2e/{shell,storage}.spec.ts`
 - M0-9: `src/main/bootstrap/app-origin.ts` and `app-protocol.ts` (new), `window.ts`, `src/main/index.ts`, `src/main/ipc/router.ts`; `tests/security/app-protocol.test.ts` (new), `tests/integration/ipc-router.test.ts`, `tests/e2e/shell.spec.ts`
 - M0-3: `src/main/storage/` (database, migrate, migration-rules, migrations, repositories, app-database), `src/main/index.ts` (DB at startup, single-instance lock), `tests/integration/storage-*`, `tests/e2e/storage.spec.ts`; both E2E specs use a temporary `--user-data-dir`
@@ -57,6 +67,16 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- M0-4, 2026-11-10, local Windows 11: typecheck, lint, format:check pass. Unit/integration 125/125 (17 new projection tests). E2E 23/23 (8 new in `world.spec.ts`, built app, production CSP). Renderer used locally: WebGL.
+  - The grid draws real pixels: `webContents.capturePage` finds ground colour at the centre and background past the map edge. No CSP violations, no console errors.
+  - Hover, wheel zoom and middle-drag pan give the expected tiles (e.g. "Tile 30, 34" after a 64 px pan).
+  - The canvas and its drawing buffer follow two window sizes.
+  - Leaks: 20 hide/show cycles, then 20 hides during init (more than 10 must really race). Live WebGL contexts return to baseline. Pixi keeps one page-wide helper context (`getTestContext`).
+  - Forced `loseContext()`: the message shows, `app.ping` works, and after `restoreContext()` the world is back.
+  - With WebGL blocked (init script), it falls back to Canvas2D and draws ground pixels. With all canvas contexts blocked: state `failed`, an alert, disabled zoom buttons, and launch info and `app.ping` still work.
+  - Mutation checks, each of which made a test fail: removing `pixi.js/unsafe-eval`, the ResizeObserver, unmount destroy, late-init destroy or `EDGE_EPSILON`, and a grey ground colour.
+  - Not checked: `pnpm dev` by hand (StrictMode double mount), Canvas2D on a real GPU-less machine, §17.4 performance targets, or a packaged run with the world view.
+  - security-auditor: approve. L2 (the CSP-violation listener now runs from an init script before app code) and L3 (an ESLint `no-restricted-imports` rule allows Pixi imports only in `grid-scene.ts`) are fixed. L1 (asset loader workers) is a note for M0-8, listed below. invariant-reviewer: no invariant violations. It found a wrong exercise answer in lesson 007 (fixed) and a stale status doc (updated in this commit).
 - M0-7, 2026-11-09, local Windows 11: typecheck, lint, format:check pass. Unit/integration 108/108. E2E 15/15 (built app). Packaged E2E 7/7.
   - `pnpm package` took about 70 s. Output: `AtlasRealm-Setup-0.0.0.exe` (121 MB) and `win-unpacked` (358 MB). The asar holds only `out/` + `package.json`.
   - Packaged E2E copies the app to `%TEMP%\atlas packaged Ünïcødé 测试 …\Program Fïles (x86) 地图\Atlas Realm`, with userData also under a non-ASCII path.
@@ -89,7 +109,10 @@
 - CI: see the PR checks (first CI run with E2E on windows-latest).
 
 ## Known limitations
-- No product features yet: no world, projects, Pixi or React Flow. The DB holds only launch facts.
+- No product features yet: the world is a placeholder grid with no projects, buildings or React Flow. The DB holds only launch facts.
+- World view: WebGPU is off (ADR-0011). Canvas2D was only tested by forcing it. The CI runners have no GPU, so either renderer is accepted there. Performance with buildings is unmeasured. The world has no keyboard tile selection yet (the zoom buttons are keyboard-usable). A list equivalent comes with real projects (UI_SPEC §6.6).
+- Pixi's bundled "agent skills" (pnpm prompt) were not approved. They aren't needed.
+- **For M0-8 (textures):** Pixi's `Assets` loader uses `blob:` workers by default, and our CSP blocks them. Its support check has no error handler, so loading could hang silently. Set `preferWorkers = false` (check the docs first), don't add `blob:` to the CSP, and add an E2E test that loads a texture under the production CSP.
 - `node:sqlite` is a release candidate API (ADR-0010). It works in the packaged build (M0-7 E2E).
 - **Release gate (#20):** the packaged app still accepts Chromium switches such as `--remote-debugging-port`, `--no-sandbox` and `--disable-web-security`. Any program running as the same user could drive the trusted page. Low impact while only `ping`/`launchInfo` exist. It must be fixed before any IPC command touches files, secrets or providers.
 - Unsigned build: SmartScreen warns, and asar integrity only stops corruption and casual tampering. Without a signature, a local attacker can patch the hash in the `.exe` too. Code signing is a release decision (costs money).
@@ -112,9 +135,10 @@
 - [ADR-0008](../adr/0008-proprietary-license-for-now.md): proprietary license for now
 - [ADR-0009](../adr/0009-electron-vite-and-electron-builder.md): electron-vite for builds, electron-builder for packaging
 - [ADR-0010](../adr/0010-node-sqlite-binding.md): built-in `node:sqlite` as the SQLite binding
+- [ADR-0011](../adr/0011-plain-pixijs-webgl-canvas-fallback.md): plain `pixi.js` with our own React wrapper; WebGL, then Canvas2D
 
 ## Next task
-- After the #10 PR is merged, pick an unblocked M0 task:
-  - **M0-4 Pixi canvas (#7)** (recommended next: it's the next big risk spike), or M0-5 React Flow spike (#8), M0-6 worker messaging (#9), M0-8 art placeholders (#11, would replace the default icon).
+- After the #7 PR is merged, pick an unblocked M0 task:
+  - **M0-5 React Flow spike (#8)** (recommended next: its acceptance criteria need shared selection that the Pixi view also reads, and the world now exists), M0-6 worker messaging (#9), or M0-8 art placeholders (#11, would replace the placeholder colours and default icon).
   - #20 (block Chromium switches) is a release gate before M3, not urgent for M0.
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.

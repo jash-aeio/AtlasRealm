@@ -10,6 +10,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 004 | [Database migrations, transactions and safe backups](lessons/004-migrations-transactions-backups.md) | M0 | migrations, schema version, transactions, rollback, WAL, online backup, repositories |
 | 005 | [Origins, custom protocols and path traversal](lessons/005-origins-custom-protocols-path-traversal.md) | M0 | origin, custom protocol, app://, path traversal, positive control |
 | 006 | [Packaging, asar and fuses](lessons/006-packaging-asar-and-fuses.md) | M0 | packaging, installer, NSIS, asar, asar integrity, fuses, CDP, code signing |
+| 007 | [Rendering as a pure view](lessons/007-rendering-as-a-pure-view.md) | M0 | isometric projection, inverse projection, camera, WebGL/Canvas2D, WebGL context, error boundary, StrictMode, mutation check |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map
