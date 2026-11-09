@@ -2,7 +2,7 @@
 
 A beginner-friendly, **local-first Windows desktop app** where your projects are buildings in a fantasy isometric world. You can enter a building's 2.5D interior, look at how things connect in the Realm Atlas, assign AI agents with skills and tools, supervise their work, and turn workflows into automations.
 
-> **Status:** M0 in progress. Tooling and a secure Electron shell exist. The window shows only an IPC test panel: no world, projects or data yet.
+> **Status:** M0 in progress. A secure Electron shell with a local SQLite database, packaged as a Windows installer. The window shows only M0 test panels (IPC check, launch count): no world or projects yet.
 > See [docs/status/IMPLEMENTATION_STATUS.md](docs/status/IMPLEMENTATION_STATUS.md) for where things stand right now.
 
 ## Planned stack (confirmed during M0)
@@ -24,9 +24,18 @@ pnpm test             # Vitest, once (`pnpm test:watch` re-runs on save)
 pnpm dev              # run the app with hot reload (electron-vite)
 pnpm build            # build main/preload/renderer into out/
 pnpm test:e2e         # build, then Playwright launches the real app
+pnpm package          # Windows installer + unpacked app in release/ (about 1 minute)
+pnpm test:e2e:packaged # smoke-test the packaged app (run `pnpm package` first)
 ```
 
 Can't run `corepack enable`? Prefix the commands with `corepack` instead, e.g. `corepack pnpm install`.
+
+### Packaging (Windows)
+`pnpm package` builds `release/AtlasRealm-Setup-<version>.exe` (an NSIS installer: per-user, no admin rights, choosable folder) and `release/win-unpacked/` (the app, runnable without installing).
+- **Unsigned:** Windows SmartScreen warns on first run ("More info" → "Run anyway"). Code signing is a later release decision.
+- **Placeholder icon:** Electron's default until the M0-8 art lands.
+- The installed app keeps its data in `%APPDATA%\Atlas Realm` (dev runs use `%APPDATA%\atlas-realm`). Uninstalling keeps that folder.
+- `pnpm test:e2e:packaged` runs the packaged `.exe` from a folder with spaces and non-ASCII characters. It checks that data survives a restart, that assets load only from inside the app, and that the security fuses are on. CI does the same on every PR and attaches the unsigned installer as a 7-day artifact.
 
 ## Documentation
 Start at **[docs/README.md](docs/README.md)**. It's a map of every document with a "read this when…" guide.

@@ -35,16 +35,23 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Formatter** | A tool that rewrites code layout (quotes, spacing) without changing behavior. We use Prettier. | `.prettierrc.json` |
 | **Hook (Claude Code)** | A script the harness runs automatically on events (before a tool runs, at session start…) | `.claude/hooks/` |
 | **Idempotent** | Doing it twice has the same effect as doing it once | workflow engine §12.6 |
+| **Installer (NSIS)** | A Setup.exe that copies the app into a folder and adds Start-menu and uninstall entries. NSIS is the installer system electron-builder uses | `electron-builder.yml` |
 | **Invariant** | A rule that must *always* hold (e.g. "removing a building never deletes a project") | `PRODUCT_RULES.md` §3.1 |
 | **IPC** | Inter-Process Communication: messages between renderer and main | §16 |
 | **Linter** | A tool that flags suspicious code that still compiles (unawaited promises, empty catch). We use ESLint. | `eslint.config.js` |
+| **asar** | Electron's read-only archive format: our built files packed into one `app.asar`, read like a folder | `electron-builder.yml` |
+| **asar integrity** | A fingerprint of every file in `app.asar`, stored in the `.exe` and checked at startup, so a modified app refuses to run | `electron-builder.yml` |
 | **Lockfile** | A generated file recording the exact version of every installed dependency, so all machines match | `pnpm-lock.yaml` |
 | **Binding (SQLite)** | The bridge library between JavaScript and SQLite's C code; ours is the built-in `node:sqlite` (ADR-0010) | `src/main/storage/database.ts` |
+| **CDP (Chrome DevTools Protocol)** | The protocol DevTools uses to inspect and control a Chromium page; our packaged tests connect with it | `tests/e2e-packaged/` |
+| **Code signing** | A certificate-backed signature on the `.exe` that tells Windows who made it; not done yet (costs money), so SmartScreen warns | `electron-builder.yml` |
 | **MCP** | Model Context Protocol: a standard way to give AI tools access to external services | `.mcp.json` |
+| **Fuse (Electron)** | An on/off switch inside the Electron binary, flipped at package time to remove risky features such as `ELECTRON_RUN_AS_NODE` | `electron-builder.yml` |
 | **Migration** | A versioned script that changes the database schema safely | §9 |
 | **Online backup** | A consistent copy of a live SQLite database made by SQLite itself, not by copying the file | `src/main/storage/database.ts` |
 | **Mock** | A fake implementation used in tests (must be labeled as such) | providers |
 | **Origin** | A page's identity for security checks: scheme + host + port. CSP `'self'` means "same origin" | `src/main/bootstrap/app-origin.ts` |
+| **Packaging** | Turning the project into an installable app: Electron runtime + our bundled code + installer | `pnpm package` |
 | **Path traversal** | An attack that uses `..` (often URL-encoded) to read files outside an allowed folder | `resolveAppRequestPath` |
 | **Peer dependency** | A library a package expects *you* to install alongside it (Vitest 5 needs Vite) | `package.json` |
 | **Positive control** | A test case that must succeed, proving the test can tell success from failure (not passing vacuously) | `tests/e2e/shell.spec.ts` |
