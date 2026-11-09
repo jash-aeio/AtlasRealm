@@ -26,8 +26,10 @@ asar: true
 npmRebuild: false
 
 # Fuses are switches inside the Electron binary, flipped at package time. They turn off
-# features an attacker could use to run code through our signed-looking executable
-# (#16 security review). See docs/learning/lessons for the "packaging" lesson.
+# features an attacker could use to run their code through our executable (#16 security
+# review; lesson 006). Asar integrity only becomes a real boundary once the .exe is
+# code-signed: unsigned, a local attacker can patch the stored hash too. Chromium switches
+# such as --remote-debugging-port have no fuse yet (follow-up issue, release gate).
 electronFuses:
   runAsNode: false # ELECTRON_RUN_AS_NODE can't turn the app into a plain Node.js
   enableNodeOptionsEnvironmentVariable: false # NODE_OPTIONS can't inject code

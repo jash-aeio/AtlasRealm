@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 
 const require = createRequire(import.meta.url);
 const builderCli = require.resolve('electron-builder/cli.js');
@@ -24,12 +24,23 @@ let shimDir: string | undefined;
 const env = { ...process.env };
 if (!pnpmOnPath()) {
   shimDir = mkdtempSync(join(tmpdir(), 'atlas-pnpm-shim-'));
-  const enabled = spawnSync('corepack', ['enable', 'pnpm', '--install-directory', shimDir], {
-    stdio: 'inherit',
-    shell: isWindows, // corepack is a .cmd shim on Windows
-  });
+  // Run corepack's JS entry with this Node directly: no shell, so a temp path with spaces or
+  // shell characters (the Windows user name is in %TEMP%) stays one safe argument.
+  const corepackJs = join(
+    dirname(process.execPath),
+    'node_modules',
+    'corepack',
+    'dist',
+    'corepack.js',
+  );
+  const enabled = spawnSync(
+    process.execPath,
+    [corepackJs, 'enable', 'pnpm', '--install-directory', shimDir],
+    { stdio: 'inherit' },
+  );
   if (enabled.status !== 0) {
     console.error('[package] pnpm is not on PATH and corepack could not create a shim.');
+    rmSync(shimDir, { recursive: true, force: true });
     process.exit(1);
   }
   const pathKey = Object.keys(env).find((key) => key.toUpperCase() === 'PATH') ?? 'PATH';
@@ -37,9 +48,14 @@ if (!pnpmOnPath()) {
   console.info('[package] pnpm not on PATH: using temporary corepack shims for electron-builder');
 }
 
-const result = spawnSync(process.execPath, [builderCli, ...process.argv.slice(2)], {
-  stdio: 'inherit',
-  env,
-});
-if (shimDir !== undefined) rmSync(shimDir, { recursive: true, force: true });
-process.exit(result.status ?? 1);
+function runBuilder(): number {
+  try {
+    const args = [builderCli, ...process.argv.slice(2)];
+    return spawnSync(process.execPath, args, { stdio: 'inherit', env }).status ?? 1;
+  } finally {
+    // Remove the temporary shims even if spawning throws.
+    if (shimDir !== undefined) rmSync(shimDir, { recursive: true, force: true });
+  }
+}
+
+process.exit(runBuilder());

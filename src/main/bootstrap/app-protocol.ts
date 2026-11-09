@@ -45,6 +45,9 @@ export function serveAppProtocol(rootDir: string): void {
  * bypassCustomProtocolHandlers and so skips this block. Closing file: removes a whole class of
  * leaks (local files, UNC network shares that send the Windows login hash) no matter which page,
  * frame or main-process code asks (#16 security review follow-up, #10).
+ *
+ * Rule: this covers the default session only. Any window that ever gets its own session
+ * (session.fromPartition) must call `protocol.handle('file', ...)` on that session too.
  */
 export function blockFileProtocol(): void {
   protocol.handle('file', () => new Response(null, { status: 404 }));

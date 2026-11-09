@@ -179,6 +179,44 @@ test('loads the UI and its bundled assets only from app://atlas (works offline)'
   }
 });
 
+test('file: images are blocked in the packaged app, while app:// assets still load', async () => {
+  const running = await launchPackaged();
+  try {
+    const outcome = await running.page.evaluate(async () => {
+      const load = (element: HTMLImageElement | HTMLLinkElement): Promise<string> =>
+        new Promise((resolveLoad) => {
+          element.addEventListener('load', () => {
+            resolveLoad('loaded');
+          });
+          element.addEventListener('error', () => {
+            resolveLoad('blocked');
+          });
+          setTimeout(() => {
+            resolveLoad('timeout');
+          }, 3000);
+        });
+      const img = document.createElement('img');
+      img.src = 'file:///C:/Windows/Web/Screen/img100.jpg'; // exists on every Windows 10/11
+      const imgResult = load(img);
+      document.body.append(img);
+      // Positive control: the same load/error mechanism succeeds for our own stylesheet.
+      const existing = document.querySelector<HTMLLinkElement>('link[rel="stylesheet"]');
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = `${existing?.href ?? ''}?control`;
+      const linkResult = load(link);
+      document.head.append(link);
+      const results = { fileImage: await imgResult, appStylesheet: await linkResult };
+      img.remove();
+      link.remove();
+      return results;
+    });
+    expect(outcome).toEqual({ fileImage: 'blocked', appStylesheet: 'loaded' });
+  } finally {
+    await quit(running);
+  }
+});
+
 // ---- Fuses -------------------------------------------------------------------------------
 
 /**
