@@ -3,7 +3,7 @@
 > This is the **Markdown mirror** of the GitHub Milestones and [Project board](https://github.com/users/jash-aeio/projects/1). GitHub is the source of truth for issue status. Run `/sync-pm` to refresh this file.
 > Full milestone specs (build, checks, exit criteria): [ROADMAP_SPEC.md](ROADMAP_SPEC.md) · Task-level dependency graphs: [DEPENDENCIES.md](DEPENDENCIES.md)
 
-**Last synced:** 2026-11-10 · **Current milestone:** M0 (in progress: #4, #5, #6, #7, #8, #10, #16 done; #9 in review)
+**Last synced:** 2026-11-10 · **Current milestone:** M0 (in progress: #4, #5, #6, #7, #8, #9, #10, #16 done; #11 in review)
 
 ## Progress overview
 

@@ -8,7 +8,7 @@
 // code so `unsafe-eval` is NOT needed.
 import 'pixi.js/unsafe-eval';
 
-import { Application, Container, Graphics } from 'pixi.js';
+import { Application, Container, Graphics, ImageSource, Sprite, Texture } from 'pixi.js';
 
 import {
   DEFAULT_MAP,
@@ -20,21 +20,19 @@ import {
   type Point,
   type TileSize,
 } from './projection';
+import { WORLD_COLOURS, WORLD_SPRITES, worldSprite, type WorldSprite } from './world-assets';
 
 /** ADR-0011: WebGL first, then Canvas2D. WebGPU is excluded until tested on real machines. */
 export const RENDERER_PREFERENCE = ['webgl', 'canvas'] as const;
 
-// Placeholder colours (ART_BIBLE values come with M0-8 art placeholders).
-const GROUND_FILL = 0x34503a;
-const GRID_LINE = 0x22382a;
-const HOVER_FILL = 0xf2d16b;
-const HOVER_LINE = 0xf2d16b;
-const BACKGROUND = 0x14161c;
-const MARKER_FILL = 0xc9a26b;
-const MARKER_LINE = 0x5a4526;
-// Same colour as the selected node outline in the Realm Atlas (app.css).
-const SELECTED_FILL = 0x6bc6f2;
-const SELECTED_LINE = 0xe8f6ff;
+// Colours from the ART_BIBLE palette (M0-8). The selection highlight is a placeholder sprite.
+const GROUND_FILL = WORLD_COLOURS.ground;
+const GRID_LINE = WORLD_COLOURS.gridLine;
+const HOVER_FILL = WORLD_COLOURS.hover;
+const HOVER_LINE = WORLD_COLOURS.hover;
+const BACKGROUND = WORLD_COLOURS.background;
+const MARKER_FILL = WORLD_COLOURS.marker;
+const MARKER_LINE = WORLD_COLOURS.markerLine;
 /** Markers are half-size diamonds centred in their tile, so the selection shows around them. */
 const MARKER_SCALE = 0.5;
 
@@ -90,14 +88,35 @@ function drawHover(tile: TileSize): Graphics {
   return hover;
 }
 
-function drawSelected(tile: TileSize): Graphics {
-  const selected = new Graphics();
-  selected
-    .poly(diamond({ gx: 0, gy: 0 }, { columns: 1, rows: 1 }, tile))
-    .fill({ color: SELECTED_FILL })
-    .stroke({ width: 2, color: SELECTED_LINE, pixelLine: false });
-  selected.visible = false;
-  return selected;
+/**
+ * Loads a bundled image with a plain <img> element. We don't use Pixi's Assets loader: by
+ * default it decodes in blob: workers (our CSP blocks them, and its support check can hang
+ * without an error) and fetches with CORS, and the renderer can't fetch() app:// URLs at all.
+ * An <img> load is an ordinary same-origin image request that CSP img-src 'self' allows.
+ */
+async function loadImage(url: string): Promise<HTMLImageElement> {
+  const image = new Image();
+  image.src = url;
+  // decode() rejects if the file is missing or not an image, so failures surface here.
+  await image.decode();
+  return image;
+}
+
+/**
+ * A sprite placed by its manifest pivot: its anchor is the pivot, and it sits on the south
+ * corner of its footprint. Nearest-neighbour sampling keeps pixel art crisp (ART_BIBLE).
+ */
+function createPivotSprite(art: WorldSprite, image: HTMLImageElement): Sprite {
+  const source = new ImageSource({ resource: image, scaleMode: 'nearest' });
+  const sprite = new Sprite(new Texture({ source }));
+  sprite.anchor.set(art.pivot.x / art.width, art.pivot.y / art.height);
+  sprite.label = art.id;
+  return sprite;
+}
+
+/** World position of a sprite's pivot when its footprint's north tile is `tile`. */
+function pivotPosition(art: WorldSprite, at: GridPoint, tile: TileSize): Point {
+  return gridToWorld({ gx: at.gx + art.footprint.columns, gy: at.gy + art.footprint.rows }, tile);
 }
 
 /** Redraws all markers into one Graphics: one draw call however many entities there are. */
@@ -124,6 +143,10 @@ export async function createWorldScene(
   map: MapSize = DEFAULT_MAP,
   tile: TileSize = DEFAULT_TILE,
 ): Promise<WorldScene> {
+  // Load the art first: if a bundled file is missing there is no app to clean up yet.
+  const selectionArt = worldSprite(WORLD_SPRITES.selection);
+  const selectionImage = await loadImage(selectionArt.url);
+
   const app = new Application();
   try {
     await app.init({
@@ -150,7 +173,8 @@ export async function createWorldScene(
 
   const world = new Container();
   const hover = drawHover(tile);
-  const selected = drawSelected(tile);
+  const selected = createPivotSprite(selectionArt, selectionImage);
+  selected.visible = false;
   const markers = new Graphics();
   // Back to front: ground, selection, markers, hover outline.
   world.addChild(drawGround(map, tile), selected, markers, hover);
@@ -189,7 +213,7 @@ export async function createWorldScene(
     setSelected(target) {
       selected.visible = target !== null;
       if (target !== null) {
-        const at = gridToWorld(target, tile);
+        const at = pivotPosition(selectionArt, target, tile);
         selected.position.set(at.x, at.y);
       }
       requestRender();

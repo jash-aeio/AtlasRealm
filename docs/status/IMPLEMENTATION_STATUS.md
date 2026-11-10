@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-10 · **Branch:** spike/9-worker-messaging (PR for #9)
+**Last updated:** 2026-11-10 · **Branch:** feat/11-placeholder-art (PR #26 for #11; worktree `AtlasRealm-m0-8`)
 
 ## Current milestone
-**M0 — Foundation and risk spikes** (🔨 in progress; M0-1, M0-2, M0-3, M0-4, M0-5, M0-7, M0-9 done; M0-6 in review)
+**M0 — Foundation and risk spikes** (🔨 in progress; M0-1, M0-2, M0-3, M0-4, M0-5, M0-6, M0-7, M0-9 done; M0-8 in review)
 
 ## Implemented and demonstrated
 - Repository and process setup (2026-11-06): spec docs, Claude Code config, GitHub workflow. See `docs/sessions/2026-11-06-project-setup.md`.
@@ -69,7 +69,7 @@
   - World: `grid-scene.ts` gains `setMarkers` (one Graphics for all markers) and `setSelected` (a light-blue tile under the marker). `WorldCanvas` reads the store and tells the scene what to draw, including on a newly created scene. Left-clicking a marker selects it, and clicking empty ground clears the selection. The camera never jumps on selection (§30.1).
   - Hiding the world view keeps the entities and the selection, and showing it again draws the selection straight away.
 
-- **M0-6 worker messaging spike (#9):** the main process starts a background **worker process** at launch. A "Worker check (M0 spike)" panel shows its real state. The worker only runs **M0 spike methods** (`spike.echo`, `spike.slowCount`) and does no product work.
+- **M0-6 worker messaging spike (#9, merged):** the main process starts a background **worker process** at launch. A "Worker check (M0 spike)" panel shows its real state. The worker only runs **M0 spike methods** (`spike.echo`, `spike.slowCount`) and does no product work.
   - Electron `utilityProcess` (ADR-0012), built by electron-vite through a `?modulePath` import (`out/main/chunks/index-<hash>.js`). It's a separate OS process, so a crash or hang can't take main down.
   - Channel: main hands the worker a private `MessagePort` in one `connect` message. Only main and the worker hold it, so no localhost server is involved (§7.2).
   - Protocol (`src/common/contracts/worker-protocol.ts`): Zod envelopes `request`/`cancel` → `ready`/`result`/`error`, with a random UUID per request. Both sides check size (256 KiB, UTF-8 JSON, shared `json-size.ts`, now also used by the IPC router) and schema. Main also validates the worker's results.
@@ -80,7 +80,15 @@
     - `runtime.workerStatus` (no payload)
     - `runtime.workerCheck` (optional `cancelAfterMs` 10–5000, default 100): echo, then a slow count cancelled in flight, then an echo that reads how many requests are still active.
 
+- **M0-8 art contract and placeholders (#11, in review):** ADR-0013 fixes the art values (64 × 32 tiles; 2×2/3×3/4×4 footprints; ground pivot on the footprint's south corner; 16-swatch "warm storybook village" palette). ART_BIBLE §34.3.1 lists them.
+  - `resources/assets/asset-manifest.json` (schema v1) is validated by `src/common/assets/asset-manifest.ts` (Zod). Fields: confined relative `.png` path, size, pivot, footprint, optional animation strip, sha256, `placeholder` flag, provenance. A footprint hanging outside its frame is refused.
+  - Four **placeholders** in `resources/assets/placeholders/` (ground tile, 2×2 building, selection marker, invalid marker), drawn by `scripts/generate-placeholder-art.ts` (`pnpm art:placeholders [--check]`). PNGs are encoded with `node:zlib`, so there's no new dependency and the bytes are the same every run.
+  - World: only the **selection highlight** is drawn from a PNG. It's loaded with a plain `<img>` (not Pixi `Assets`), sampled nearest-neighbour and placed by its manifest pivot. Ground, entity markers and hover are still drawn shapes, now in palette colours. The ground tile, building and invalid marker aren't drawn anywhere yet.
+  - Build: `assetsInlineLimit: 0`, so all four PNGs ship as real files under `app://atlas/assets/`.
+  - The renderer sets Zod `jitless` (`src/renderer/app/zod-config.ts`). Without it, Zod 4's `new Function` probe causes a `script-src eval` CSP report.
+
 ## Changed components
+- M0-8: `src/common/assets/` (new), `scripts/generate-placeholder-art.ts` (new), `resources/assets/` (new), `src/renderer/world/{world-assets.ts (new),grid-scene.ts}`, `src/renderer/app/{zod-config.ts (new),main.tsx}`, `electron.vite.config.ts`, `package.json` (script); `tests/domain/asset-manifest.test.ts` (new), `tests/e2e/world.spec.ts`, `tests/e2e-packaged/packaged.spec.ts`; docs: ADR-0013, ART_BIBLE, ASSET_PROVENANCE, glossary, lesson 011; `.claude/hooks/guard-bash.mjs` (branch checked where the command runs, for worktrees)
 - M0-6: `src/worker/` (new), `src/main/runtime-bridge/` (new), `src/common/contracts/{worker-protocol,json-size,runtime-worker,channels,atlas-api}.ts`, `src/main/ipc/{router.ts,register.ts,commands/runtime-worker.ts}`, `src/main/index.ts`, `src/preload/index.ts`, `src/renderer/app/{App.tsx,WorkerPanel.tsx}`, `tsconfig.node.json` (includes `src/worker`); `tests/integration/{worker-messaging,runtime-worker-contract}.test.ts`, `tests/e2e/worker.spec.ts` (new), `tests/e2e/shell.spec.ts` (API shape), `tests/e2e-packaged/packaged.spec.ts`
 - #24 (chore): `.github/dependabot.yml` ignores major-version bumps of `typescript` and `@types/node`. They are upgraded by hand (see Known limitations).
 - M0-5: `src/renderer/state/` (new), `src/renderer/atlas/` (new), `src/renderer/world/{grid-scene.ts,WorldCanvas.tsx}`, `src/renderer/app/{App.tsx,app.css}`, `package.json` + lockfile; `tests/domain/selection-store.test.ts`, `tests/e2e/atlas.spec.ts` (new), `tests/e2e/world.spec.ts` (locators scoped to the world section)
@@ -94,6 +102,15 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- M0-8, 2026-11-10, local Windows 11: typecheck, lint, format:check pass. Unit/integration 168/168 (30 new). E2E 30/30 (1 new). Packaged E2E 8/8 (1 new; run before the schema bounds were added, and those don't touch packaging). `pnpm art:placeholders --check` is clean.
+  - After merging main (with M0-6): unit/integration 193/193, E2E 35/35, packaged E2E 9/9 (fresh `pnpm package`). typecheck, lint and format:check pass.
+  - Hook fix: `.claude/hooks/guard-bash.mjs` now reads the branch where each sub-command runs (`cd <dir> &&`, `git -C <dir>`). It falls back to the session folder when that folder isn't a repository. Checked with 14 allow/block cases: commit or push from the worktree allowed; commit on main via cd or `-C` blocked; push to main, force push and `--no-verify` blocked.
+  - Manifest tests: each PNG's header size, chunk CRCs and sha256 match. Pivots sit on the south corner. The generator reproduces the committed bytes. The schema rejects `..`, absolute paths, drive letters, backslashes, duplicates, bad digests, out-of-frame pivots and frames that don't fit, Windows device names (`nul.png`, `aux/x.png`) and oversized values (width > 4096, > 2000 entries, long strings).
+  - E2E: the selection sprite is an `<img>` load of `app://atlas/assets/selection-*.png`, with no CSP violations. The existing atlas selection-pixel tests now depend on the PNG.
+  - Packaged: the hashed PNG decodes from `app://atlas` inside the packaged app, and the world reaches ready.
+  - Mutation checks, each of which made a test fail: sprite hidden → 2 atlas tests; inlining back on → the new world test.
+  - Not checked: `pnpm dev` by hand.
+  - security-auditor: approve. L1 (Windows device names in paths) and L2 (no size bounds) are fixed with tests. Advice not acted on: `data:` in CSP `img-src` looks unused now that inlining is off. Removing it is a security change for the user to decide (follow-up). Note for the future importer: realpath/symlink confinement and hashing the bytes actually read. invariant-reviewer: no violations. It noted that `pivotPosition` is only exercised through the 1×1 selection sprite in E2E.
 - M0-6, 2026-11-10, local Windows 11: typecheck, lint, format:check pass. Unit/integration 163/163 (25 new). E2E 34/34 (5 new in `worker.spec.ts`; the worker spec also passed 20/20 over 4 repeats). Packaged E2E 8/8 (1 new).
   - Spawn: `app.getAppMetrics()` lists exactly one Utility process named "Atlas Realm worker". Its pid matches the status and differs from main's.
   - Cancel: the check returns `cancelled` with 0 requests still active, in under 3 s (a broken cancel would take about 10 s). Unit test: the counting loop stops within one step of the cancel.
@@ -193,11 +210,16 @@
   - Selection latency (~70–100 ms at 150 nodes) should be profiled before the limits go up.
 - World view: WebGPU is off (ADR-0011). Canvas2D was only tested by forcing it. The CI runners have no GPU, so either renderer is accepted there. Performance with buildings is unmeasured. The world has no keyboard tile selection yet (the zoom buttons are keyboard-usable). A list equivalent comes with real projects (UI_SPEC §6.6).
 - Pixi's bundled "agent skills" (pnpm prompt) were not approved. They aren't needed.
-- **For M0-8 (textures):** Pixi's `Assets` loader uses `blob:` workers by default, and our CSP blocks them. Its support check has no error handler, so loading could hang silently. Set `preferWorkers = false` (check the docs first), don't add `blob:` to the CSP, and add an E2E test that loads a texture under the production CSP.
+- Textures (M0-8): we don't use Pixi's `Assets` loader (its `blob:` workers and `fetch`/CORS don't fit our CSP or `app://`). Load art with `<img>` like `grid-scene.ts` does. Keep `blob:` out of the CSP.
+- Packaged app: no resource-timing entries are recorded for `app://` loads. The "every resource is from app://atlas" loop in the packaged "works offline" test therefore checks an empty list (since M0-7). Its script and stylesheet checks, which read the DOM, are real. Cause unknown; a follow-up.
+- Art: only placeholders exist. 3×3/4×4 placeholders, ground and buildings drawn from art, and the invalid marker in use all come with M1 placement. The palette lives in two places (generator script and `world-assets.ts`) because Node runs the script without a bundler.
+- CSP `img-src` still allows `data:`, which no longer seems needed (security-auditor advice). Removing it is a user decision; follow-up.
+- Imported asset packs (later) need main-process path confinement (realpath, no symlinks) and digest checks on the bytes read. The manifest schema only checks path text.
+- Zod in the renderer runs `jitless` (no generated parsers). Fine at today's sizes; measure before parsing large data there.
 - `node:sqlite` is a release candidate API (ADR-0010). It works in the packaged build (M0-7 E2E).
 - **Release gate (#20):** the packaged app still accepts Chromium switches such as `--remote-debugging-port`, `--no-sandbox` and `--disable-web-security`. Any program running as the same user could drive the trusted page. Low impact while only `ping`/`launchInfo` exist. It must be fixed before any IPC command touches files, secrets or providers.
 - Unsigned build: SmartScreen warns, and asar integrity only stops corruption and casual tampering. Without a signature, a local attacker can patch the hash in the `.exe` too. Code signing is a release decision (costs money).
-- Electron's default icon is a placeholder until M0-8. The `app-update.yml` that electron-builder generates is unused (no updater).
+- Electron's default icon is still a placeholder (not in M0-8's acceptance criteria; follow-up). The `app-update.yml` that electron-builder generates is unused (no updater).
 - The `file:` block covers the default session only. Any future `session.fromPartition` needs its own block (rule in `app-protocol.ts`).
 - CI actions are pinned by tag, not commit SHA (supply-chain hardening, low risk with `contents: read`).
 - Node 24.13 `fs.cpSync` silently copies nothing into a non-ASCII destination on Windows. The packaged test uses `fs/promises` `cp`. Avoid `cpSync` for user paths.
@@ -217,10 +239,11 @@
 - [ADR-0009](../adr/0009-electron-vite-and-electron-builder.md): electron-vite for builds, electron-builder for packaging
 - [ADR-0010](../adr/0010-node-sqlite-binding.md): built-in `node:sqlite` as the SQLite binding
 - [ADR-0011](../adr/0011-plain-pixijs-webgl-canvas-fallback.md): plain `pixi.js` with our own React wrapper; WebGL, then Canvas2D
-- [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 - [ADR-0012](../adr/0012-electron-utility-process-worker.md): Electron `utilityProcess` for the trusted worker
+- [ADR-0013](../adr/0013-art-technical-contract.md): art technical contract (tile, footprints, south-corner pivot, palette, asset manifest)
+- [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- After the #9 PR is merged: **M0-8 art placeholders (#11)** is being worked on in a separate worktree (`AtlasRealm-m0-8`). Follow the "For M0-8" note above about Pixi's asset loader under our CSP.
-  - #20 (block Chromium switches) is a release gate before M3, not urgent for M0.
+- After the #11 PR is merged, every M0 task except **M0-10 (#20, block Chromium switches)** is done. #20 is a release gate before M3, so decide whether to do it now or move it out of M0, then close M0 with `/close-milestone`.
+  - Possible follow-ups: an app icon; removing `data:` from CSP `img-src` (needs your decision); the empty resource-timing list in the packaged test.
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.

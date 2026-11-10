@@ -14,6 +14,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 008 | [One store, many views](lessons/008-one-store-many-views.md) | M0 | single source of truth, external store, useSyncExternalStore, controlled component, React Flow |
 | 009 | [Dependency updates and semver](lessons/009-dependency-updates-and-semver.md) | M0 | semantic versioning, Dependabot groups, ignore rules, @types/node vs runtime Node |
 | 010 | [Worker processes, request IDs and cancellation](lessons/010-worker-processes-and-cancellation.md) | M0 | utility process, message passing, request IDs, AbortController, crash detection, stale replies |
+| 011 | [Sprites, pivots and an asset manifest](lessons/011-sprites-pivots-and-an-asset-manifest.md) | M0 | sprite, footprint, ground pivot, asset manifest, digest, nearest-neighbour sampling, placeholder art, Zod JIT/jitless |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map

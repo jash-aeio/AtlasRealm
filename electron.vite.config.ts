@@ -44,6 +44,9 @@ export default defineConfig({
     plugins: [react(), contentSecurityPolicy()],
     // Minify the UI bundle (electron-vite leaves it readable by default). Main and preload stay
     // unminified so stack traces in local logs remain readable.
-    build: { minify: true },
+    // assetsInlineLimit 0: images stay real files instead of data: URIs, so the bundled art
+    // matches resources/assets/asset-manifest.json and the packaged app serves it from
+    // app://atlas (ART_BIBLE §34.8, M0-8).
+    build: { minify: true, assetsInlineLimit: 0 },
   },
 });

@@ -1,3 +1,5 @@
+// Must run before any Zod schema parses (see the file).
+import './zod-config';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 

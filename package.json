@@ -23,7 +23,8 @@
     "test:watch": "vitest",
     "test:e2e": "electron-vite build && playwright test",
     "package": "electron-vite build && node scripts/electron-builder.ts --win --publish never",
-    "test:e2e:packaged": "playwright test --config playwright.packaged.config.ts"
+    "test:e2e:packaged": "playwright test --config playwright.packaged.config.ts",
+    "art:placeholders": "node scripts/generate-placeholder-art.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
