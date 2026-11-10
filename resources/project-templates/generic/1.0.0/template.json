@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "kind": "project-template",
+  "id": "builtin.generic",
+  "version": "1.0.0",
+  "name": "Generic Project",
+  "description": "For any work without a specialized template: state a goal and requirements, pick reference files, and say what you want delivered.",
+  "publisher": "Atlas Realm",
+  "source": { "type": "bundled" },
+  "metadataOnly": true,
+  "metadataOnlyNote": "Template metadata only: this version records inputs and planned outputs. Workflows and agents that produce the outputs arrive in later milestones (M3/M4).",
+  "inputFields": [
+    {
+      "key": "goal",
+      "label": "Goal",
+      "help": "What this project should achieve, in a sentence or two.",
+      "required": true,
+      "type": "longText",
+      "maxLength": 2000
+    },
+    {
+      "key": "requirements",
+      "label": "Requirements",
+      "help": "Must-haves, constraints and anything the result has to satisfy.",
+      "required": true,
+      "type": "longText",
+      "maxLength": 10000
+    },
+    {
+      "key": "referenceFiles",
+      "label": "Reference files",
+      "help": "Files the project may read. Only files you select are used.",
+      "required": false,
+      "type": "fileReferences",
+      "maxFiles": 20
+    },
+    {
+      "key": "expectedDeliverable",
+      "label": "Expected deliverable",
+      "help": "The text or Markdown document you want at the end.",
+      "required": true,
+      "type": "text",
+      "maxLength": 200
+    },
+    {
+      "key": "deadline",
+      "label": "Deadline",
+      "required": false,
+      "type": "date"
+    }
+  ],
+  "artifactTypes": [
+    {
+      "id": "project-brief",
+      "name": "Project brief",
+      "format": "markdown",
+      "description": "The organized goal and requirements."
+    },
+    {
+      "id": "requested-draft",
+      "name": "Requested draft",
+      "format": "markdown",
+      "description": "The requested text or Markdown deliverable, as a draft for your review."
+    }
+  ],
+  "offlineLimitations": [
+    "Uses only the reference files you select. It does no web lookups.",
+    "Drafting needs an available AI model. Offline, that means a local model."
+  ]
+}
