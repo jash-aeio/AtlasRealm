@@ -32,3 +32,14 @@ Decisions the builder can revisit without blocking the start:
 - Which exact third-party resources and applications deserve the first curated integrations.
 
 **Approved decisions, November 6, 2026:** Atlas Realm naming; upper-right context-sensitive Map/Connections panel; 2.5D enterable cutaway interiors and Blueprint mode before true 3D; optional Obsidian O1 export/open before O2 indexing and O3 two-way edits; reviewed automatic setup for existing folders with copy/link choices; PixelLab MCP preferred for producing a locally packaged fantasy asset set. Do not reopen these decisions as unresolved preferences without new evidence.
+
+## Risk review log
+
+Added after each milestone close. The table above stays as the spec wrote it; this log records what the milestones actually taught.
+
+### M0 close (2026-11-10)
+- **Retired: "the stack can't be packaged."** The packaged Windows build starts from a path with spaces and non-ASCII characters, loads `node:sqlite`, the worker and bundled art from `app.asar`, and keeps data across restarts (packaged E2E 9/9, in CI).
+- **Retired: "the Pixi world and the React Flow Atlas can't share state."** One selection store drives both (M0-5 E2E). 150 nodes / 300 edges load in under 0.2 s.
+- **Open, scheduled: Chromium debug switches** (`--remote-debugging-port`, `--no-sandbox`, …) still work on the packaged app. Low impact today. Moved to M1 as #20; it must land before M3's file, secret and provider commands.
+- **New: security hardening makes scope grow.** Two M0 issues (M0-9 `app://`, M0-10 switches) came from per-PR security reviews, not the plan. *Response:* leave room in each milestone plan for review findings, and track every accepted finding as an issue with a deadline gate.
+- **New: unsigned installer.** SmartScreen warns on install. Fine for development; code signing is decided in M7 (packaging hardening).
