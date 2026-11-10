@@ -44,7 +44,7 @@ describe('app.launchInfo handler', () => {
       expect(info).toMatchObject({
         launchCount: 2,
         firstLaunchedAt: firstInfo.firstLaunchedAt,
-        schemaVersion: 1,
+        schemaVersion: MIGRATIONS.length,
       });
     } finally {
       second.db.close();
