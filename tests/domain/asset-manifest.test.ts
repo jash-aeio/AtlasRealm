@@ -163,8 +163,25 @@ describe('AssetManifest schema', () => {
     ['not a PNG', 'placeholders/x.jpg'],
     ['upper case', 'Placeholders/X.png'],
     ['empty segment', 'placeholders//x.png'],
+    ['a Windows device name', 'nul.png'],
+    ['a Windows device name as a folder', 'aux/x.png'],
+    ['a Windows device name before a double extension', 'markers/com1.tar.png'],
+    ['more than 200 characters', `${'a'.repeat(197)}.png`],
   ])('rejects a path with %s', (_label, path) => {
     expect(parseWith(entry({ path })).success).toBe(false);
+  });
+
+  it('accepts names that only start like a device name', () => {
+    expect(parseWith(entry({ path: 'console/null-marker.png' })).success).toBe(true);
+  });
+
+  it('bounds sizes so a hostile manifest cannot demand huge textures or lists', () => {
+    expect(parseWith(entry({ width: 4097 })).success).toBe(false);
+    expect(parseWith(entry({ provenance: 'x'.repeat(501) })).success).toBe(false);
+    const many = Array.from({ length: 2001 }, (_, index) =>
+      entry({ id: `a${String(index)}`, path: `a${String(index)}.png` }),
+    );
+    expect(parseWith(...many).success).toBe(false);
   });
 
   it('rejects duplicate IDs and duplicate paths', () => {

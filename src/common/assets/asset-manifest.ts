@@ -15,18 +15,30 @@ export const ASSET_MANIFEST_SCHEMA_VERSION = 1;
 /** Lowercase words joined by dots or dashes, e.g. `placeholder.marker.selection`. */
 const AssetId = z
   .string()
+  .max(100)
   .regex(/^[a-z0-9]+(?:[.-][a-z0-9]+)*$/, 'lowercase words joined by "." or "-"');
 
 /**
  * A path relative to resources/assets, with forward slashes, ending in `.png`. Absolute paths,
  * drive letters, backslashes and `..` are refused, so an entry can never point outside the
- * assets folder (bundled files today, imported packs later).
+ * assets folder (bundled files today, imported packs later). Windows device names such as
+ * `nul` or `aux` are refused too: Windows opens a device for them, even with an extension.
+ * Lowercase-only also stops two entries differing just by case on a case-insensitive drive.
  */
+const WINDOWS_DEVICE_NAME = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])$/;
 const AssetPath = z
   .string()
-  .regex(/^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*\.png$/, 'relative lowercase .png path');
+  .max(200)
+  .regex(/^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*\.png$/, 'relative lowercase .png path')
+  .refine(
+    (path) =>
+      path.split('/').every((segment) => !WINDOWS_DEVICE_NAME.test(segment.split('.')[0] ?? '')),
+    'reserved Windows device name',
+  );
 
-const Pixels = z.int().positive();
+// Upper bounds keep a hostile (imported) manifest from demanding huge memory or textures
+// (SECURITY.md: untrusted input is size-bounded). 4096 px is a common GPU texture limit.
+const Pixels = z.int().positive().max(4096);
 const Size = z.strictObject({ width: Pixels, height: Pixels });
 const Point = z.strictObject({ x: z.int().nonnegative(), y: z.int().nonnegative() });
 
@@ -37,28 +49,31 @@ export type AssetKind = z.infer<typeof AssetKind>;
 const Animation = z.strictObject({
   frameWidth: Pixels,
   frameHeight: Pixels,
-  frameCount: z.int().positive(),
-  frameDurationMs: z.int().positive(),
+  frameCount: z.int().positive().max(256),
+  frameDurationMs: z.int().positive().max(60_000),
 });
 
 const AssetEntry = z.strictObject({
   id: AssetId,
   /** Raised whenever the image changes, so caches and saved references can tell. */
-  version: z.int().positive(),
+  version: z.int().positive().max(1_000_000),
   kind: AssetKind,
   path: AssetPath,
   width: Pixels,
   height: Pixels,
   pivot: Point,
   /** Grid tiles covered on the ground: columns along gx, rows along gy. */
-  footprint: z.strictObject({ columns: z.int().positive(), rows: z.int().positive() }),
+  footprint: z.strictObject({
+    columns: z.int().positive().max(16),
+    rows: z.int().positive().max(16),
+  }),
   animation: Animation.optional(),
   /** Lowercase hex SHA-256 of the file: detects a changed or corrupted file. */
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
   /** True for engineering placeholders; the UI and docs must label them as such. */
   placeholder: z.boolean(),
   /** Where the source and terms are recorded, e.g. a section of docs/art/ASSET_PROVENANCE.md. */
-  provenance: z.string().min(1),
+  provenance: z.string().min(1).max(500),
 });
 export type AssetEntry = z.infer<typeof AssetEntry>;
 
@@ -67,7 +82,7 @@ export const AssetManifest = z
     schemaVersion: z.literal(ASSET_MANIFEST_SCHEMA_VERSION),
     /** The world's ground tile in logical pixels (ART_BIBLE: 64 × 32). */
     tile: Size,
-    assets: z.array(AssetEntry),
+    assets: z.array(AssetEntry).max(2000),
   })
   .superRefine((manifest, ctx) => {
     const ids = new Set<string>();
