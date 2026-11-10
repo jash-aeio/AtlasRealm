@@ -12,6 +12,10 @@ const api: AtlasApi = {
     ping: (input) => ipcRenderer.invoke(Channels.appPing, input),
     launchInfo: () => ipcRenderer.invoke(Channels.appLaunchInfo),
   },
+  runtime: {
+    workerStatus: () => ipcRenderer.invoke(Channels.runtimeWorkerStatus),
+    workerCheck: (input) => ipcRenderer.invoke(Channels.runtimeWorkerCheck, input),
+  },
 };
 
 contextBridge.exposeInMainWorld('atlas', api);

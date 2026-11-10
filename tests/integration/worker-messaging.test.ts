@@ -140,7 +140,7 @@ describe('worker messaging: request/response', () => {
       fast.then((r) => order.push(r.ok ? `fast:${r.data.text}` : 'fast:err')),
     ]);
     expect(order).toEqual(['fast:fast', 'slow:3']);
-    expect(bridge.pendingCount()).toBe(0);
+    expect(bridge.status().pendingRequests).toBe(0);
   });
 });
 
@@ -239,7 +239,7 @@ describe('worker messaging: cancellation', () => {
     expect(stepsAtCancel).toBeGreaterThan(0); // it really was running
     controller.abort();
     expect(await pending).toMatchObject({ ok: false, error: { code: 'cancelled' } });
-    expect(bridge.pendingCount()).toBe(0);
+    expect(bridge.status().pendingRequests).toBe(0);
 
     await new Promise((r) => setTimeout(r, 40));
     expect(steps).toBeLessThanOrEqual(stepsAtCancel + 1); // at most the step already under way
@@ -284,7 +284,7 @@ describe('worker messaging: cancellation', () => {
     const result = await bridge.request('spike.echo', { text: 'x' }, { timeoutMs: 20 });
     expect(result).toMatchObject({ ok: false, error: { code: 'timeout' } });
     expect(worker(workers).sent.map((m) => m.kind)).toEqual(['request', 'cancel']);
-    expect(bridge.pendingCount()).toBe(0);
+    expect(bridge.status().pendingRequests).toBe(0);
   });
 });
 
@@ -305,6 +305,7 @@ describe('worker messaging: crash detection', () => {
       pid: null,
       crashCount: 1,
       lastExitCode: 3221225477,
+      pendingRequests: 0,
       staleRepliesDropped: 0,
     });
     expect(error).toHaveBeenCalledWith(expect.stringContaining('exited unexpectedly'));

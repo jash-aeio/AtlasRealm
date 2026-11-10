@@ -48,6 +48,8 @@ export interface WorkerStatus {
   /** How many times a worker ended without being asked to. */
   readonly crashCount: number;
   readonly lastExitCode: number | null;
+  /** Requests sent and not yet settled. */
+  readonly pendingRequests: number;
   /** Replies that arrived after their request was cancelled, timed out or never existed. */
   readonly staleRepliesDropped: number;
 }
@@ -110,12 +112,9 @@ export class WorkerBridge {
       pid: this.#pid,
       crashCount: this.#crashCount,
       lastExitCode: this.#lastExitCode,
+      pendingRequests: this.#pending.size,
       staleRepliesDropped: this.#staleRepliesDropped,
     };
-  }
-
-  pendingCount(): number {
-    return this.#pending.size;
   }
 
   request<M extends WorkerMethod>(

@@ -6,6 +6,7 @@ import type { IpcResult } from '../../common/contracts/ipc-result';
 import { RealmAtlasPanel } from '../atlas/RealmAtlasPanel';
 import { WorldCanvas } from '../world/WorldCanvas';
 import { WorldErrorBoundary } from '../world/WorldErrorBoundary';
+import { WorkerPanel } from './WorkerPanel';
 
 export function App() {
   const [message, setMessage] = useState('hello from the renderer');
@@ -87,6 +88,8 @@ export function App() {
           </output>
         )}
       </section>
+
+      <WorkerPanel />
     </main>
   );
 }

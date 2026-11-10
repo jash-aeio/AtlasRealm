@@ -69,8 +69,13 @@ test('preload exposes only the explicit API', async () => {
   const shape = await page.evaluate(() => ({
     top: Object.keys(window.atlas),
     app: Object.keys(window.atlas.app),
+    runtime: Object.keys(window.atlas.runtime),
   }));
-  expect(shape).toEqual({ top: ['app'], app: ['ping', 'launchInfo'] });
+  expect(shape).toEqual({
+    top: ['app', 'runtime'],
+    app: ['ping', 'launchInfo'],
+    runtime: ['workerStatus', 'workerCheck'],
+  });
 });
 
 test('app.ping round-trips through the main process', async () => {
