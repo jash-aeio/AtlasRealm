@@ -51,20 +51,23 @@ async function launchOnce(): Promise<{ userData: string; launchText: string }> {
 test('the database lives under userData and its records survive a restart', async () => {
   const first = await launchOnce();
   expect(first.userData).toBe(userDataDir);
-  expect(first.launchText).toMatch(/^Launch #1 · .* · schema v1$/);
+  expect(first.launchText).toMatch(/^Launch #1 · .* · schema v2$/);
   // The UI shows the stored count after a restart, not just the database file.
-  expect((await launchOnce()).launchText).toMatch(/^Launch #2 · .* · schema v1$/);
+  expect((await launchOnce()).launchText).toMatch(/^Launch #2 · .* · schema v2$/);
 
   // Read the file the app wrote, after it has quit (read-only: the test never changes it).
   const db = new DatabaseSync(join(userDataDir, 'profiles', 'default', 'app.sqlite'), {
     readOnly: true,
   });
   try {
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 1 });
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 2 });
     expect(db.prepare("SELECT value FROM app_meta WHERE key = 'launch_count'").get()).toEqual({
       value: '2',
     });
-    expect(db.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }]);
+    expect(db.prepare('SELECT version FROM schema_migrations').all()).toEqual([
+      { version: 1 },
+      { version: 2 },
+    ]);
   } finally {
     db.close();
   }
