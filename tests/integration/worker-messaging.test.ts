@@ -345,6 +345,18 @@ describe('worker messaging: crash detection', () => {
     expect(bridge.status().pid).toBe(2);
   });
 
+  it('after stop, requests fail with worker_stopped and never start a new worker', async () => {
+    const { spawn, workers } = fakeSpawner();
+    const bridge = new WorkerBridge(spawn);
+    bridge.start();
+    bridge.stop();
+    const result = await bridge.request('spike.echo', { text: 'during quit' });
+    expect(result).toMatchObject({ ok: false, error: { code: 'worker_stopped' } });
+    bridge.start();
+    expect(workers).toHaveLength(1);
+    expect(bridge.status().state).toBe('stopped');
+  });
+
   it('a deliberate stop is not counted as a crash', async () => {
     const { spawn, workers } = fakeSpawner({ connect: false });
     const bridge = new WorkerBridge(spawn);

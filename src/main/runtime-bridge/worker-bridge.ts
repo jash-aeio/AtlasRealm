@@ -75,14 +75,19 @@ export class WorkerBridge {
   #crashCount = 0;
   #lastExitCode: number | null = null;
   #staleRepliesDropped = 0;
+  /** Set by stop(): the app is quitting, so no worker may start again. */
+  #stopped = false;
 
   constructor(spawn: WorkerSpawner) {
     this.#spawn = spawn;
   }
 
-  /** Starts a worker if none is running. Called at startup and before each request. */
+  /**
+   * Starts a worker if none is running. Called at startup and before each request. Does
+   * nothing after stop(), so a request racing the app's quit can't fork a new process.
+   */
   start(): void {
-    if (this.#transport !== undefined) return;
+    if (this.#stopped || this.#transport !== undefined) return;
     const transport = this.#spawn();
     this.#transport = transport;
     this.#state = 'starting';
@@ -96,12 +101,16 @@ export class WorkerBridge {
     });
   }
 
-  /** Stops the worker on purpose (app quit). Pending requests fail; it is not a crash. */
+  /**
+   * Stops the worker on purpose (app quit) for good. Pending and later requests fail with
+   * `worker_stopped`; it is not a crash.
+   */
   stop(): void {
+    this.#stopped = true;
+    this.#state = 'stopped';
     const transport = this.#transport;
     if (transport === undefined) return;
     this.#transport = undefined;
-    this.#state = 'stopped';
     this.#failAll('worker_stopped', 'The worker was stopped.');
     transport.kill();
   }
@@ -141,7 +150,9 @@ export class WorkerBridge {
 
     this.start();
     const transport = this.#transport;
-    if (transport === undefined) throw new Error('Worker failed to start');
+    if (transport === undefined) {
+      return Promise.resolve(failure('worker_stopped', 'The worker was stopped.'));
+    }
 
     return new Promise((resolve) => {
       const onAbort = (): void => {

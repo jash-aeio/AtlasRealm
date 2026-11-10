@@ -59,7 +59,13 @@ async function start(): Promise<void> {
   // Only serve app:// when the build is in use; `pnpm dev` loads from the dev server.
   if (entryUrl === APP_ENTRY_URL) serveAppProtocol(RENDERER_DIR);
   // utilityProcess.fork only works after 'ready'. Start it now so its status is visible.
-  worker.start();
+  // A failure here must not stop the window from opening: the worker is optional for the
+  // UI, and the next worker request tries again (and reports the error through IPC).
+  try {
+    worker.start();
+  } catch (error) {
+    console.error('[runtime] could not start the worker', error);
+  }
   registerIpcHandlers(entryUrl, db, worker);
   createMainWindow();
 }
