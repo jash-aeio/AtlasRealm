@@ -10,6 +10,7 @@ import type { z } from 'zod';
 
 import type { Channel } from '../../common/contracts/channels';
 import type { IpcError, IpcErrorCode, IpcResult } from '../../common/contracts/ipc-result';
+import { jsonByteLength } from '../../common/contracts/json-size';
 import { isAppOrigin } from '../bootstrap/app-origin';
 
 /** Largest accepted payload, measured as UTF-8 JSON. Generous for commands, tiny for abuse. */
@@ -59,16 +60,6 @@ export function trustRendererEntry(entryUrl: string): SenderCheck {
   };
 }
 
-function payloadBytes(raw: unknown): number | undefined {
-  // No argument at all. (JSON.stringify(undefined) returns undefined, despite its types.)
-  if (raw === undefined) return 0;
-  try {
-    return Buffer.byteLength(JSON.stringify(raw), 'utf8');
-  } catch {
-    return undefined; // not JSON-serializable (e.g. BigInt): treat as invalid
-  }
-}
-
 export function createCommandHandler<I extends z.ZodType, O extends z.ZodType>(
   definition: CommandDefinition<I, O>,
   handler: CommandHandler<I, O>,
@@ -84,7 +75,7 @@ export function createCommandHandler<I extends z.ZodType, O extends z.ZodType>(
       return fail('invalid_payload', `Request rejected: invalid ${definition.channel} payload.`);
     }
 
-    const size = payloadBytes(parsed.data);
+    const size = jsonByteLength(parsed.data);
     if (size === undefined) {
       return fail('invalid_payload', 'Request rejected: payload is not plain data.');
     }
