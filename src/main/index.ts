@@ -1,9 +1,13 @@
 // Main process entry: the trusted side of the app. It owns windows, IPC and the database
 // (later also files and providers). The renderer only gets what the preload exposes.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { app, BrowserWindow, dialog } from 'electron';
 
 import { APP_ENTRY_URL } from './bootstrap/app-origin';
 import { blockFileProtocol, registerAppScheme, serveAppProtocol } from './bootstrap/app-protocol';
+import { findBlockedSwitches, isPackagedTestBuild } from './bootstrap/switch-guard';
 import {
   createMainWindow,
   installNavigationGuards,
@@ -70,9 +74,41 @@ async function start(): Promise<void> {
   createMainWindow();
 }
 
+/** Reads the test-variant marker from the packaged package.json. Any failure means "not a test build". */
+function readIsTestBuild(): boolean {
+  try {
+    return isPackagedTestBuild(
+      JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')) as unknown,
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The packaged app refuses Chromium switches that bypass its security boundary (#20,
+ * SECURITY §21.1). Runs before anything else: no lock, DB, protocol or window yet. Electron
+ * applies --remote-debugging-port only after this script has run, so the port never opens.
+ * `pnpm dev` and the dev E2E tests are not packaged and keep their switches.
+ */
+function refuseBlockedSwitches(): boolean {
+  if (!app.isPackaged) return false;
+  const found = findBlockedSwitches((name) => app.commandLine.hasSwitch(name), {
+    isTestBuild: readIsTestBuild(),
+  });
+  if (found.length === 0) return false;
+  // No dialog: a modal box would leave the process hanging for automation, and it tells an
+  // attacker nothing they don't know. The switch names are ours, never user data.
+  console.error(`[security] refusing to start with blocked switches: ${found.join(', ')}`);
+  app.exit(1);
+  return true;
+}
+
 // One running copy per user profile folder (ARCHITECTURE §7.4). A second copy would open the
 // same database and could race the first through migrations, so it quits and focuses the first.
-if (!app.requestSingleInstanceLock()) {
+if (refuseBlockedSwitches()) {
+  // app.exit is already under way; register nothing else.
+} else if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   registerAppScheme(); // must happen before 'ready'
