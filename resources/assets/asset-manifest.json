@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "tile": {
+    "width": 64,
+    "height": 32
+  },
+  "assets": [
+    {
+      "id": "placeholder.terrain.ground",
+      "version": 1,
+      "kind": "terrain",
+      "path": "placeholders/terrain/ground.png",
+      "width": 64,
+      "height": 32,
+      "pivot": {
+        "x": 32,
+        "y": 32
+      },
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "sha256": "5e1dd6e06486d8fce8ab88498762a3e9443f0cd2392e46de445aaa84f72cdf55",
+      "placeholder": true,
+      "provenance": "docs/art/ASSET_PROVENANCE.md#generated-placeholders"
+    },
+    {
+      "id": "placeholder.building.2x2",
+      "version": 1,
+      "kind": "building",
+      "path": "placeholders/buildings/building-2x2.png",
+      "width": 128,
+      "height": 128,
+      "pivot": {
+        "x": 64,
+        "y": 128
+      },
+      "footprint": {
+        "columns": 2,
+        "rows": 2
+      },
+      "sha256": "ea5f8b015e4462fdd1fd2b913285aef40b7c3718df4a5d76f7c1f2af4f84f48c",
+      "placeholder": true,
+      "provenance": "docs/art/ASSET_PROVENANCE.md#generated-placeholders"
+    },
+    {
+      "id": "placeholder.marker.selection",
+      "version": 1,
+      "kind": "marker",
+      "path": "placeholders/markers/selection.png",
+      "width": 64,
+      "height": 32,
+      "pivot": {
+        "x": 32,
+        "y": 32
+      },
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "sha256": "26065c150873d2942033affb352ec4db6c660a8a73ec778f6f229836a7f73dae",
+      "placeholder": true,
+      "provenance": "docs/art/ASSET_PROVENANCE.md#generated-placeholders"
+    },
+    {
+      "id": "placeholder.marker.invalid",
+      "version": 1,
+      "kind": "marker",
+      "path": "placeholders/markers/invalid.png",
+      "width": 64,
+      "height": 32,
+      "pivot": {
+        "x": 32,
+        "y": 32
+      },
+      "footprint": {
+        "columns": 1,
+        "rows": 1
+      },
+      "sha256": "b77e1e77e09a399f278fa760b57fdb0abaee3a48b3e1bf206ee7827295ff96a4",
+      "placeholder": true,
+      "provenance": "docs/art/ASSET_PROVENANCE.md#generated-placeholders"
+    }
+  ]
+}
