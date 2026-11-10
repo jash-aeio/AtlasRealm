@@ -163,7 +163,6 @@ export type TemplateListInput = z.infer<typeof TemplateListInput>;
 export const TemplateUnavailableReason = z.enum([
   'invalid_manifest', // the file failed the schema above
   'location_mismatch', // its folder doesn't match its ID or version
-  'duplicate', // another template already has this ID and version
   'too_many_templates', // files beyond MAX_PROJECT_TEMPLATES (reported once, not per file)
 ]);
 export type TemplateUnavailableReason = z.infer<typeof TemplateUnavailableReason>;
