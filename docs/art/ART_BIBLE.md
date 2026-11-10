@@ -42,7 +42,7 @@ Validate supported dimensions and controls against the live MCP tool schema. A g
 
 ### 34.3.1 Approved technical values (M0-8, 2026-11-10)
 
-Changed by [ADR-0012](../adr/0012-art-technical-contract.md). The user confirmed these values. They replace the "proposed convention" column above wherever the two differ.
+Changed by [ADR-0013](../adr/0013-art-technical-contract.md). The user confirmed these values. They replace the "proposed convention" column above wherever the two differ.
 
 | Property | Approved value |
 |---|---|

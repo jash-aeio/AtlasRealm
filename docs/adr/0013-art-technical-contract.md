@@ -1,4 +1,4 @@
-# ADR-0012: Art technical contract: tile size, footprints, ground pivot, palette and asset manifest
+# ADR-0013: Art technical contract: tile size, footprints, ground pivot, palette and asset manifest
 
 - **Status:** Accepted
 - **Date:** 2026-11-10

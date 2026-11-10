@@ -11,10 +11,14 @@ import {
   rendererEntryUrl,
 } from './bootstrap/window';
 import { registerIpcHandlers } from './ipc/register';
+import { spawnUtilityWorker } from './runtime-bridge/utility-transport';
+import { WorkerBridge } from './runtime-bridge/worker-bridge';
 import { openAppDatabase } from './storage/app-database';
 import type { Database } from './storage/database';
 
 let database: Database | undefined;
+// Trusted background work runs in a separate utility process (ARCHITECTURE §7.2, ADR-0012).
+const worker = new WorkerBridge(spawnUtilityWorker);
 
 function focusMainWindow(): void {
   const window = BrowserWindow.getAllWindows()[0];
@@ -54,7 +58,15 @@ async function start(): Promise<void> {
   const entryUrl = rendererEntryUrl();
   // Only serve app:// when the build is in use; `pnpm dev` loads from the dev server.
   if (entryUrl === APP_ENTRY_URL) serveAppProtocol(RENDERER_DIR);
-  registerIpcHandlers(entryUrl, db);
+  // utilityProcess.fork only works after 'ready'. Start it now so its status is visible.
+  // A failure here must not stop the window from opening: the worker is optional for the
+  // UI, and the next worker request tries again (and reports the error through IPC).
+  try {
+    worker.start();
+  } catch (error) {
+    console.error('[runtime] could not start the worker', error);
+  }
+  registerIpcHandlers(entryUrl, db, worker);
   createMainWindow();
 }
 
@@ -69,6 +81,10 @@ if (!app.requestSingleInstanceLock()) {
     app.quit();
   });
   app.on('will-quit', () => {
+    // Electron ends utility processes when the app exits anyway (E2E checks no worker is left).
+    // Stopping first marks it as deliberate: no crash is logged, and pending requests fail
+    // with worker_stopped rather than worker_crashed.
+    worker.stop();
     // Closing checkpoints the WAL back into app.sqlite, leaving one tidy file.
     if (database?.isOpen) database.close();
   });

@@ -1,6 +1,6 @@
 # 2026-11-10: M0-8 art bible values, placeholder sprites and asset manifest (#11)
 
-**Branch:** `feat/11-placeholder-art` (worktree `D:MyProjectsJCBAtlasRealm-m0-8`) · **Issue:** [#11](https://github.com/jash-aeio/AtlasRealm/issues/11)
+**Branch:** `feat/11-placeholder-art` (worktree `D:\MyProjectsJCB\AtlasRealm-m0-8`) · **Issue:** [#11](https://github.com/jash-aeio/AtlasRealm/issues/11)
 
 ## Task
 Lock the art technical contract (ART_BIBLE §34.3) so engineering placeholders and later PixelLab assets match. Make geometric placeholder sprites and `resources/assets/asset-manifest.json` with a documented schema. No PixelLab account.
@@ -11,7 +11,7 @@ Lock the art technical contract (ART_BIBLE §34.3) so engineering placeholders a
 - **Palette:** "warm storybook village": grass greens, timber browns, grey-blue stone, lantern gold, parchment cream, and one arcane-blue accent (the existing selection blue).
 - **Scope:** files, manifest, Zod schema and tests, **plus** one texture in the world. The selection highlight is drawn from its PNG, and an E2E test proves textures load under the production CSP. This goes outside the issue's "files owned" (`src/renderer/world`, `src/common`, `scripts`, tests) with the user's approval.
 - Branch type is `feat` (not `docs` like the label) because the work adds code and assets.
-- Recorded as [ADR-0012](../adr/0012-art-technical-contract.md).
+- Recorded as [ADR-0013](../adr/0013-art-technical-contract.md).
 - **Shared checkout (process):** the M0-6 session (#9) was editing the same folder, and its files ended up on my branch. The user chose to move this lane into its own git worktree on a fresh branch `feat/11-placeholder-art`. Only my files moved; the empty `feat/11-art-placeholders` was deleted after the M0-6 session switched to `spike/9-worker-messaging`. Lesson: parallel lanes need their own worktree from the start (MULTI_AGENT_GUIDE).
 
 ## Plan
@@ -27,7 +27,7 @@ Lock the art technical contract (ART_BIBLE §34.3) so engineering placeholders a
 - World: `world-assets.ts` (manifest → built URLs through `import.meta.glob`). `grid-scene.ts` loads the selection PNG with an `<img>`, uses nearest-neighbour sampling and places it by its pivot. Palette colours. `assetsInlineLimit: 0`.
 - **Found:** Zod 4 probes `new Function` the first time it parses an object. Even caught, Chromium reports a `script-src eval` CSP violation. The renderer now sets `z.config({ jitless: true })` first thing (`src/renderer/app/zod-config.ts`). The main process keeps the default.
 - **Found:** the packaged app records **no** resource-timing entries for `app://` loads (not even scripts and CSS). The M0-7 test "every resource is from app://atlas" therefore loops over an empty list. Its script and stylesheet checks (from the DOM) are still real. The new packaged art test decodes the PNG by name instead.
-- Docs: ART_BIBLE §34.3.1 (values, palette, manifest fields), ASSET_PROVENANCE rows, 8 glossary terms, ADR-0012.
+- Docs: ART_BIBLE §34.3.1 (values, palette, manifest fields), ASSET_PROVENANCE rows, 8 glossary terms, ADR-0013.
 
 ## Verification (local Windows 11)
 - typecheck, lint, format:check pass. Unit/integration 168/168 (30 new in `tests/domain/asset-manifest.test.ts`). E2E 30/30 (1 new). Packaged E2E 8/8 (1 new). `pnpm art:placeholders --check` is clean.
@@ -37,7 +37,15 @@ Lock the art technical contract (ART_BIBLE §34.3) so engineering placeholders a
 ## Reviews
 - security-auditor: approve. Fixed: Windows device names (`nul`, `aux`, `com1`…) are refused in paths, and size bounds were added (path 200, provenance 500, 2000 entries, 4096 px, 256 frames, footprint 16). Not acted on: removing `data:` from CSP `img-src` (the user's call).
 - invariant-reviewer: no violations.
-- Lesson 010 written (sprites, pivots, asset manifest).
+- Lesson 011 written (sprites, pivots, asset manifest).
+
+## Merge with M0-6
+- PR #26 conflicted with main after M0-6 (#27) merged. I merged main into the branch rather than rebasing, because force-pushing is blocked.
+- M0-6 had also used **ADR-0012** and **lesson 010**. Theirs merged first, so this work's ADR became **ADR-0013** and its lesson **lesson 011**. All references were updated.
+- Conflicts in IMPLEMENTATION_STATUS, ROADMAP, CHANGELOG, GLOSSARY and LEARNING_LOG were resolved by keeping both sides.
+- After the merge: unit 193/193, E2E 35/35, packaged 9/9, and typecheck, lint and format all pass.
+- **Hook fix (asked with AskUserQuestion; the user chose "fix the hook"):** `guard-bash.mjs` read the branch from the session folder (the shared checkout, now on `main`), so it blocked committing in this worktree. It now reads the branch where each sub-command runs (`cd <dir> &&`, `git -C <dir>`). It falls back to the session folder when that folder isn't a repository, and `git -C … commit`/`push` are now checked too (they weren't matched before). Checked with 14 allow/block cases.
+- Lesson for parallel lanes: reserve ADR and lesson numbers per lane, or pick them at merge time.
 
 ## Open questions
 - Remove `data:` from the CSP `img-src`? It seems unused now. It's a security decision, so ask the user.

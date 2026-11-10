@@ -1,5 +1,5 @@
-# Lesson 010: Sprites, pivots and an asset manifest
-**Milestone:** M0 · **Date:** 2026-11-10 · **Related:** `resources/assets/asset-manifest.json`, `src/common/assets/asset-manifest.ts`, `src/renderer/world/grid-scene.ts`, ADR-0012, ART_BIBLE §34.3.1
+# Lesson 011: Sprites, pivots and an asset manifest
+**Milestone:** M0 · **Date:** 2026-11-10 · **Related:** `resources/assets/asset-manifest.json`, `src/common/assets/asset-manifest.ts`, `src/renderer/world/grid-scene.ts`, ADR-0013, ART_BIBLE §34.3.1
 
 ## The concept (plain words)
 A **sprite** is a picture drawn at a position. To put it in the right spot, code must know which point of the image touches the ground: the **pivot**. A **footprint** says how many grid tiles the sprite covers. An **asset manifest** is one list of every image with these numbers, so code never guesses.

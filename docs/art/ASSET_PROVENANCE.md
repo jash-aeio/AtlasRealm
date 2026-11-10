@@ -3,7 +3,7 @@
 Records where every shipped asset came from (spec §34.5). **No credentials or private reference data here.**
 
 <a id="generated-placeholders"></a>
-**Generated placeholders (M0-8):** engineering stand-ins drawn by code, owned by the project, no PixelLab account used (ADR-0006, ADR-0012). Regenerate with `pnpm art:placeholders`.
+**Generated placeholders (M0-8):** engineering stand-ins drawn by code, owned by the project, no PixelLab account used (ADR-0006, ADR-0013). Regenerate with `pnpm art:placeholders`.
 
 | Asset ID / version | Local path | Source (service / job ID / author) | Prompt or reference provenance | Date | Modifications | Terms checked (link + date) | Attribution |
 |---|---|---|---|---|---|---|---|

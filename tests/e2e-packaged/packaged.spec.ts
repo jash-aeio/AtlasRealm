@@ -262,6 +262,56 @@ function readFuses(binary: string): string {
   return bytes.subarray(start + 2, start + 2 + length).toString('latin1');
 }
 
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0); // signal 0: existence check only
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+test('the worker utility process runs from inside app.asar with the fuses on (M0-6)', async () => {
+  // Nothing is unpacked next to the asar, so the worker script can only come from inside it.
+  expect(existsSync(join(installDir, 'resources', 'app.asar'))).toBe(true);
+  expect(existsSync(join(installDir, 'resources', 'app.asar.unpacked'))).toBe(false);
+
+  const running = await launchPackaged();
+  let pid: number | null = null;
+  try {
+    const { page } = running;
+    await expect(page.getByTestId('worker-status')).toContainText('Worker running · pid');
+    const check = await page.evaluate(() => window.atlas.runtime.workerCheck());
+    expect(check).toMatchObject({
+      ok: true,
+      data: {
+        echo: { outcome: 'ok' },
+        cancel: { outcome: 'cancelled', activeAfterCancel: 0 },
+        status: { state: 'running', crashCount: 0 },
+      },
+    });
+
+    // Crash detection and restart also work packaged.
+    const status = await page.evaluate(() => window.atlas.runtime.workerStatus());
+    if (!status.ok || status.data.pid === null) throw new Error('no worker pid');
+    process.kill(status.data.pid);
+    await expect
+      .poll(async () => {
+        const after = await page.evaluate(() => window.atlas.runtime.workerStatus());
+        return after.ok ? after.data.state : after.error.code;
+      })
+      .toBe('crashed');
+    const recovered = await page.evaluate(() => window.atlas.runtime.workerCheck());
+    expect(recovered).toMatchObject({ ok: true, data: { status: { crashCount: 1 } } });
+    pid = recovered.ok ? recovered.data.status.pid : null;
+  } finally {
+    expect(await quit(running)).toBe(0);
+  }
+  // Quitting leaves no worker behind.
+  expect(pid).not.toBeNull();
+  if (pid !== null) await expect.poll(() => isAlive(pid), { timeout: 5_000 }).toBe(false);
+});
+
 // Fuse positions in FuseVersion.V1 (@electron/fuses FuseV1Options).
 const FUSE = {
   runAsNode: 0,
