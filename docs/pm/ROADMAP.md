@@ -3,7 +3,7 @@
 > This is the **Markdown mirror** of the GitHub Milestones and [Project board](https://github.com/users/jash-aeio/projects/1). GitHub is the source of truth for issue status. Run `/sync-pm` to refresh this file.
 > Full milestone specs (build, checks, exit criteria): [ROADMAP_SPEC.md](ROADMAP_SPEC.md) · Task-level dependency graphs: [DEPENDENCIES.md](DEPENDENCIES.md)
 
-**Last synced:** 2026-11-10 · **Current milestone:** M1 (not planned yet). M0 closed 2026-11-10 as `v0.1.0-m0`.
+**Last synced:** 2026-11-11 · **Current milestone:** M1 (planned: 11 issues). M0 closed 2026-11-10 as `v0.1.0-m0`.
 
 ## Progress overview
 
@@ -11,7 +11,7 @@
 |---|---|---|---|---|---|
 | **Setup** | Repo, docs, Claude Code config, GitHub workflow | — | ✅ Done | — | — |
 | **M0** | Foundation and risk spikes: packaged Electron app with SQLite, IPC, Pixi, React Flow | Setup | ✅ Done | 9/9 (#20 moved to M1) | [v0.1.0-m0](https://github.com/jash-aeio/AtlasRealm/releases/tag/v0.1.0-m0) |
-| **M1** | Profiles, worlds, project persistence (list UI, no canvas) | M0 | 📋 Backlog (next) | 0/1 (#20 carried over) | — |
+| **M1** | Profiles, worlds, project persistence (list UI, no canvas) | M0 | ⏳ Planned | 0/11 (#20, #29–#38) | — |
 | **M2** | Isometric world, placement, hotbar, library, Atlas shell | M1 | 📋 Backlog | — | — |
 | **M3** | Bundled resources, permission broker, artifacts, import commit | M1 (∥ M2) | 📋 Backlog | — | — |
 | **M4** | Durable runtime, mock + Ollama + Anthropic adapter | M3 | 📋 Backlog | — | — |
@@ -32,4 +32,4 @@ Recorded so the reasons stay visible:
 4. Each milestone is broken into ½–1 day issues **when it starts** (`/plan-milestone`), not all up front. This is just-in-time planning, because later plans improve with what earlier milestones teach.
 
 ## Current milestone detail
-M1 has no breakdown yet: run `/plan-milestone M1`. Previous: [milestones/M0.md](milestones/M0.md) (closed).
+[milestones/M1.md](milestones/M1.md): 11 issues, critical path M1-1 (#20) → M1-2 → M1-6 → M1-7 → M1-10 → M1-11. Ready now: #20, #30, #32. Previous: [milestones/M0.md](milestones/M0.md) (closed).

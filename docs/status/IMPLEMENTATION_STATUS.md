@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-10 · **Branch:** chore/release-v0.1.0-m0 (M0 release PR)
+**Last updated:** 2026-11-11 · **Branch:** docs/plan-m1 (M1 planning PR)
 
 ## Current milestone
-**M1 — Profiles, worlds, and project persistence** (📋 not planned yet; run `/plan-milestone M1`). Carried over: #20 (M0-10, Chromium switch block).
+**M1 — Profiles, worlds, and project persistence** (⏳ planned 2026-11-11: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). Nothing implemented yet.
 
 **M0 — Foundation and risk spikes: ✅ closed 2026-11-10, tag `v0.1.0-m0`.** Evidence: unit/integration 193/193, E2E 35/35, packaged E2E 9/9 on main @ 2fbf944; CI green. See `docs/sessions/2026-11-10-m0-close.md`.
 
@@ -243,9 +243,10 @@
 - [ADR-0011](../adr/0011-plain-pixijs-webgl-canvas-fallback.md): plain `pixi.js` with our own React wrapper; WebGL, then Canvas2D
 - [ADR-0012](../adr/0012-electron-utility-process-worker.md): Electron `utilityProcess` for the trusted worker
 - [ADR-0013](../adr/0013-art-technical-contract.md): art technical contract (tile, footprints, south-corner pivot, palette, asset manifest)
+- [ADR-0014](../adr/0014-local-profiles-storage-and-switching.md): local profiles: adopt the M0 `default` folder; switch in-process, then reload the window
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- Run `/plan-milestone M1` to break M1 into issues. Put **#20 (block Chromium switches)** early in M1: it's a release gate before M3's file, secret and provider commands.
+- Start M1 with `/start-task 20` (M1-1, Chromium switch guard; it goes first because M1-2 also edits `src/main/index.ts`). #30 (schema v2) and #32 (templates) are also Ready and parallel-safe.
   - Possible follow-ups: an app icon; removing `data:` from CSP `img-src` (needs your decision); the empty resource-timing list in the packaged test.
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.
