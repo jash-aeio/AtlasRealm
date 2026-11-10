@@ -99,3 +99,6 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Nearest-neighbour sampling** | Scaling an image by copying the closest pixel instead of blending, so pixel art stays crisp | `grid-scene.ts` |
 | **Placeholder art** | Simple stand-in images, clearly flagged, used until approved art exists | `resources/assets/placeholders/` |
 | **JIT (in Zod)** | "Just-in-time": Zod 4 can generate parser code at runtime with `new Function`. Our CSP forbids that, so the renderer sets `jitless` | `src/renderer/app/zod-config.ts` |
+| **Project template (starter package)** | A versioned description of a kind of project: the inputs it asks for, the outputs it plans, and what it can't do offline. A project records which template ID and version it came from. In M1 templates are metadata only | `resources/project-templates/` |
+| **Discriminated union** | A schema with several shapes told apart by one field (here `type` or `status`), so each shape gets its own rules and TypeScript knows which one it has | `project-template.ts` |
+| **Build-time import (`import.meta.glob`)** | A Vite feature that finds files by pattern while building and bundles them into the code, so the app needs no file paths at runtime | `bundled-templates.ts` |
