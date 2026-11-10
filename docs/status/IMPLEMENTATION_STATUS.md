@@ -89,7 +89,14 @@
   - Build: `assetsInlineLimit: 0`, so all four PNGs ship as real files under `app://atlas/assets/`.
   - The renderer sets Zod `jitless` (`src/renderer/app/zod-config.ts`). Without it, Zod 4's `new Function` probe causes a `script-src eval` CSP report.
 
+- **M1-1 Chromium switch guard (#20, branch `feat/20-chromium-switch-guard`):** the packaged app refuses to start with debugging, sandbox-disabling, child-process injection or traffic-interception switches (SECURITY §21.1, ADR-0015).
+  - `src/main/bootstrap/switch-guard.ts` holds the deny-list (19 switches) and the checks. `src/main/index.ts` runs it first: when `app.isPackaged` and a listed switch is present, it logs `[security] refusing to start with blocked switches: …` to stderr and calls `app.exit(1)` before the lock, DB, protocol or window. No dialog.
+  - Detection uses `app.commandLine.hasSwitch` (Chromium's parser), so `-x`, `/x` and upper-case spellings are caught.
+  - `pnpm package:test` builds a **test-only variant** (`release/test/win-unpacked`, folder only) whose asar package.json carries `atlasRealm.packagedTest: true`. That variant allows `remote-debugging-port` only. CI builds it after the installer and never uploads it.
+  - `pnpm dev` and the dev E2E suite are unaffected (not packaged).
+
 ## Changed components
+- M1-1: `src/main/bootstrap/switch-guard.ts` (new), `src/main/index.ts`, `package.json` (`package:test`), `electron-builder.yml` (comment), `.github/workflows/ci.yml`; `tests/security/switch-guard.test.ts` (new), `tests/e2e-packaged/packaged.spec.ts`; docs: ADR-0015, SECURITY §21.1, glossary
 - M0-8: `src/common/assets/` (new), `scripts/generate-placeholder-art.ts` (new), `resources/assets/` (new), `src/renderer/world/{world-assets.ts (new),grid-scene.ts}`, `src/renderer/app/{zod-config.ts (new),main.tsx}`, `electron.vite.config.ts`, `package.json` (script); `tests/domain/asset-manifest.test.ts` (new), `tests/e2e/world.spec.ts`, `tests/e2e-packaged/packaged.spec.ts`; docs: ADR-0013, ART_BIBLE, ASSET_PROVENANCE, glossary, lesson 011; `.claude/hooks/guard-bash.mjs` (branch checked where the command runs, for worktrees)
 - M0-6: `src/worker/` (new), `src/main/runtime-bridge/` (new), `src/common/contracts/{worker-protocol,json-size,runtime-worker,channels,atlas-api}.ts`, `src/main/ipc/{router.ts,register.ts,commands/runtime-worker.ts}`, `src/main/index.ts`, `src/preload/index.ts`, `src/renderer/app/{App.tsx,WorkerPanel.tsx}`, `tsconfig.node.json` (includes `src/worker`); `tests/integration/{worker-messaging,runtime-worker-contract}.test.ts`, `tests/e2e/worker.spec.ts` (new), `tests/e2e/shell.spec.ts` (API shape), `tests/e2e-packaged/packaged.spec.ts`
 - #24 (chore): `.github/dependabot.yml` ignores major-version bumps of `typescript` and `@types/node`. They are upgraded by hand (see Known limitations).
@@ -104,6 +111,11 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- M1-1, 2026-11-11, local Windows 11: typecheck, lint, format:check pass. Unit/integration 224/224 (31 new). E2E 35/35. Packaged E2E 13/13 (4 new) on a fresh `pnpm package` + `pnpm package:test`.
+  - The first unit run had 1 failure out of 224. Its output was lost, and 4 reruns all passed: an unidentified flaky test (see Known limitations).
+  - Packaged, shipped build: with no switches it opens its DB and keeps running (positive control). `--remote-debugging-port` in four spellings (`--`, `-`, `/`, upper case) exits 1 with the `[security]` line, the port never answers and no DB is created. `--remote-debugging-pipe`, `--no-sandbox`, `--disable-web-security`, `--js-flags` and `--proxy-server` also exit 1. `--inspect=0` is now refused outright, on top of the fuse.
+  - Packaged, test variant: all CDP smoke tests pass (so it opens the port: the positive control for the port check). `--remote-debugging-port` plus `--no-sandbox` still exits 1, reporting only `no-sandbox`.
+  - Marker checked by reading both `app.asar` files: `"atlasRealm": { "packagedTest": true }` (a boolean) in the variant, absent in the shipped build. Fuse states are the same in both.
 - M0-8, 2026-11-10, local Windows 11: typecheck, lint, format:check pass. Unit/integration 168/168 (30 new). E2E 30/30 (1 new). Packaged E2E 8/8 (1 new; run before the schema bounds were added, and those don't touch packaging). `pnpm art:placeholders --check` is clean.
   - After merging main (with M0-6): unit/integration 193/193, E2E 35/35, packaged E2E 9/9 (fresh `pnpm package`). typecheck, lint and format:check pass.
   - Hook fix: `.claude/hooks/guard-bash.mjs` now reads the branch where each sub-command runs (`cd <dir> &&`, `git -C <dir>`). It falls back to the session folder when that folder isn't a repository. Checked with 14 allow/block cases: commit or push from the worktree allowed; commit on main via cd or `-C` blocked; push to main, force push and `--no-verify` blocked.
@@ -177,7 +189,7 @@
     - Packaged without `electronFuses`, the fuse-wire, RunAsNode, inspect and tamper tests each failed.
     - Without `blockFileProtocol`, the dev E2E `file:` test failed (200 instead of 404).
   - **Manual, not automated:** a silent NSIS install (`/S /D=%TEMP%\Atlas Install Ünïcødé 测试\Atlas Realm`) exited 0 in 15 s. The installed app created `%APPDATA%\Atlas Realm\profiles\default\app.sqlite`. A silent uninstall exited 0 and removed the program and its uninstall registry entry, but **kept** the data folder. Interactive install via the wizard wasn't tried.
-  - Packaged tests connect over CDP (`--remote-debugging-port`), because the inspect fuse stops Playwright's `_electron.launch`.
+  - Packaged tests connect over CDP (`--remote-debugging-port`), because the inspect fuse stops Playwright's `_electron.launch`. Since M1-1 they drive the test-only variant, because the shipped build refuses that switch.
   - security-auditor: approve with changes. M1 (Chromium switches) is accepted and tracked in #20. L1 (shell quoting in the wrapper) and L2 (packaged `file:` test) are fixed. L3 and L4 are documented in comments and below. L5 (SHA-pinning actions) is listed below. invariant-reviewer: no violations. It asked for these docs and an uninstall check (done manually, above).
 - M0-9, 2026-11-08, local Windows 11: typecheck, lint, format:check pass. Unit/integration 100/100. E2E 13/13 (built app).
   - E2E: the page URL is `app://atlas/index.html` and all scripts come from `app:`. A `file:` script, a `file:` image and a UNC (`file://127.0.0.1/c$/...`) image all fail to load. Chromium refuses `file:` resources from a non-file page before CSP is consulted (no CSP violation event fires), and `'self'` no longer covers `file:` either.
@@ -219,7 +231,8 @@
 - Imported asset packs (later) need main-process path confinement (realpath, no symlinks) and digest checks on the bytes read. The manifest schema only checks path text.
 - Zod in the renderer runs `jitless` (no generated parsers). Fine at today's sizes; measure before parsing large data there.
 - `node:sqlite` is a release candidate API (ADR-0010). It works in the packaged build (M0-7 E2E).
-- **Release gate (#20, moved to M1):** the packaged app still accepts Chromium switches such as `--remote-debugging-port`, `--no-sandbox` and `--disable-web-security`. Any program running as the same user could drive the trusted page. Low impact while only `ping`/`launchInfo` exist. It must be fixed before any IPC command touches files, secrets or providers.
+- Packaged UI smoke tests run on the test-only variant, not the exact shipped bytes (one package.json field differs, ADR-0015). The shipped build gets the guard tests and the fuse readout. The switch guard is a deny-list: an unlisted dangerous switch would get through.
+- One unit-test run (M1-1) failed once with 1/224 and couldn't be reproduced in 4 reruns. Output lost; the test is unidentified. Watch CI for a repeat.
 - Unsigned build: SmartScreen warns, and asar integrity only stops corruption and casual tampering. Without a signature, a local attacker can patch the hash in the `.exe` too. Code signing is a release decision (costs money).
 - Electron's default icon is still a placeholder (not in M0-8's acceptance criteria; follow-up). The `app-update.yml` that electron-builder generates is unused (no updater).
 - The `file:` block covers the default session only. Any future `session.fromPartition` needs its own block (rule in `app-protocol.ts`).
@@ -244,6 +257,7 @@
 - [ADR-0012](../adr/0012-electron-utility-process-worker.md): Electron `utilityProcess` for the trusted worker
 - [ADR-0013](../adr/0013-art-technical-contract.md): art technical contract (tile, footprints, south-corner pivot, palette, asset manifest)
 - [ADR-0014](../adr/0014-local-profiles-storage-and-switching.md): local profiles: adopt the M0 `default` folder; switch in-process, then reload the window
+- [ADR-0015](../adr/0015-chromium-switch-guard-and-test-variant.md): Chromium switch guard as a named deny-list; packaged smoke tests use a test-only variant marked inside `app.asar`
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
