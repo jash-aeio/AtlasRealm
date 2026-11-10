@@ -79,6 +79,12 @@ jobs:
           done
           exit 1
 
+      # Test-only variant (#20, ADR-0015): same build plus a marker inside app.asar that lets
+      # the smoke tests use --remote-debugging-port. Folder only (release/test), never an
+      # installer, never uploaded. Reuses the Electron download from the step above.
+      - name: Package test variant
+        run: pnpm package:test
+
       # Runs the packaged .exe from a path with spaces and non-ASCII characters, checks that
       # data survives a restart, that assets load only from app://, and that the fuses hold.
       - name: E2E (packaged app)
