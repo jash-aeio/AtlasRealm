@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-10 · **Branch:** chore/24-dependabot-ignore-majors (PR for #24)
+**Last updated:** 2026-11-10 · **Branch:** spike/9-worker-messaging (PR for #9)
 
 ## Current milestone
-**M0 — Foundation and risk spikes** (🔨 in progress; M0-1, M0-2, M0-3, M0-4, M0-5, M0-7, M0-9 done)
+**M0 — Foundation and risk spikes** (🔨 in progress; M0-1, M0-2, M0-3, M0-4, M0-5, M0-7, M0-9 done; M0-6 in review)
 
 ## Implemented and demonstrated
 - Repository and process setup (2026-11-06): spec docs, Claude Code config, GitHub workflow. See `docs/sessions/2026-11-06-project-setup.md`.
@@ -69,7 +69,19 @@
   - World: `grid-scene.ts` gains `setMarkers` (one Graphics for all markers) and `setSelected` (a light-blue tile under the marker). `WorldCanvas` reads the store and tells the scene what to draw, including on a newly created scene. Left-clicking a marker selects it, and clicking empty ground clears the selection. The camera never jumps on selection (§30.1).
   - Hiding the world view keeps the entities and the selection, and showing it again draws the selection straight away.
 
+- **M0-6 worker messaging spike (#9):** the main process starts a background **worker process** at launch. A "Worker check (M0 spike)" panel shows its real state. The worker only runs **M0 spike methods** (`spike.echo`, `spike.slowCount`) and does no product work.
+  - Electron `utilityProcess` (ADR-0012), built by electron-vite through a `?modulePath` import (`out/main/chunks/index-<hash>.js`). It's a separate OS process, so a crash or hang can't take main down.
+  - Channel: main hands the worker a private `MessagePort` in one `connect` message. Only main and the worker hold it, so no localhost server is involved (§7.2).
+  - Protocol (`src/common/contracts/worker-protocol.ts`): Zod envelopes `request`/`cancel` → `ready`/`result`/`error`, with a random UUID per request. Both sides check size (256 KiB, UTF-8 JSON, shared `json-size.ts`, now also used by the IPC router) and schema. Main also validates the worker's results.
+  - Cancellation: an `AbortSignal` or timeout settles the request at once and sends `cancel`. The worker aborts that request's `AbortController`. Late replies are dropped and counted (`staleRepliesDropped`).
+  - Crash: on an unexpected exit, every pending request fails with `worker_crashed`, and the crash count and exit code are kept and logged. **Nothing is retried.** The next request starts a fresh worker. A deliberate stop (quit) fails pending requests with `worker_stopped` and isn't counted as a crash.
+  - Logic with no Electron imports: `src/worker/dispatcher.ts` and `src/main/runtime-bridge/worker-bridge.ts`. Electron glue: `src/worker/index.ts` and `runtime-bridge/utility-transport.ts`.
+  - New **M0 spike** IPC commands:
+    - `runtime.workerStatus` (no payload)
+    - `runtime.workerCheck` (optional `cancelAfterMs` 10–5000, default 100): echo, then a slow count cancelled in flight, then an echo that reads how many requests are still active.
+
 ## Changed components
+- M0-6: `src/worker/` (new), `src/main/runtime-bridge/` (new), `src/common/contracts/{worker-protocol,json-size,runtime-worker,channels,atlas-api}.ts`, `src/main/ipc/{router.ts,register.ts,commands/runtime-worker.ts}`, `src/main/index.ts`, `src/preload/index.ts`, `src/renderer/app/{App.tsx,WorkerPanel.tsx}`, `tsconfig.node.json` (includes `src/worker`); `tests/integration/{worker-messaging,runtime-worker-contract}.test.ts`, `tests/e2e/worker.spec.ts` (new), `tests/e2e/shell.spec.ts` (API shape), `tests/e2e-packaged/packaged.spec.ts`
 - #24 (chore): `.github/dependabot.yml` ignores major-version bumps of `typescript` and `@types/node`. They are upgraded by hand (see Known limitations).
 - M0-5: `src/renderer/state/` (new), `src/renderer/atlas/` (new), `src/renderer/world/{grid-scene.ts,WorldCanvas.tsx}`, `src/renderer/app/{App.tsx,app.css}`, `package.json` + lockfile; `tests/domain/selection-store.test.ts`, `tests/e2e/atlas.spec.ts` (new), `tests/e2e/world.spec.ts` (locators scoped to the world section)
 - M0-4: `src/renderer/world/` (new: `projection.ts`, `grid-scene.ts`, `WorldCanvas.tsx`, `WorldErrorBoundary.tsx`), `src/renderer/app/{App.tsx,app.css}`, `package.json` + lockfile (`pixi.js`); `tests/domain/projection.test.ts`, `tests/e2e/world.spec.ts` (new)
@@ -82,6 +94,34 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- M0-6, 2026-11-10, local Windows 11: typecheck, lint, format:check pass. Unit/integration 163/163 (25 new). E2E 34/34 (5 new in `worker.spec.ts`; the worker spec also passed 20/20 over 4 repeats). Packaged E2E 8/8 (1 new).
+  - Spawn: `app.getAppMetrics()` lists exactly one Utility process named "Atlas Realm worker". Its pid matches the status and differs from main's.
+  - Cancel: the check returns `cancelled` with 0 requests still active, in under 3 s (a broken cancel would take about 10 s). Unit test: the counting loop stops within one step of the cancel.
+  - Crash: the test kills the pid from outside.
+    - The status shows `crashed` with crashes 1 and a non-zero exit code, and the process is gone from the metrics. `app.ping` still works.
+    - The next check starts a new pid.
+    - A kill during an in-flight request returns `worker_crashed` within 2 s, without waiting for the 3 s cancel.
+  - Quit leaves no worker process.
+  - Packaged: the worker runs from inside `app.asar` at a non-ASCII install path, with nothing unpacked; checked by listing the asar too. Check, crash, restart and quit cleanup all work.
+  - Mutation checks, each of which made a test fail:
+    - no `cancel` message sent
+    - no failing of pending requests on exit
+    - the worker ignoring the signal
+    - no output validation
+    - no stale-worker guard
+    - no worker size check
+    - no exit forwarding in the Electron transport
+  - Survived: removing `worker.stop()` on quit. Electron ends utility processes on app exit by itself, which E2E confirms, so `stop()` only labels the exit as deliberate.
+  - Found by tests and fixed:
+    - The check waited out its cancel delay even after a crash.
+    - A time-based crash test was flaky; it now waits on `pendingRequests`.
+    - Our `serviceName` shows up in the metrics' `name` field.
+  - Not checked: `pnpm dev` by hand with the worker (a background dev-server launch was blocked by the permission check), and real CPU-heavy work in the worker.
+  - security-auditor: approve with changes.
+    - Fixed: M1 (a request racing quit could fork a new worker; `stop()` is now final, with a test and a mutation check) and L3 (a fork failure at startup no longer prevents the window from opening).
+    - Deferred to before M4, listed under Known limitations: M2 (crash-loop backoff), L1 (single-flight `workerCheck` and a cap on pending requests), L2 (gate or remove the spike commands and the pid in renderer responses).
+    - Noted for M4: I1 (don't log payloads in worker errors) and I3 (pass the worker a minimal `env`).
+  - invariant-reviewer: no violations. Its one note (the session log was unfilled at review time) is done.
 - M0-5, 2026-11-10, local Windows 11: typecheck, lint, format:check pass. Unit/integration 138/138 (13 new). E2E 29/29 (6 new in `atlas.spec.ts`, built app, production CSP).
   - Graph click → world: `data-selected-entity` matches, and the pixel at the projected tile (beside the marker) turns selection blue. It was ground before (control) and goes back to ground when another node is selected.
   - World click on a marker → the same graph node is `.selected` (exactly one). Clicking empty ground clears both views.
@@ -137,6 +177,14 @@
 - CI: see the PR checks (first CI run with E2E on windows-latest).
 
 ## Known limitations
+- Worker (M0-6):
+  - Only spike methods. No leases, persisted runs or orchestration yet (M4).
+  - No crash-loop backoff: every request after a crash starts a new worker (security M2). Add backoff and a `failed` state before M4.
+  - No cap on pending requests, and `runtime.workerCheck` isn't single-flight (security L1).
+  - The spike commands ship in production builds and give the renderer the worker pid (security L2). Gate or remove them before M4. Tests can read the pid via `app.getAppMetrics()`.
+  - `runtime.workerCheck` can hold a slow count for up to 5 s per call. It's a spike command; remove it or rate-limit it when real run commands arrive.
+  - The worker's console output is inherited by the app's stdout (no log file yet).
+  - The "error" event of `utilityProcess` (experimental) is not used; `exit` is the crash signal.
 - No product features yet: the world is a placeholder grid and the Realm Atlas shows mock entities; no real projects or buildings. The DB holds only launch facts.
 - Realm Atlas (M0-5): mock data only, with no Map tab, resize, pin, expand, search, filters or grouping.
   - At "fit to view" the 150-node stress graph is too small to read. Readability, not speed, is the limit (§30.6 grouping/expansion).
@@ -170,9 +218,9 @@
 - [ADR-0010](../adr/0010-node-sqlite-binding.md): built-in `node:sqlite` as the SQLite binding
 - [ADR-0011](../adr/0011-plain-pixijs-webgl-canvas-fallback.md): plain `pixi.js` with our own React wrapper; WebGL, then Canvas2D
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
+- [ADR-0012](../adr/0012-electron-utility-process-worker.md): Electron `utilityProcess` for the trusted worker
 
 ## Next task
-- After the #24 PR is merged, pick an unblocked M0 task:
-  - **M0-6 worker messaging (#9)** or **M0-8 art placeholders (#11)**. M0-8 would replace the placeholder colours and default icon; follow the "For M0-8" note above about Pixi's asset loader under our CSP.
+- After the #9 PR is merged: **M0-8 art placeholders (#11)** is being worked on in a separate worktree (`AtlasRealm-m0-8`). Follow the "For M0-8" note above about Pixi's asset loader under our CSP.
   - #20 (block Chromium switches) is a release gate before M3, not urgent for M0.
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.

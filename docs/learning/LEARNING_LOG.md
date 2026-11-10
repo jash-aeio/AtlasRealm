@@ -13,6 +13,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 007 | [Rendering as a pure view](lessons/007-rendering-as-a-pure-view.md) | M0 | isometric projection, inverse projection, camera, WebGL/Canvas2D, WebGL context, error boundary, StrictMode, mutation check |
 | 008 | [One store, many views](lessons/008-one-store-many-views.md) | M0 | single source of truth, external store, useSyncExternalStore, controlled component, React Flow |
 | 009 | [Dependency updates and semver](lessons/009-dependency-updates-and-semver.md) | M0 | semantic versioning, Dependabot groups, ignore rules, @types/node vs runtime Node |
+| 010 | [Worker processes, request IDs and cancellation](lessons/010-worker-processes-and-cancellation.md) | M0 | utility process, message passing, request IDs, AbortController, crash detection, stale replies |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map
