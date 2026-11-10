@@ -30,11 +30,17 @@ Lock the art technical contract (ART_BIBLE §34.3) so engineering placeholders a
 - Docs: ART_BIBLE §34.3.1 (values, palette, manifest fields), ASSET_PROVENANCE rows, 8 glossary terms, ADR-0012.
 
 ## Verification (local Windows 11)
-- typecheck, lint, format:check pass. Unit/integration 162/162 (24 new in `tests/domain/asset-manifest.test.ts`). E2E 30/30 (1 new). Packaged E2E 8/8 (1 new). `pnpm art:placeholders --check` is clean.
+- typecheck, lint, format:check pass. Unit/integration 168/168 (30 new in `tests/domain/asset-manifest.test.ts`). E2E 30/30 (1 new). Packaged E2E 8/8 (1 new). `pnpm art:placeholders --check` is clean.
 - Mutation checks, each of which made a test fail: sprite hidden (`alpha = 0`) → 2 atlas selection-pixel tests fail. Inlining back on (4096) → the new world art test fails.
 - Sprites checked by eye. Not checked: `pnpm dev` by hand.
 
+## Reviews
+- security-auditor: approve. Fixed: Windows device names (`nul`, `aux`, `com1`…) are refused in paths, and size bounds were added (path 200, provenance 500, 2000 entries, 4096 px, 256 frames, footprint 16). Not acted on: removing `data:` from CSP `img-src` (the user's call).
+- invariant-reviewer: no violations.
+- Lesson 010 written (sprites, pivots, asset manifest).
+
 ## Open questions
+- Remove `data:` from the CSP `img-src`? It seems unused now. It's a security decision, so ask the user.
 - The app icon (still Electron's default) isn't in the acceptance criteria. Left for a follow-up.
 - The vacuous `resources` loop in the packaged "works offline" test: fix it, or find out why there is no resource timing for `app://` in the packaged build (it works in the unpackaged E2E build).
 - 3×3 and 4×4 placeholders, and drawing buildings and ground tiles from art, belong to M1 placement work.
