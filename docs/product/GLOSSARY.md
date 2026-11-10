@@ -82,3 +82,11 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Controlled component** | A component that shows a value passed in from outside and only *reports* user actions, instead of keeping its own state | `ConnectionsGraph.tsx` |
 | **React Flow** | The library (`@xyflow/react`) that draws the Realm Atlas Connections graph as HTML/SVG nodes and edges (ADR-0003) | `src/renderer/atlas/` |
 | **Shared entity ID** | One stable ID used by every view of the same thing (world marker, graph node, list item), so selection can be shared | `spike-graph.ts` |
+| **Sprite** | A single picture (PNG) drawn into the world at a position, e.g. a building or a marker | `grid-scene.ts` |
+| **Footprint** | The grid tiles a sprite covers on the ground, e.g. 2×2. Used for placement and collision, never for permissions | `asset-manifest.json` |
+| **Ground pivot (anchor)** | The point of an image that is placed on the grid. Ours is the south corner of the footprint, the corner nearest the viewer (ADR-0012) | `asset-manifest.ts` |
+| **Asset manifest** | One JSON list of every bundled image with its size, pivot, footprint and digest, checked by a schema and tests | `resources/assets/asset-manifest.json` |
+| **Digest (SHA-256)** | A fingerprint of a file's bytes; any change gives a different value, so it detects edited or corrupted files | manifest `sha256` |
+| **Nearest-neighbour sampling** | Scaling an image by copying the closest pixel instead of blending, so pixel art stays crisp | `grid-scene.ts` |
+| **Placeholder art** | Simple stand-in images, clearly flagged, used until approved art exists | `resources/assets/placeholders/` |
+| **JIT (in Zod)** | "Just-in-time": Zod 4 can generate parser code at runtime with `new Function`. Our CSP forbids that, so the renderer sets `jitless` | `src/renderer/app/zod-config.ts` |

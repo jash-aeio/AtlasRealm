@@ -40,6 +40,62 @@ Before bulk generation, create `docs/ART_BIBLE.md` and one approved reference sh
 
 Validate supported dimensions and controls against the live MCP tool schema. A generator's square image canvas is not necessarily the desired diamond tile's rendered footprint. Do not silently mix top-down characters with an incompatible isometric camera.
 
+### 34.3.1 Approved technical values (M0-8, 2026-11-10)
+
+Changed by [ADR-0012](../adr/0012-art-technical-contract.md). The user confirmed these values. They replace the "proposed convention" column above wherever the two differ.
+
+| Property | Approved value |
+|---|---|
+| World ground tile | **64 × 32** logical pixels, 2:1 diamond. Diamond edges use clean "two across, one down" pixel steps |
+| Building footprints | **2×2, 3×3, 4×4** tiles. Terrain tiles and markers are 1×1 |
+| Ground pivot | **South corner of the footprint diamond** (nearest the viewer), in image pixels from the top-left. The sprite is drawn with its pivot on grid point `(gx + columns, gy + rows)` |
+| Lighting | Upper-left. The south-west wall is lit, the south-east wall is in shade |
+| Sampling | Nearest-neighbour (no blending) |
+| Exports | Transparent RGBA PNG, one file per sprite or a strip of equal frames |
+
+**Footprint geometry.** With the pivot at the south corner, a footprint of `columns × rows` reaches `columns × 32` px left (west corner), `rows × 32` px right (east corner) and `(columns + rows) × 16` px up (north corner). The schema refuses a pivot that would hang the footprint outside the frame. An unpadded 2×2 building is 128 px wide with its pivot at `(64, height)`.
+
+**Palette: "warm storybook village"** (16 swatches; also in `scripts/generate-placeholder-art.ts`):
+
+| Swatch | Hex | Material / use |
+|---|---|---|
+| grass dark | `#2F4A32` | grass edges, grid lines |
+| grass | `#4F7A3F` | ground |
+| grass light | `#7FA55A` | tufts, highlights |
+| timber dark | `#4A3220` | beams, marker outlines |
+| timber | `#7A5230` | shaded wood walls |
+| timber light | `#A87A4A` | lit wood walls, entity markers |
+| stone dark | `#46505E` | shaded stone |
+| stone | `#7D8794` | stone walls, paths |
+| stone light | `#B4BCC4` | lit stone |
+| clay | `#8E3B2E` | roofs |
+| lantern | `#F2C14E` | windows, lanterns, hover |
+| parchment | `#EFE2BF` | scrolls, labels, Atlas accents |
+| ink | `#1D1F26` | outlines, world background |
+| arcane | `#6BC6F2` | selection (same as the Atlas selection outline) |
+| arcane light | `#E8F6FF` | selection edge, magic glints |
+| warning | `#D9483B` | invalid placement, errors. Always paired with a pattern, never colour alone |
+
+**Asset manifest** (`resources/assets/asset-manifest.json`, schema version 1, validated by `src/common/assets/asset-manifest.ts`):
+
+| Field | Meaning |
+|---|---|
+| `schemaVersion` | `1`. Bumped when old readers couldn't understand the file |
+| `tile` | The ground tile size the art was made for (`64 × 32`) |
+| `assets[].id` | Stable ID, lowercase words joined by `.` or `-` (e.g. `placeholder.marker.selection`). Unique |
+| `version` | Raised whenever the image changes |
+| `kind` | `terrain`, `building` or `marker` (more kinds come with characters, status icons and interiors) |
+| `path` | Relative to `resources/assets`: lowercase, forward slashes, `.png`, no `..`, drive letters or backslashes. Unique |
+| `width`, `height` | Image size in pixels; must match the PNG header |
+| `pivot` | Ground pivot `{x, y}` (see above). Per frame for animations |
+| `footprint` | `{columns, rows}` tiles covered on the ground |
+| `animation` | Optional: `frameWidth`, `frameHeight`, `frameCount`, `frameDurationMs`; frames left to right, top to bottom |
+| `sha256` | Lowercase hex digest of the file; tests compare it with the real bytes |
+| `placeholder` | `true` for engineering placeholders, which must be labelled as such |
+| `provenance` | Where source and terms are recorded (`docs/art/ASSET_PROVENANCE.md`) |
+
+**Placeholders (M0-8).** `pnpm art:placeholders` draws the ground tile, a 2×2 building, and the selection and invalid markers into `resources/assets/placeholders/`, and updates their manifest entries. Other entries are left alone. `--check` reports stale files. The world currently draws only the selection marker from its PNG. The ground, entity markers and hover outline are still drawn shapes in palette colours.
+
 ### 34.4 Minimal production batch
 
 Prioritize a coherent useful slice rather than hundreds of decorative variants:
