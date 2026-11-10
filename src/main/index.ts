@@ -19,6 +19,7 @@ import { spawnUtilityWorker } from './runtime-bridge/utility-transport';
 import { WorkerBridge } from './runtime-bridge/worker-bridge';
 import { openAppDatabase } from './storage/app-database';
 import type { Database } from './storage/database';
+import { loadBundledTemplateCatalog } from './templates/bundled-templates';
 
 let database: Database | undefined;
 // Trusted background work runs in a separate utility process (ARCHITECTURE §7.2, ADR-0012).
@@ -70,7 +71,12 @@ async function start(): Promise<void> {
   } catch (error) {
     console.error('[runtime] could not start the worker', error);
   }
-  registerIpcHandlers(entryUrl, db, worker);
+  // Validated once. A bad template is logged and listed as unavailable; it never stops startup.
+  const templates = loadBundledTemplateCatalog();
+  console.info(
+    `[templates] ${String(templates.available.length)} available, ${String(templates.unavailable.length)} unavailable`,
+  );
+  registerIpcHandlers(entryUrl, db, worker, templates);
   createMainWindow();
 }
 

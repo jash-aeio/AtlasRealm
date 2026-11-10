@@ -3,6 +3,7 @@
 import type { LaunchInfoOutput } from './app-launch-info';
 import type { PingInput, PingOutput } from './app-ping';
 import type { IpcResult } from './ipc-result';
+import type { TemplateListOutput } from './project-template';
 import type { WorkerCheckInput, WorkerCheckOutput, WorkerStatusOutput } from './runtime-worker';
 
 export interface AtlasApi {
@@ -14,5 +15,8 @@ export interface AtlasApi {
   readonly runtime: {
     readonly workerStatus: () => Promise<IpcResult<WorkerStatusOutput>>;
     readonly workerCheck: (input?: WorkerCheckInput) => Promise<IpcResult<WorkerCheckOutput>>;
+  };
+  readonly template: {
+    readonly list: () => Promise<IpcResult<TemplateListOutput>>;
   };
 }

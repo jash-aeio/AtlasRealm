@@ -70,12 +70,25 @@ test('preload exposes only the explicit API', async () => {
     top: Object.keys(window.atlas),
     app: Object.keys(window.atlas.app),
     runtime: Object.keys(window.atlas.runtime),
+    template: Object.keys(window.atlas.template),
   }));
   expect(shape).toEqual({
-    top: ['app', 'runtime'],
+    top: ['app', 'runtime', 'template'],
     app: ['ping', 'launchInfo'],
     runtime: ['workerStatus', 'workerCheck'],
+    template: ['list'],
   });
+});
+
+test('template.list returns the bundled templates from the built main process', async () => {
+  const result = await page.evaluate(() => window.atlas.template.list());
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(
+    result.data.templates.map((t) =>
+      t.status === 'available' ? `${t.id}@${t.version}` : t.reason,
+    ),
+  ).toEqual(['builtin.content-campaign@1.0.0', 'builtin.generic@1.0.0']);
 });
 
 test('app.ping round-trips through the main process', async () => {

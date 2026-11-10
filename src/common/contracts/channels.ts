@@ -4,6 +4,7 @@ export const Channels = {
   appLaunchInfo: 'app.launchInfo',
   runtimeWorkerStatus: 'runtime.workerStatus',
   runtimeWorkerCheck: 'runtime.workerCheck',
+  templateList: 'template.list',
 } as const;
 
 export type Channel = (typeof Channels)[keyof typeof Channels];
