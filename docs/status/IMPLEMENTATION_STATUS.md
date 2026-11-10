@@ -2,10 +2,12 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-10 · **Branch:** feat/11-placeholder-art (PR #26 for #11; worktree `AtlasRealm-m0-8`)
+**Last updated:** 2026-11-10 · **Branch:** chore/release-v0.1.0-m0 (M0 release PR)
 
 ## Current milestone
-**M0 — Foundation and risk spikes** (🔨 in progress; M0-1, M0-2, M0-3, M0-4, M0-5, M0-6, M0-7, M0-9 done; M0-8 in review)
+**M1 — Profiles, worlds, and project persistence** (📋 not planned yet; run `/plan-milestone M1`). Carried over: #20 (M0-10, Chromium switch block).
+
+**M0 — Foundation and risk spikes: ✅ closed 2026-11-10, tag `v0.1.0-m0`.** Evidence: unit/integration 193/193, E2E 35/35, packaged E2E 9/9 on main @ 2fbf944; CI green. See `docs/sessions/2026-11-10-m0-close.md`.
 
 ## Implemented and demonstrated
 - Repository and process setup (2026-11-06): spec docs, Claude Code config, GitHub workflow. See `docs/sessions/2026-11-06-project-setup.md`.
@@ -37,7 +39,7 @@
   - IPC trusts only the `app://atlas` origin in builds (shared `isAppOrigin`, which also rejects `user:pw@`). The router refuses to build a check for a `file:` entry. `pnpm dev` still uses the localhost dev server.
   - Rule written in `app-protocol.ts`: only build output may be served under `app://atlas`, because IPC trusts that whole origin.
 
-- **M0-7 Windows packaging (#10, merged):** `pnpm package` builds `release/AtlasRealm-Setup-0.0.0.exe` (NSIS) and `release/win-unpacked/`.
+- **M0-7 Windows packaging (#10, merged):** `pnpm package` builds `release/AtlasRealm-Setup-<version>.exe` (NSIS) and `release/win-unpacked/`.
   - electron-builder 26.18.0 (`electron-builder.yml`, ADR-0009). Only `out/**` and `package.json` go into `app.asar`, with no `node_modules`. Main bundles zod, and all packages are devDependencies. The renderer is minified (567 → 220 kB).
   - Fuses: RunAsNode, `NODE_OPTIONS` and `--inspect` are off. `file:` extra privileges are off. Embedded asar integrity and OnlyLoadAppFromAsar are on.
   - `file:` is blocked for every request in the default session (`blockFileProtocol`). The `app://` handler bypasses the block for its own files.
@@ -80,7 +82,7 @@
     - `runtime.workerStatus` (no payload)
     - `runtime.workerCheck` (optional `cancelAfterMs` 10–5000, default 100): echo, then a slow count cancelled in flight, then an echo that reads how many requests are still active.
 
-- **M0-8 art contract and placeholders (#11, in review):** ADR-0013 fixes the art values (64 × 32 tiles; 2×2/3×3/4×4 footprints; ground pivot on the footprint's south corner; 16-swatch "warm storybook village" palette). ART_BIBLE §34.3.1 lists them.
+- **M0-8 art contract and placeholders (#11, merged):** ADR-0013 fixes the art values (64 × 32 tiles; 2×2/3×3/4×4 footprints; ground pivot on the footprint's south corner; 16-swatch "warm storybook village" palette). ART_BIBLE §34.3.1 lists them.
   - `resources/assets/asset-manifest.json` (schema v1) is validated by `src/common/assets/asset-manifest.ts` (Zod). Fields: confined relative `.png` path, size, pivot, footprint, optional animation strip, sha256, `placeholder` flag, provenance. A footprint hanging outside its frame is refused.
   - Four **placeholders** in `resources/assets/placeholders/` (ground tile, 2×2 building, selection marker, invalid marker), drawn by `scripts/generate-placeholder-art.ts` (`pnpm art:placeholders [--check]`). PNGs are encoded with `node:zlib`, so there's no new dependency and the bytes are the same every run.
   - World: only the **selection highlight** is drawn from a PNG. It's loaded with a plain `<img>` (not Pixi `Assets`), sampled nearest-neighbour and placed by its manifest pivot. Ground, entity markers and hover are still drawn shapes, now in palette colours. The ground tile, building and invalid marker aren't drawn anywhere yet.
@@ -217,7 +219,7 @@
 - Imported asset packs (later) need main-process path confinement (realpath, no symlinks) and digest checks on the bytes read. The manifest schema only checks path text.
 - Zod in the renderer runs `jitless` (no generated parsers). Fine at today's sizes; measure before parsing large data there.
 - `node:sqlite` is a release candidate API (ADR-0010). It works in the packaged build (M0-7 E2E).
-- **Release gate (#20):** the packaged app still accepts Chromium switches such as `--remote-debugging-port`, `--no-sandbox` and `--disable-web-security`. Any program running as the same user could drive the trusted page. Low impact while only `ping`/`launchInfo` exist. It must be fixed before any IPC command touches files, secrets or providers.
+- **Release gate (#20, moved to M1):** the packaged app still accepts Chromium switches such as `--remote-debugging-port`, `--no-sandbox` and `--disable-web-security`. Any program running as the same user could drive the trusted page. Low impact while only `ping`/`launchInfo` exist. It must be fixed before any IPC command touches files, secrets or providers.
 - Unsigned build: SmartScreen warns, and asar integrity only stops corruption and casual tampering. Without a signature, a local attacker can patch the hash in the `.exe` too. Code signing is a release decision (costs money).
 - Electron's default icon is still a placeholder (not in M0-8's acceptance criteria; follow-up). The `app-update.yml` that electron-builder generates is unused (no updater).
 - The `file:` block covers the default session only. Any future `session.fromPartition` needs its own block (rule in `app-protocol.ts`).
@@ -244,6 +246,6 @@
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- After the #11 PR is merged, every M0 task except **M0-10 (#20, block Chromium switches)** is done. #20 is a release gate before M3, so decide whether to do it now or move it out of M0, then close M0 with `/close-milestone`.
+- Run `/plan-milestone M1` to break M1 into issues. Put **#20 (block Chromium switches)** early in M1: it's a release gate before M3's file, secret and provider commands.
   - Possible follow-ups: an app icon; removing `data:` from CSP `img-src` (needs your decision); the empty resource-timing list in the packaged test.
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.

@@ -1,6 +1,6 @@
 {
   "name": "atlas-realm",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Local-first Windows desktop app where projects are buildings in a fantasy isometric world.",
   "author": "jash-aeio",
   "private": true,
