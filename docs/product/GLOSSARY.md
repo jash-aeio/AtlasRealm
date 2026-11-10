@@ -97,3 +97,8 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Nearest-neighbour sampling** | Scaling an image by copying the closest pixel instead of blending, so pixel art stays crisp | `grid-scene.ts` |
 | **Placeholder art** | Simple stand-in images, clearly flagged, used until approved art exists | `resources/assets/placeholders/` |
 | **JIT (in Zod)** | "Just-in-time": Zod 4 can generate parser code at runtime with `new Function`. Our CSP forbids that, so the renderer sets `jitless` | `src/renderer/app/zod-config.ts` |
+| **Optimistic concurrency (expected revision)** | Every save says which `revision` it last read. If the row has moved on, the save changes nothing and fails with `revision_conflict` instead of overwriting someone else's change | `repository-support.ts` (`guardedUpdate`), lesson 012 |
+| **Lost update** | Two edits start from the same old version, and the later save silently wipes out the earlier one. Optimistic concurrency prevents it | lesson 012 |
+| **Soft delete** | Marking a row as removed (status + timestamp) instead of running `DELETE`, so it can be restored. Our archive and trash work this way | `project-repository.ts`, ADR-0016 |
+| **STRICT table** | A SQLite table that refuses values of the wrong type (e.g. text in an INTEGER column) instead of quietly storing them | `src/main/storage/migrations/` |
+| **CHECK constraint** | A rule stored in the table itself. SQLite refuses any row that breaks it, even from code that skips the repositories | migration 2 |
