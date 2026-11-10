@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdtempSync,
   openSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeSync,
@@ -174,6 +175,34 @@ test('loads the UI and its bundled assets only from app://atlas (works offline)'
     expect(loaded.bodyMargin).toBe('0px');
     // React ran: the heading exists and the IPC bridge answered.
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Atlas Realm');
+  } finally {
+    await quit(running);
+  }
+});
+
+test('bundled placeholder art ships in app.asar and loads offline from app://atlas (M0-8)', async () => {
+  // The packaged app records no resource-timing entries for app:// loads, so instead of
+  // reading performance entries we decode the built file by name. Its hashed name comes from
+  // out/renderer, the build that `pnpm package` just wrapped.
+  const built = readdirSync(resolve('out', 'renderer', 'assets')).filter((name) =>
+    /^selection-[\w-]+\.png$/.test(name),
+  );
+  expect(built).toHaveLength(1);
+  const running = await launchPackaged();
+  try {
+    const { page } = running;
+    // The world decodes its art before it reports ready; a missing file would leave it failed.
+    await expect(page.getByTestId('world')).toHaveAttribute('data-state', 'ready');
+    const size = await page.evaluate(
+      async (url) => {
+        const image = new Image();
+        image.src = url;
+        await image.decode();
+        return { width: image.naturalWidth, height: image.naturalHeight };
+      },
+      `app://atlas/assets/${String(built[0])}`,
+    );
+    expect(size).toEqual({ width: 64, height: 32 });
   } finally {
     await quit(running);
   }

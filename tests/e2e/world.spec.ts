@@ -141,6 +141,30 @@ test.describe('world view with graphics available', () => {
     expect(launched.consoleLines.filter((line) => line.startsWith('error'))).toEqual([]);
   });
 
+  test('loads the selection placeholder sprite as a real PNG from app://atlas (M0-8)', async () => {
+    const { page } = launched;
+    await expect(page.getByTestId('world')).toHaveAttribute('data-state', 'ready');
+    // The scene loads its art before it reports ready, so the request has already happened.
+    const images = await page.evaluate(() =>
+      performance
+        .getEntriesByType('resource')
+        .filter((entry) => (entry as PerformanceResourceTiming).initiatorType === 'img')
+        .map((entry) => entry.name),
+    );
+    // A real file (inlining is off), not a data: URI, served by our app:// handler.
+    expect(images).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^app:\/\/atlas\/assets\/selection-[\w-]+\.png$/),
+      ]),
+    );
+    expect(images.filter((url) => !url.startsWith('app://atlas/'))).toEqual([]);
+    // Pixi's Assets loader is not used, so no blob: workers were needed (our CSP blocks them).
+    const violations = await page.evaluate(
+      () => (window as unknown as { __cspViolations: string[] }).__cspViolations,
+    );
+    expect(violations).toEqual([]);
+  });
+
   test('draws real pixels: ground in the centre, background beyond the map edge', async () => {
     const { app, page } = launched;
     // At 0.5× the map covers the whole view; zoom out to ~0.26× so the corners are off-map.
