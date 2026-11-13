@@ -44,3 +44,10 @@ Routine choices (not asked):
 
 ## Open questions
 - None blocking. The packaged smoke test (`e2e-packaged`) wasn't re-run. The same build-time import is covered by the dev-build E2E.
+
+## 2026-11-13: re-verification (`/start-task 32`, second session)
+- `/start-task 32` found this branch already complete in its worktree. Nothing was re-implemented. The branch is still based on `main` @ dd1bd53, so no rebase was needed.
+- `pnpm typecheck`, `pnpm lint`, `pnpm format:check`: clean.
+- `pnpm test`: **flaky under load.** 3 runs gave 2 failures, then 1, then 0, out of 262 tests. The failures were always in M0 tests (`ipc-router` "huge binary payload", `worker-messaging` cancellation timing), never in template tests. Re-run on their own, those two files passed 41/41. A peer session was shipping #20 on the same machine at the time. Worth a follow-up issue if it happens again on an idle machine or in CI.
+- `pnpm test:e2e`: 36/36 passed, including `template.list` from the built main process.
+- Process slip: this session briefly switched the shared checkout to `main` while a peer session was shipping #20 there. It switched back at once, and the peer's uncommitted files (CHANGELOG entry, lesson 012) carried over unchanged. All further work stayed in this worktree.
