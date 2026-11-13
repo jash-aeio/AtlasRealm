@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-11 · **Branch:** docs/plan-m1 (M1 planning PR)
+**Last updated:** 2026-11-13 · **Branch:** feat/30-schema-v2-repositories (M1-3 PR)
 
 ## Current milestone
-**M1 — Profiles, worlds, and project persistence** (⏳ planned 2026-11-11: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). Nothing implemented yet.
+**M1 — Profiles, worlds, and project persistence** (⏳ in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-3 (#30, schema v2 + repositories) is in review. #20 and #32 are being worked on in parallel sessions.
 
 **M0 — Foundation and risk spikes: ✅ closed 2026-11-10, tag `v0.1.0-m0`.** Evidence: unit/integration 193/193, E2E 35/35, packaged E2E 9/9 on main @ 2fbf944; CI green. See `docs/sessions/2026-11-10-m0-close.md`.
 
@@ -89,7 +89,20 @@
   - Build: `assetsInlineLimit: 0`, so all four PNGs ship as real files under `app://atlas/assets/`.
   - The renderer sets Zod `jitless` (`src/renderer/app/zod-config.ts`). Without it, Zod 4's `new Function` probe causes a `script-src eval` CSP report.
 
+- **M1-3 schema v2 + repositories (#30, in review):** the database now has its first product tables. No UI or IPC uses them yet (M1-6/M1-7 add the commands).
+  - Migration 2 adds `profile_settings`, `worlds` and `projects`. All three are STRICT and have `created_at`, `updated_at` (UTC) and `revision`.
+  - CHECK constraints: names trimmed and 1–80 characters, slug IDs, semver template versions, `#rrggbb` avatar colours, preferences a JSON object of at most 16 KiB, profile ID `default` or a UUID (ADR-0014).
+  - Project status is `active`, `archived` or `trashed`. A table CHECK keeps it consistent with `archived_at`/`trashed_at`.
+  - `projects.world_id` is a foreign key (`ON DELETE RESTRICT`). Index `projects_by_world_status`, which the query planner uses.
+  - `ProfileSettingsRepository`, `WorldRepository` and `ProjectRepository` are the only code that touches these tables. Every update takes an expected revision (optimistic concurrency, lesson 012).
+    - A stale revision fails with `revision_conflict` (plus the current revision) and changes nothing.
+    - Other stable codes: `not_found`, `already_exists`, `invalid_input`, `invalid_transition`.
+    - Each update is one `UPDATE … RETURNING` statement, and repositories open no transactions, so callers can group writes (M1-4).
+  - Rename keeps the project ID. Archive and trash are status + timestamp changes, and there is no delete method. Restoring from trash returns a project to archived if it was archived, else active (ADR-0016). A trashed project can't be edited.
+  - Input is validated before SQL: code-point lengths that match SQLite; control, invisible spoofing and unpaired-surrogate characters refused; canonical IANA timezones (bare offsets like `+02:00` refused); preferences limited to plain JSON data, 16 KiB and 32 levels.
+
 ## Changed components
+- M1-3: `src/main/storage/migrations/index.ts`, `src/main/storage/repositories/{repository-support,profile-settings-repository,world-repository,project-repository}.ts` (new), `src/main/storage/database.ts` (type re-export); `tests/integration/storage-{migration-v2,project-repository,world-repository,profile-settings-repository}.test.ts` (new), `tests/fixtures/db/v1-app.sql` (new), `tests/integration/app-launch-info.test.ts`, `tests/e2e/storage.spec.ts`, `tests/e2e-packaged/packaged.spec.ts` (schema v2); docs: ADR-0016, lesson 012, glossary
 - M0-8: `src/common/assets/` (new), `scripts/generate-placeholder-art.ts` (new), `resources/assets/` (new), `src/renderer/world/{world-assets.ts (new),grid-scene.ts}`, `src/renderer/app/{zod-config.ts (new),main.tsx}`, `electron.vite.config.ts`, `package.json` (script); `tests/domain/asset-manifest.test.ts` (new), `tests/e2e/world.spec.ts`, `tests/e2e-packaged/packaged.spec.ts`; docs: ADR-0013, ART_BIBLE, ASSET_PROVENANCE, glossary, lesson 011; `.claude/hooks/guard-bash.mjs` (branch checked where the command runs, for worktrees)
 - M0-6: `src/worker/` (new), `src/main/runtime-bridge/` (new), `src/common/contracts/{worker-protocol,json-size,runtime-worker,channels,atlas-api}.ts`, `src/main/ipc/{router.ts,register.ts,commands/runtime-worker.ts}`, `src/main/index.ts`, `src/preload/index.ts`, `src/renderer/app/{App.tsx,WorkerPanel.tsx}`, `tsconfig.node.json` (includes `src/worker`); `tests/integration/{worker-messaging,runtime-worker-contract}.test.ts`, `tests/e2e/worker.spec.ts` (new), `tests/e2e/shell.spec.ts` (API shape), `tests/e2e-packaged/packaged.spec.ts`
 - #24 (chore): `.github/dependabot.yml` ignores major-version bumps of `typescript` and `@types/node`. They are upgraded by hand (see Known limitations).
@@ -104,6 +117,23 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- M1-3, 2026-11-11/13, local Windows 11: typecheck, lint, format:check pass. Unit/integration 273/273 (80 new across 4 files). E2E 35/35. Packaged E2E 9/9 (fresh `pnpm package`; the installed app shows "schema v2" across restarts). All re-run on 2026-11-13 after the review fixes.
+  - Migration: the frozen v1 fixture (`tests/fixtures/db/v1-app.sql`) upgrades to v2, keeps `app_meta` byte for byte, and leaves a v1 backup. A test keeps the fixture's table shapes equal to what migration 1 produces.
+  - Raw-SQL constraint tests (no repository): FK refuses an unknown world and deleting a world with projects. CHECKs refuse padded, empty or 81-character names, a 2001-character goal, unknown statuses, status/timestamp mismatches, unsafe template IDs, a non-UUID project ID, and bad profile settings. An 80-character non-ASCII name fits.
+  - Repositories: a stale revision gives `revision_conflict` with the current revision for rename, goal, archive and trash, and the row is unchanged. Rename keeps the ID. Archive/trash round-trips never change the row count. Archived-then-trashed restores to archived. A rollback in the caller's transaction undoes a repository update. Data survives closing and reopening the file.
+  - Found by tests and fixed: `Intl` accepts `+02:00` as a time zone, so the check now also requires an IANA-shaped name.
+  - **Flaky test that exists on main too** (not caused by this branch): `ipc-router.test.ts` "rejects a huge binary payload by shape" fails about 1 run in 3. Zod's lazy JIT compile calls `JSON.stringify` the first time it sees the schema, and the test's spy catches it. The same failure happens in a clean `origin/main` worktree. Follow-up suggested.
+  - Not checked: `pnpm dev` by hand (nothing visible changed besides "schema v2").
+  - invariant-reviewer: no violations. Every acceptance criterion confirmed with file and test references.
+  - security-auditor: approve, with no Critical/High/Medium findings and no SQL injection path. All 7 Low findings were fixed before the PR, with tests:
+    - L1/L2: preferences must be plain JSON data, at most 32 levels deep. Circular values, BigInt, Date, Map and NaN are refused instead of throwing raw errors or being silently changed.
+    - L3: names and goals refuse bidi overrides/isolates, zero-width spaces and marks ("Trojan Source" spoofing). Names also refuse line/paragraph separators. Zero-width joiners stay allowed (emoji, Persian).
+    - L4: unpaired surrogates are refused (SQLite would have replaced them with U+FFFD).
+    - L5: timezones are stored in canonical spelling (`europe/amsterdam` → `Europe/Amsterdam`).
+    - L6: migration 2 CHECKs tightened while it's still unreleased: exact UUID shape, no NUL in text columns, IANA-shaped timezone.
+    - L7: settings `create` is one `INSERT … ON CONFLICT DO NOTHING RETURNING`, so a race gives `already_exists`, not a raw UNIQUE error.
+    - Mutation check: disabling the spoofing check or the plain-data check fails 4 tests.
+  - Forward notes for M1-6/M1-7, recorded on #33 and #34: Zod-validate runtime types before calling a repository (F1), give preferences a strict schema (F2), map `RepositoryError.code` to IPC errors and never forward raw messages (F3), keep `guardedUpdate` private to the repositories folder (F4), decide whether projects may be created or renamed in an archived world (F5).
 - M0-8, 2026-11-10, local Windows 11: typecheck, lint, format:check pass. Unit/integration 168/168 (30 new). E2E 30/30 (1 new). Packaged E2E 8/8 (1 new; run before the schema bounds were added, and those don't touch packaging). `pnpm art:placeholders --check` is clean.
   - After merging main (with M0-6): unit/integration 193/193, E2E 35/35, packaged E2E 9/9 (fresh `pnpm package`). typecheck, lint and format:check pass.
   - Hook fix: `.claude/hooks/guard-bash.mjs` now reads the branch where each sub-command runs (`cd <dir> &&`, `git -C <dir>`). It falls back to the session folder when that folder isn't a repository. Checked with 14 allow/block cases: commit or push from the worktree allowed; commit on main via cd or `-C` blocked; push to main, force push and `--no-verify` blocked.
@@ -233,6 +263,11 @@
 
 ## Data/schema changes
 - Schema v1 (migration 0001 `create_app_meta`): `app_meta(key PK, value, created_at, updated_at, revision)` STRICT, plus the runner's `schema_migrations(version PK, name, applied_at)`.
+- Schema v2 (migration 0002 `create_profile_settings_worlds_projects`, M1-3):
+  - `profile_settings(profile_id PK, display_name, avatar_preset?, avatar_colour?, timezone, preferences_json, created_at, updated_at, revision)`
+  - `worlds(id PK, name, theme_id, grid_width, grid_height, archived_at?, created_at, updated_at, revision)`
+  - `projects(id PK, world_id FK RESTRICT, name, goal, template_id, template_version, status, archived_at?, trashed_at?, created_at, updated_at, revision)` + index `projects_by_world_status(world_id, status)`
+  - All STRICT, with CHECKs. An existing v1 database is backed up before the upgrade. No rows are ever deleted by the app.
 
 ## Decisions
 - ADR-0001 … ADR-0006 (stack defaults and approved Nov 6 product decisions)
@@ -244,9 +279,11 @@
 - [ADR-0012](../adr/0012-electron-utility-process-worker.md): Electron `utilityProcess` for the trusted worker
 - [ADR-0013](../adr/0013-art-technical-contract.md): art technical contract (tile, footprints, south-corner pivot, palette, asset manifest)
 - [ADR-0014](../adr/0014-local-profiles-storage-and-switching.md): local profiles: adopt the M0 `default` folder; switch in-process, then reload the window
+- [ADR-0016](../adr/0016-project-lifecycle-and-trash-restore.md): project lifecycle `active`/`archived`/`trashed`; restoring from trash returns to the prior state (ADR-0015 is taken by #20)
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- Start M1 with `/start-task 20` (M1-1, Chromium switch guard; it goes first because M1-2 also edits `src/main/index.ts`). #30 (schema v2) and #32 (templates) are also Ready and parallel-safe.
+- After #30 merges: `/start-task 31` (M1-4, graph entity IDs; migration 3 builds on schema v2). Finish #20 (M1-1) and #32 (M1-5), which are in progress in parallel sessions; then M1-2 (#29).
+  - Suggested follow-up: fix the flaky `ipc-router.test.ts` "huge binary payload" test (warm up the schema before spying, or spy only on the router's own serialization).
   - Possible follow-ups: an app icon; removing `data:` from CSP `img-src` (needs your decision); the empty resource-timing list in the packaged test.
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.

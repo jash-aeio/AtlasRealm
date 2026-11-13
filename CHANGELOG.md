@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ## [Unreleased]
 
+### Added
+- Project storage (M1-3, #30): the local database now has tables for profile settings, worlds and projects (schema v2), with rules the database enforces itself: tidy, length-limited names, a fixed list of project statuses, and every project belonging to exactly one world. A project keeps the same ID when renamed. Archiving and trashing never delete anything, and restoring from the trash puts a project back where it was (ADR-0016). Every change checks that nobody else changed the record in the meantime, so edits can't silently overwrite each other. Existing databases are backed up and upgraded automatically. Nothing in the UI uses this yet; project commands and screens come next in M1.
+
 ## [0.1.0-m0] - 2026-11-10 — M0: Foundation and risk spikes
 
 ### Added
