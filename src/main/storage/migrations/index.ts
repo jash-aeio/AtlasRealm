@@ -115,4 +115,75 @@ const m0002ProfileWorldsProjects: Migration = {
   `,
 };
 
-export const MIGRATIONS: readonly Migration[] = [m0001AppMeta, m0002ProfileWorldsProjects];
+// Graph entities (GRAPH_MODEL §30.5): the stable node IDs the Realm Atlas and imports build on.
+// An entity has its own UUID, never a name or a position; layout is cosmetic and gets its own
+// table later (graph_view_states). Entities are tombstoned, not deleted.
+// Adding kinds (file, note, ...) later means rebuilding this table, as SQLite can't alter a CHECK.
+const m0003GraphEntities: Migration = {
+  version: 3,
+  name: 'create_graph_entities',
+  up: `
+    -- Lets graph_entities check that a project entity's world is the project's own world.
+    CREATE UNIQUE INDEX projects_id_world ON projects (id, world_id);
+
+    CREATE TABLE graph_entities (
+      id             TEXT    PRIMARY KEY CHECK (
+                       id GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
+      kind           TEXT    NOT NULL CHECK (kind IN ('world', 'project')),
+      -- Scope: every entity lives in a world; project-level entities also name their project.
+      world_id       TEXT    NOT NULL REFERENCES worlds (id) ON DELETE RESTRICT,
+      project_id     TEXT,
+      -- app_owned: the app created it. external: it mirrors something outside the app (an
+      -- imported file, an Obsidian note) found at source_locator.
+      ownership      TEXT    NOT NULL CHECK (ownership IN ('app_owned', 'external')),
+      source_locator TEXT    CHECK (
+                       source_locator IS NULL OR
+                       (length(source_locator) BETWEEN 1 AND 1024 AND
+                        instr(source_locator, char(0)) = 0)),
+      tombstoned_at  TEXT,  -- UTC ISO-8601 instant; NULL while the entity is live
+      created_at     TEXT    NOT NULL,
+      updated_at     TEXT    NOT NULL,
+      revision       INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+      FOREIGN KEY (project_id, world_id) REFERENCES projects (id, world_id) ON DELETE RESTRICT,
+      CHECK (
+        (kind = 'world'   AND project_id IS NULL) OR
+        (kind = 'project' AND project_id IS NOT NULL)
+      ),
+      CHECK (ownership = 'app_owned' OR source_locator IS NOT NULL)
+    ) STRICT;
+
+    -- One entity per world and per project, which is also how they are looked up.
+    CREATE UNIQUE INDEX graph_entities_one_per_world
+      ON graph_entities (world_id) WHERE kind = 'world';
+    CREATE UNIQUE INDEX graph_entities_one_per_project
+      ON graph_entities (project_id) WHERE kind = 'project';
+
+    -- Backfill worlds and projects created under v2. randomblob() builds a version 4 UUID:
+    -- the third group starts with 4 and the fourth with 8, 9, a or b. Trashed projects start
+    -- tombstoned, from the moment they were trashed.
+    INSERT INTO graph_entities (id, kind, world_id, project_id, ownership, created_at, updated_at)
+    SELECT
+      lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' ||
+        substr(lower(hex(randomblob(2))), 2) || '-' ||
+        substr('89ab', 1 + (random() & 3), 1) || substr(lower(hex(randomblob(2))), 2) || '-' ||
+        lower(hex(randomblob(6))),
+      'world', id, NULL, 'app_owned', created_at, created_at
+    FROM worlds;
+
+    INSERT INTO graph_entities (id, kind, world_id, project_id, ownership, tombstoned_at,
+                                created_at, updated_at)
+    SELECT
+      lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' ||
+        substr(lower(hex(randomblob(2))), 2) || '-' ||
+        substr('89ab', 1 + (random() & 3), 1) || substr(lower(hex(randomblob(2))), 2) || '-' ||
+        lower(hex(randomblob(6))),
+      'project', world_id, id, 'app_owned', trashed_at, created_at, coalesce(trashed_at, created_at)
+    FROM projects;
+  `,
+};
+
+export const MIGRATIONS: readonly Migration[] = [
+  m0001AppMeta,
+  m0002ProfileWorldsProjects,
+  m0003GraphEntities,
+];

@@ -5,9 +5,12 @@
 // project and everything it owns stay recoverable (PRD §5.6; permanent delete is not in M1).
 // Lifecycle:   active ⇄ archived,   active|archived → trashed → back to where it was (ADR-0015).
 // Every change takes the revision the caller last read; see guardedUpdate.
+// Graph entity (M1-4): created with the project, tombstoned on trash and cleared on restore,
+// each in the same transaction as the project change.
 import { randomUUID } from 'node:crypto';
 
-import type { Database } from '../database';
+import { type Database, withSavepoint } from '../database';
+import { GraphEntityRepository } from './graph-entity-repository';
 import {
   assertSlug,
   assertVersion,
@@ -78,11 +81,15 @@ const NOT_TRASHED = {
 } as const;
 
 export class ProjectRepository {
+  private readonly graph: GraphEntityRepository;
+
   constructor(
     private readonly db: Database,
     private readonly now: () => Date = () => new Date(),
     private readonly newId: () => string = randomUUID,
-  ) {}
+  ) {
+    this.graph = new GraphEntityRepository(db, newId);
+  }
 
   /** Creates an active project in an existing world. */
   create(input: NewProject): Project {
@@ -96,16 +103,21 @@ export class ProjectRepository {
     }
 
     const at = this.now().toISOString();
-    const row = this.db
-      .prepare(
-        `INSERT INTO projects (id, world_id, name, goal, template_id, template_version,
-                               created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         RETURNING *`,
-      )
-      .get(this.newId(), input.worldId, name, goal, templateId, templateVersion, at, at);
-    if (row === undefined) throw new Error('INSERT … RETURNING returned no row.');
-    return toProject(row);
+    // The project and its graph entity are saved together or not at all.
+    return withSavepoint(this.db, (db) => {
+      const row = db
+        .prepare(
+          `INSERT INTO projects (id, world_id, name, goal, template_id, template_version,
+                                 created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           RETURNING *`,
+        )
+        .get(this.newId(), input.worldId, name, goal, templateId, templateVersion, at, at);
+      if (row === undefined) throw new Error('INSERT … RETURNING returned no row.');
+      const project = toProject(row);
+      this.graph.createForProject(project.id, project.worldId, at);
+      return project;
+    });
   }
 
   get(id: string): Project | undefined {
@@ -158,22 +170,39 @@ export class ProjectRepository {
     });
   }
 
-  /** Moves a project to the trash. `archived_at` is kept so a restore knows where to return. */
+  /**
+   * Moves a project to the trash and tombstones its graph entity. `archived_at` is kept so a
+   * restore knows where to return. Nothing is deleted.
+   */
   trash(id: string, expectedRevision: number): Project {
-    return this.update(id, expectedRevision, "status = 'trashed', trashed_at = :updated_at", {
-      guard: { sql: "status <> 'trashed'", refusal: 'The project is already in the trash.' },
+    return withSavepoint(this.db, () => {
+      const project = this.update(
+        id,
+        expectedRevision,
+        "status = 'trashed', trashed_at = :updated_at",
+        { guard: { sql: "status <> 'trashed'", refusal: 'The project is already in the trash.' } },
+      );
+      this.graph.tombstoneProject(project.id, project.updatedAt);
+      return project;
     });
   }
 
-  /** Takes a project out of the trash, back to archived if it was archived, else active. */
+  /**
+   * Takes a project out of the trash, back to archived if it was archived, else active, and
+   * clears its graph entity's tombstone.
+   */
   restoreFromTrash(id: string, expectedRevision: number): Project {
-    return this.update(
-      id,
-      expectedRevision,
-      `status = CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,
-       trashed_at = NULL`,
-      { guard: { sql: "status = 'trashed'", refusal: 'The project is not in the trash.' } },
-    );
+    return withSavepoint(this.db, () => {
+      const project = this.update(
+        id,
+        expectedRevision,
+        `status = CASE WHEN archived_at IS NULL THEN 'active' ELSE 'archived' END,
+         trashed_at = NULL`,
+        { guard: { sql: "status = 'trashed'", refusal: 'The project is not in the trash.' } },
+      );
+      this.graph.clearProjectTombstone(project.id, project.updatedAt);
+      return project;
+    });
   }
 
   private update(

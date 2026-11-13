@@ -67,7 +67,7 @@ describe('migration v1 → v2', () => {
     try {
       const appMetaBefore = db.prepare('SELECT * FROM app_meta ORDER BY key').all();
 
-      const report = await migrate(db, MIGRATIONS, {
+      const report = await migrate(db, MIGRATIONS.slice(0, 2), {
         backupDir: join(dir, 'backups'),
         now: () => NOW,
       });

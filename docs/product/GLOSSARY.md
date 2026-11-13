@@ -115,3 +115,8 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Branded type** | A TypeScript type like `string & { brand }`: at runtime it is a plain string, but the compiler only accepts values that came through a validator, so an unchecked string can't be passed by accident | `ProfileId` in `profile-id.ts` |
 | **TOCTOU (time of check to time of use)** | A bug where code checks something ("the file exists") and then acts on it, but the world changes in between. Safer: make the action itself refuse the wrong case | `openAppDatabase({ requireExisting })` |
 | **Fail closed** | When something is wrong or unclear, stop and report instead of carrying on with a guess. The opposite, "fail open", keeps going and can hide data or weaken security | `ProfilesIndexMissingError` |
+| **Graph entity** | The stable node ID a world or project has in the Realm Atlas graph. It has its own UUID, separate from the name and from any position on screen | `graph-entity-repository.ts`, ADR-0018 |
+| **Tombstone** | A mark saying "this is gone" (a timestamp) on a row that is kept instead of deleted. A trashed project's graph entity is tombstoned, and restoring clears it | `graph_entities.tombstoned_at` |
+| **Savepoint** | A named checkpoint inside a transaction. Rolling back to it undoes only the writes made since, and the outer transaction carries on. It lets all-or-nothing steps nest | `withSavepoint` (`database.ts`), lesson 016 |
+| **Backfill** | Filling a new table or column for data that already existed before the change, as part of the migration | migration 3 |
+| **Composite foreign key** | A foreign key made of two columns together, e.g. `(project_id, world_id)` must match a real project *in that world* | migration 3 |

@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-13 · **Branch:** feat/29-profile-storage (M1-2 PR, rebased on main @ cb0034f)
+**Last updated:** 2026-11-13 · **Branch:** feat/31-graph-entity-ids (M1-4 PR, main @ 7d3abbc merged in after #29)
 
 ## Current milestone
-**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20), M1-3 (#30) and M1-5 (#32) are merged. M1-2 (#29, profile storage) is in review.
+**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20), M1-2 (#29), M1-3 (#30) and M1-5 (#32) are merged. M1-4 (#31, graph entities) is in review.
 
 **M0 — Foundation and risk spikes: ✅ closed 2026-11-10, tag `v0.1.0-m0`.** Evidence: unit/integration 193/193, E2E 35/35, packaged E2E 9/9 on main @ 2fbf944; CI green. See `docs/sessions/2026-11-10-m0-close.md`.
 
@@ -103,7 +103,7 @@
   - `ProfileSettingsRepository`, `WorldRepository` and `ProjectRepository` are the only code that touches these tables. Every update takes an expected revision (optimistic concurrency, lesson 012).
     - A stale revision fails with `revision_conflict` (plus the current revision) and changes nothing.
     - Other stable codes: `not_found`, `already_exists`, `invalid_input`, `invalid_transition`.
-    - Each update is one `UPDATE … RETURNING` statement, and repositories open no transactions, so callers can group writes (M1-4).
+    - Each update is one `UPDATE … RETURNING` statement. Since M1-4, the writes that touch a graph entity too run in `withSavepoint`, which callers can still wrap in their own transaction.
   - Rename keeps the project ID. Archive and trash are status + timestamp changes, and there is no delete method. Restoring from trash returns a project to archived if it was archived, else active (ADR-0016). A trashed project can't be edited.
   - Input is validated before SQL: code-point lengths that match SQLite; control, invisible spoofing and unpaired-surrogate characters refused; canonical IANA timezones (bare offsets like `+02:00` refused); preferences limited to plain JSON data, 16 KiB and 32 levels.
 
@@ -113,7 +113,7 @@
   - Loader: Vite's `import.meta.glob` bundles the JSON into the main process at build time (no runtime file paths, no packaging change). `buildTemplateCatalog` validates each file once at startup. A bad file is listed as `{ status: 'unavailable', location, reason }` (`invalid_manifest`, `location_mismatch`, `too_many_templates`), the Zod detail goes only to the main log, and startup continues. A location that is too long or has odd characters is shown as `(unreadable location)`. At most 100 templates.
   - IPC: `template.list` (no payload, output schema-checked, bounded by the 100 cap) via `window.atlas.template.list()`.
 
-- **M1-2 profile storage (#29, in review):** the app now has real local profiles on disk. There is no profile UI or command yet (M1-6, M1-8, M1-9).
+- **M1-2 profile storage (#29, merged as PR #45):** the app now has real local profiles on disk. There is no profile UI or command yet (M1-6, M1-8, M1-9).
   - `userData/profiles-index.json` (schema v1) holds only profile IDs, display names and the last-used ID. Strict Zod schema: unknown keys refused, IDs unique, list not empty, last-used must be listed, names follow the usual name rules. Read-only on load; a bad file is reported (`unreadable`, `invalid_json`, `invalid_shape`, `newer_version`) and **never** rewritten.
   - Writes are atomic: temp file (`wx`) in the same folder → fsync → rename, retried up to 5 times over ~0.5 s for Windows `EPERM`/`EBUSY`/`EACCES`. Leftover `profiles-index.json.<hex>.tmp` files are removed at startup.
   - Profile IDs: `default` (legacy, M0) or a lowercase UUID, as the branded type `ProfileId` (`src/main/storage/profiles/profile-id.ts`). `profilePaths` re-checks the ID at runtime, so no path is ever built from raw index text.
@@ -126,7 +126,15 @@
     - The DB is opened and migrated before a new index is written, so a failed first launch leaves no index.
   - `src/main/index.ts` shows a separate path-free dialog for a damaged/newer index, a missing index, missing profile data, and other DB failures, then quits. Nothing is deleted.
 
+- **M1-4 graph entity IDs (#31, branch `feat/31-graph-entity-ids`):** every world and project now has a graph entity: the stable node ID the Realm Atlas (M2) and imports will build on (GRAPH_MODEL §30.5, ADR-0018). No UI or IPC uses it yet.
+  - Migration 3 adds `graph_entities` (STRICT): its own UUID, `kind` (`world`/`project`), `world_id`, `project_id` (project entities only), `ownership` (`app_owned`/`external`), `source_locator` (nullable, required for `external`, ≤ 1024 characters), `tombstoned_at`, timestamps and `revision`. There are **no name or layout columns**.
+  - A composite foreign key `(project_id, world_id) → projects (id, world_id)` keeps a project entity in its project's own world. Partial unique indexes allow one entity per world and one per project.
+  - Upgrading a v2 database backfills entities for existing worlds and projects (UUIDs built with `randomblob`). Trashed projects start tombstoned.
+  - `WorldRepository.create` and `ProjectRepository.create` insert the record and its entity in one transaction. `ProjectRepository.trash` sets the tombstone and `restoreFromTrash` clears it, in the same transaction as the status change. Archiving doesn't tombstone. `GraphEntityRepository` has no delete method.
+  - `withSavepoint` (`database.ts`): opens a transaction, or nests in one that `withTransaction` opened through a SQLite SAVEPOINT. If SQLite cancels the whole transaction by itself (disk full, I/O error), the transaction is marked aborted: further writes throw `TransactionAbortedError` and it won't commit, so writes never autocommit half a unit. It refuses to join a transaction it didn't open.
+
 ## Changed components
+- M1-4: `src/main/storage/migrations/index.ts` (migration 3), `src/main/storage/database.ts` (`withSavepoint`, `TransactionAbortedError`, transaction tracking), `src/main/storage/repositories/graph-entity-repository.ts` (new), `src/main/storage/repositories/{world,project}-repository.ts`; `tests/integration/storage-{graph-entity-repository,migration-v3}.test.ts` (new), `tests/integration/storage-{database,migration-v2}.test.ts`, `tests/e2e/storage.spec.ts`, `tests/e2e-packaged/packaged.spec.ts` (schema v3); docs: ADR-0018, lesson 016, glossary
 - M1-2: `src/main/storage/profiles/{profile-id,profiles-index,startup}.ts` (new), `src/main/storage/app-database.ts`, `src/main/storage/repositories/profile-settings-repository.ts` (shared ID pattern), `src/main/index.ts`; `tests/integration/storage-profiles-{index,index-retry,startup}.test.ts` (new), `tests/integration/{storage-app-database,app-launch-info}.test.ts`, `tests/e2e/support/profile-data.ts` (new), `tests/e2e/storage.spec.ts`, `tests/e2e-packaged/packaged.spec.ts`; docs: ADR-0017, DATA_MODEL §9.1 note, glossary, lesson 015
 - M1-5: `resources/project-templates/` (new), `src/common/contracts/project-template.ts` (new), `src/main/templates/{catalog,bundled-templates}.ts` (new), `src/main/ipc/commands/template-list.ts` (new), `src/common/contracts/{channels,atlas-api}.ts`, `src/preload/index.ts`, `src/main/ipc/register.ts`, `src/main/index.ts`; `tests/domain/project-template{,-catalog}.test.ts` (new), `tests/integration/template-list.test.ts` (new), `tests/e2e/shell.spec.ts`; docs: glossary, lesson 014
 - M1-3: `src/main/storage/migrations/index.ts`, `src/main/storage/repositories/{repository-support,profile-settings-repository,world-repository,project-repository}.ts` (new), `src/main/storage/database.ts` (type re-export); `tests/integration/storage-{migration-v2,project-repository,world-repository,profile-settings-repository}.test.ts` (new), `tests/fixtures/db/v1-app.sql` (new), `tests/integration/app-launch-info.test.ts`, `tests/e2e/storage.spec.ts`, `tests/e2e-packaged/packaged.spec.ts` (schema v2); docs: ADR-0016, lesson 012, glossary
@@ -145,6 +153,7 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- M1-4, 2026-11-13, local Windows 11, on main @ d26825c: typecheck, lint, format:check pass. Unit/integration 427/427 (28 new across 2 new files and `storage-database.test.ts`). E2E 36/36 (the app shows "schema v3"). Packaged E2E 14/14 (fresh `pnpm package` + `package:test`; the installed app shows "schema v3" across restarts). Mutation checks: removing the transaction makes the 4 rollback tests fail; removing the aborted-transaction guards makes 3 `withSavepoint` tests fail, including a real full-disk case (`PRAGMA max_page_count`). Reviews: invariant-reviewer found no violations; security-auditor found one latent Medium issue (autocommit after SQLite cancels a transaction), which is fixed, and three Lows (two fixed, one noted under Known limitations).
 - M1-2, 2026-11-13, local Windows 11, rebased on main @ cb0034f (with #32): typecheck, lint, format:check pass. Unit/integration 451/451. E2E 36/36. Packaged E2E 14/14 on a fresh `pnpm package` + `pnpm package:test`.
   - Index: round-trip; corrupt JSON, wrong shapes, traversal IDs (`../evil`, `..\evil`, `C:\Windows`, `CON`, upper case, braces, trailing newline) all refused with the file kept byte for byte; a newer version reported as `newer_version`; no temp file left after a write or a refused write; stale temp cleanup touches only exact temp names; rename retry (simulated `EBUSY`/`EPERM`), give-up after 5 tries with the real error, no retry on `ENOSPC`.
   - Startup: adoption keeps launch #2 after an M0 launch; fresh start creates a UUID folder plus index; failed first open writes no index; last-used (not first) profile opened; missing DB and a version-0 DB refused; lost index with a UUID profile, or with M0 + UUID, stops with nothing written; an M0 folder with only `backups/` is refused; invalid folder names and DB-less folders ignored.
@@ -306,7 +315,7 @@
 - `node:sqlite` is a release candidate API (ADR-0010). It works in the packaged build (M0-7 E2E).
 - Packaged UI smoke tests run on the test-only variant, not the exact shipped bytes (one package.json field differs, ADR-0015). The shipped build gets the guard tests and the fuse readout. The switch guard is a deny-list: an unlisted dangerous switch would get through.
 - Switch-guard follow-ups from the security review (not done in #20): (1) an allowlist step over `process.argv` as a second layer. It reverses the deny-list decision, so it needs your call. (2) Decide "test build" at bundle time (Vite `define`) so the exception code isn't in the shipped bundle at all. (3) Refuse to start when `SSLKEYLOGFILE` is set, once provider keys exist (environment variables bypass `hasSwitch`). (4) No packaged negative test for a missing or malformed marker (unit tests only).
-- One unit-test run (M1-1) failed once with 1/224 and couldn't be reproduced in 4 reruns. Output lost; the test is unidentified. Watch CI for a repeat. On 2026-11-13 under heavy load (M1-5), the timing-sensitive M0 tests in `ipc-router.test.ts` (10 MB payload) and `worker-messaging.test.ts` (cancellation after 30 ms) failed intermittently. Likely candidates; a follow-up issue if CI shows it.
+- One unit-test run (M1-1) failed once with 1/224 and couldn't be reproduced in 4 reruns. Output lost; the test is unidentified. Watch CI for a repeat. On 2026-11-13 under heavy load (M1-5), the timing-sensitive M0 tests in `ipc-router.test.ts` (10 MB payload) and `worker-messaging.test.ts` (cancellation after 30 ms) failed intermittently. Likely candidates; a follow-up issue if CI shows it. On 2026-11-13 (merging main into #31), the E2E test `atlas.spec.ts` "selecting a graph node highlights the same entity in the Pixi world" failed once in a full run (a `toHaveAttribute` timeout), then passed 3/3 alone and in a full 36/36 rerun.
 - Templates (M1-5): metadata only. No `template.get` yet (summaries leave out help texts and limits), and nothing uses the templates until `project.create` (M1-7) and the create form (M1-10). User-installed templates will need a separate loader from disk with path confinement. Bundled ones are only checked at startup, so a broken bundled template shows as unavailable instead of failing the build (a JSON syntax error does fail the build).
 - Unsigned build: SmartScreen warns, and asar integrity only stops corruption and casual tampering. Without a signature, a local attacker can patch the hash in the `.exe` too. Code signing is a release decision (costs money).
 - Electron's default icon is still a placeholder (not in M0-8's acceptance criteria; follow-up). The `app-update.yml` that electron-builder generates is unused (no updater).
@@ -318,6 +327,7 @@
 - The renderer can't `fetch()` `app://` URLs (no `supportFetchAPI`); grant it only if a feature needs it. Optional CSP + `nosniff` response headers on `app://` are still not added (the CSP is a meta tag).
 - TypeScript is held at 6.0.x until typescript-eslint supports 7.x. Dependabot no longer proposes major bumps for `typescript` or `@types/node` (#24). Upgrade TypeScript by hand when typescript-eslint supports TS 7 (typescript-eslint/typescript-eslint#10940), and upgrade `@types/node` when Electron's bundled Node changes major. Dependabot PR #14 (TS 7 + @types/node 26) failed lint and was closed.
 - On this machine, `corepack enable` needs an admin terminal (Node is in `D:Node`). `corepack pnpm …` works without it.
+- Graph entities (M1-4): if an entity's tombstone ever disagrees with its project (for example after a manual edit), trash and restore of that project fail with `invalid_transition`/`not_found` and change nothing. That's safe, but there's no repair path yet; an integrity check belongs with backup/restore (M7). `source_locator` is unused until imports: before it holds external paths, store a root ID plus a relative path, re-resolve it under SECURITY rules on every use, and tighten its CHECK (security review notes in the #31 PR). The tombstone methods match on the current state, not an expected revision, because entities only change with their project.
 
 ## Data/schema changes
 - Schema v1 (migration 0001 `create_app_meta`): `app_meta(key PK, value, created_at, updated_at, revision)` STRICT, plus the runner's `schema_migrations(version PK, name, applied_at)`.
@@ -326,6 +336,9 @@
   - `worlds(id PK, name, theme_id, grid_width, grid_height, archived_at?, created_at, updated_at, revision)`
   - `projects(id PK, world_id FK RESTRICT, name, goal, template_id, template_version, status, archived_at?, trashed_at?, created_at, updated_at, revision)` + index `projects_by_world_status(world_id, status)`
   - All STRICT, with CHECKs. An existing v1 database is backed up before the upgrade. No rows are ever deleted by the app.
+- Schema v3 (migration 0003 `create_graph_entities`, M1-4):
+  - `graph_entities(id PK, kind, world_id FK, project_id?, ownership, source_locator?, tombstoned_at?, created_at, updated_at, revision)`, with FK `(project_id, world_id) → projects (id, world_id)`, partial unique indexes `graph_entities_one_per_world` / `graph_entities_one_per_project`, and the new unique index `projects_id_world(id, world_id)`.
+  - Backfills existing worlds and projects. An existing v2 database is backed up before the upgrade.
 
 - `userData/profiles-index.json` (M1-2, not in SQLite): `{ schemaVersion: 1, profiles: [{ id, displayName }], lastUsedProfileId }`. Profile folders: `profiles/<default | uuid>/`.
 
@@ -342,10 +355,11 @@
 - [ADR-0015](../adr/0015-chromium-switch-guard-and-test-variant.md): Chromium switch guard as a named deny-list; packaged smoke tests use a test-only variant marked inside `app.asar`
 - [ADR-0016](../adr/0016-project-lifecycle-and-trash-restore.md): project lifecycle `active`/`archived`/`trashed`; restoring from trash returns to the prior state
 - [ADR-0017](../adr/0017-fresh-install-profile-gets-uuid.md): a fresh install's first profile "Default" gets a UUID; only adopted M0 installs keep the ID `default`
+- [ADR-0018](../adr/0018-graph-entities-own-ids-written-by-repositories.md): graph entities have their own UUIDs and are written by the world and project repositories in the same transaction (nestable through `withSavepoint`)
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- After #29 merges: `/start-task 33` (M1-6, profile + world commands; needs #29 and #30, both done then) and `/start-task 31` (M1-4, graph entity IDs) can run in parallel if their files don't overlap. M1-8 (#35, profile switching) needs #33.
-  - Suggested follow-up: fix the flaky `ipc-router.test.ts` "huge binary payload" test (warm up the schema before spying, or spy only on the router's own serialization).
+- #20, #29, #30 and #32 are merged; #31 (M1-4) is in review. Next: `/start-task 33` (M1-6, profile + world commands; needs #29 and #30, both done). M1-8 (#35, profile switching) needs #33. M1-7 (#34) needs #30, #31, #32 and #33. M1-7 services can wrap repository calls in `withTransaction`; read entity IDs with `GraphEntityRepository.findByProject`/`findByWorld`.
+  - Suggested follow-up: fix the flaky `ipc-router.test.ts` "huge binary payload" test (warm up the schema before spying, or spy only on the router's own serialization). It is probably also the "unidentified flaky test" seen during #20 and the load-related failures seen during #32 and #31.
   - Possible follow-ups: an app icon; removing `data:` from CSP `img-src` (needs your decision); the empty resource-timing list in the packaged test; an E2E test for the startup error dialogs.
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.
