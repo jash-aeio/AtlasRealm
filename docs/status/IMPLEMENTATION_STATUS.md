@@ -313,6 +313,7 @@
 - [ADR-0014](../adr/0014-local-profiles-storage-and-switching.md): local profiles: adopt the M0 `default` folder; switch in-process, then reload the window
 - [ADR-0015](../adr/0015-chromium-switch-guard-and-test-variant.md): Chromium switch guard as a named deny-list; packaged smoke tests use a test-only variant marked inside `app.asar`
 - [ADR-0016](../adr/0016-project-lifecycle-and-trash-restore.md): project lifecycle `active`/`archived`/`trashed`; restoring from trash returns to the prior state
+- [ADR-0017](../adr/0017-fresh-install-profile-gets-uuid.md): a fresh install's first profile "Default" gets a UUID; only adopted M0 installs keep the ID `default`
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
