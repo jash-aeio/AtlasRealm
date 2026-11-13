@@ -1,4 +1,4 @@
-# Lesson 012: Command-line switches, deny-lists and build-time markers
+# Lesson 013: Command-line switches, deny-lists and build-time markers
 **Milestone:** M1 · **Date:** 2026-11-13 · **Related:** `src/main/bootstrap/switch-guard.ts`, `src/main/index.ts`, ADR-0015, SECURITY §21.1, lesson 006 (fuses)
 
 ## The concept (plain words)
