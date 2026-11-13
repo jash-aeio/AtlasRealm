@@ -11,7 +11,7 @@
 |---|---|---|---|---|---|
 | **Setup** | Repo, docs, Claude Code config, GitHub workflow | — | ✅ Done | — | — |
 | **M0** | Foundation and risk spikes: packaged Electron app with SQLite, IPC, Pixi, React Flow | Setup | ✅ Done | 9/9 (#20 moved to M1) | [v0.1.0-m0](https://github.com/jash-aeio/AtlasRealm/releases/tag/v0.1.0-m0) |
-| **M1** | Profiles, worlds, project persistence (list UI, no canvas) | M0 | 🚧 In progress | 0/11 (#20, #29–#38); #30 in review | — |
+| **M1** | Profiles, worlds, project persistence (list UI, no canvas) | M0 | 🚧 In progress | 1/11 (#20 done; #30 in review; #29, #31–#38 open) | — |
 | **M2** | Isometric world, placement, hotbar, library, Atlas shell | M1 | 📋 Backlog | — | — |
 | **M3** | Bundled resources, permission broker, artifacts, import commit | M1 (∥ M2) | 📋 Backlog | — | — |
 | **M4** | Durable runtime, mock + Ollama + Anthropic adapter | M3 | 📋 Backlog | — | — |

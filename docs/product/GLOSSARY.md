@@ -44,6 +44,8 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Lockfile** | A generated file recording the exact version of every installed dependency, so all machines match | `pnpm-lock.yaml` |
 | **Binding (SQLite)** | The bridge library between JavaScript and SQLite's C code; ours is the built-in `node:sqlite` (ADR-0010) | `src/main/storage/database.ts` |
 | **CDP (Chrome DevTools Protocol)** | The protocol DevTools uses to inspect and control a Chromium page; our packaged tests connect with it | `tests/e2e-packaged/` |
+| **Chromium switch** | A command-line option such as `--remote-debugging-port` that changes how Electron's browser engine behaves. The packaged app refuses the dangerous ones | `src/main/bootstrap/switch-guard.ts` |
+| **Deny-list / allowlist** | A list of what's forbidden (everything else allowed) / a list of what's permitted (everything else refused) | ADR-0015 |
 | **Code signing** | A certificate-backed signature on the `.exe` that tells Windows who made it; not done yet (costs money), so SmartScreen warns | `electron-builder.yml` |
 | **MCP** | Model Context Protocol: a standard way to give AI tools access to external services | `.mcp.json` |
 | **Fuse (Electron)** | An on/off switch inside the Electron binary, flipped at package time to remove risky features such as `ELECTRON_RUN_AS_NODE` | `electron-builder.yml` |

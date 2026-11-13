@@ -23,9 +23,18 @@ import { type Browser, chromium, expect, type Page, test } from '@playwright/tes
 // Why not Playwright's _electron.launch: it attaches through Node's --inspect, and the
 // packaged app turns that off with a fuse. Instead we start the .exe ourselves with Chromium's
 // --remote-debugging-port and connect to the window over CDP (the DevTools protocol).
+//
+// Two builds (#20, ADR-0015). The shipped build (release/win-unpacked, `pnpm package`) refuses
+// --remote-debugging-port, so the UI smoke tests drive the test-only variant
+// (release-test/win-unpacked, `pnpm package:test`). Same bundled code, plus a marker in the
+// package.json inside app.asar that allows that one switch. It has its own exe name, appId and
+// data folder, so it can't be mistaken for the real app. The shipped build gets the
+// switch-guard tests, the marker check and the fuse readout.
 
-const UNPACKED = resolve('release', 'win-unpacked');
-const EXE_NAME = 'Atlas Realm.exe';
+const UNPACKED = resolve('release-test', 'win-unpacked');
+const SHIPPED_UNPACKED = resolve('release', 'win-unpacked');
+const EXE_NAME = 'AtlasRealmTest.exe';
+const SHIPPED_EXE_NAME = 'Atlas Realm.exe';
 const devElectron = createRequire(import.meta.url)('electron') as string;
 
 test.describe.configure({ mode: 'serial' });
@@ -33,11 +42,15 @@ test.describe.configure({ mode: 'serial' });
 let root: string;
 let installDir: string;
 let exePath: string;
+let shippedExePath: string;
 let userDataDir: string;
 
 test.beforeAll(async () => {
-  if (!existsSync(join(UNPACKED, EXE_NAME))) {
+  if (!existsSync(join(SHIPPED_UNPACKED, SHIPPED_EXE_NAME))) {
     throw new Error('No packaged app in release/win-unpacked. Run `pnpm package` first.');
+  }
+  if (!existsSync(join(UNPACKED, EXE_NAME))) {
+    throw new Error('No test variant in release-test/win-unpacked. Run `pnpm package:test`.');
   }
   root = mkdtempSync(join(tmpdir(), 'atlas packaged Ünïcødé 测试 '));
   installDir = join(root, 'Program Fïles (x86) 地图', 'Atlas Realm');
@@ -46,6 +59,10 @@ test.beforeAll(async () => {
   await cp(UNPACKED, installDir, { recursive: true });
   exePath = join(installDir, EXE_NAME);
   if (!existsSync(exePath)) throw new Error(`Copy failed: ${exePath} is missing`);
+  const shippedDir = join(root, 'shipped Fïles 地图', 'Atlas Realm');
+  await cp(SHIPPED_UNPACKED, shippedDir, { recursive: true });
+  shippedExePath = join(shippedDir, SHIPPED_EXE_NAME);
+  if (!existsSync(shippedExePath)) throw new Error(`Copy failed: ${shippedExePath} is missing`);
 });
 
 test.afterAll(() => {
@@ -246,6 +263,166 @@ test('file: images are blocked in the packaged app, while app:// assets still lo
   }
 });
 
+// ---- Chromium switch guard (#20) -------------------------------------------------------
+
+interface Started {
+  readonly child: ChildProcess;
+  readonly output: () => string;
+  readonly userData: string;
+}
+
+/** Starts an .exe without CDP (default: the shipped build) with its own fresh userData. */
+function startExe(args: string[], exe = shippedExePath): Started {
+  const userData = mkdtempSync(join(root, 'guard data Ü '));
+  const child = spawn(exe, [`--user-data-dir=${userData}`, ...args], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let output = '';
+  child.stdout.on('data', (chunk: Buffer) => (output += chunk.toString()));
+  child.stderr.on('data', (chunk: Buffer) => (output += chunk.toString()));
+  return { child, output: () => output, userData };
+}
+
+/** Resolves with the exit code, or 'still running' after the timeout. */
+function exitOrTimeout(child: ChildProcess, ms: number): Promise<number | null | 'still running'> {
+  if (child.exitCode !== null) return Promise.resolve(child.exitCode);
+  return new Promise((r) => {
+    const timer = setTimeout(() => {
+      r('still running');
+    }, ms);
+    child.once('exit', (code) => {
+      clearTimeout(timer);
+      r(code);
+    });
+  });
+}
+
+/** Ends the whole process tree (renderer, GPU, worker): the shipped build has no CDP to close it. */
+function killTree(child: ChildProcess): void {
+  if (child.pid !== undefined && child.exitCode === null) {
+    spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+  }
+}
+
+async function portAnswers(port: number): Promise<boolean> {
+  try {
+    return (await fetch(`http://127.0.0.1:${String(port)}/json/version`)).ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Polls the port every 50 ms from start until the process exits (or the timeout), so a port
+ * that opened briefly and closed again is still caught.
+ */
+async function watchPortUntilExit(
+  child: ChildProcess,
+  port: number,
+  ms: number,
+): Promise<{ exit: number | null | 'still running'; portEverAnswered: boolean }> {
+  let portEverAnswered = false;
+  // An object, so lint sees that the .finally callback changes it.
+  const state = { done: false };
+  const exit = exitOrTimeout(child, ms).finally(() => {
+    state.done = true;
+  });
+  while (!state.done) {
+    if (await portAnswers(port)) portEverAnswered = true;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  if (await portAnswers(port)) portEverAnswered = true;
+  return { exit: await exit, portEverAnswered };
+}
+
+const dbFile = (userData: string): string => join(userData, 'profiles', 'default', 'app.sqlite');
+
+test('positive control: the shipped build starts normally without blocked switches', async () => {
+  const started = startExe([]);
+  try {
+    // It opens its database (so it got past the guard and the lock) and keeps running.
+    await expect.poll(() => existsSync(dbFile(started.userData)), { timeout: 30_000 }).toBe(true);
+    expect(await exitOrTimeout(started.child, 1_000)).toBe('still running');
+    expect(started.output()).not.toContain('[security]');
+  } finally {
+    killTree(started.child);
+  }
+});
+
+test('the shipped build quits on --remote-debugging-port before opening the port or DB', async () => {
+  // Positive control for the port: the test variant does open it (launchPackaged, used by
+  // every smoke test above). Chromium also accepts -x, /x and any letter case on Windows;
+  // the guard asks Chromium's own parser, so all of them are caught.
+  for (const spelling of [
+    '--remote-debugging-port',
+    '-remote-debugging-port',
+    '/remote-debugging-port',
+    '--REMOTE-DEBUGGING-PORT',
+  ]) {
+    const port = await freePort();
+    const started = startExe([`${spelling}=${String(port)}`]);
+    try {
+      const watched = await watchPortUntilExit(started.child, port, 20_000);
+      expect(watched.exit, spelling).toBe(1);
+      expect(started.output()).toContain(
+        '[security] refusing to start with blocked switches: remote-debugging-port',
+      );
+      expect(watched.portEverAnswered, spelling).toBe(false);
+      expect(existsSync(dbFile(started.userData))).toBe(false);
+    } finally {
+      killTree(started.child);
+    }
+  }
+});
+
+test('the shipped build quits on other debugging, sandbox and proxy switches', async () => {
+  for (const [arg, name] of [
+    ['--remote-debugging-pipe', 'remote-debugging-pipe'],
+    ['--no-sandbox', 'no-sandbox'],
+    ['--disable-web-security', 'disable-web-security'],
+    ['--js-flags=--allow-natives-syntax', 'js-flags'],
+    ['--proxy-server=127.0.0.1:1', 'proxy-server'],
+    ['--disable-features=IsolateOrigins,site-per-process', 'disable-features'],
+    ['--disable-gpu-sandbox', 'disable-gpu-sandbox'],
+    ['--ssl-key-log-file=keys.log', 'ssl-key-log-file'],
+  ] as const) {
+    const started = startExe([arg]);
+    try {
+      expect(await exitOrTimeout(started.child, 20_000), arg).toBe(1);
+      expect(started.output()).toContain(`blocked switches: ${name}`);
+      expect(existsSync(dbFile(started.userData))).toBe(false);
+    } finally {
+      killTree(started.child);
+    }
+  }
+});
+
+test('the test variant allows only --remote-debugging-port and still refuses the rest', async () => {
+  const port = await freePort();
+  const started = startExe([`--remote-debugging-port=${String(port)}`, '--no-sandbox'], exePath);
+  try {
+    const watched = await watchPortUntilExit(started.child, port, 20_000);
+    expect(watched.exit).toBe(1);
+    // Only no-sandbox is reported: remote-debugging-port is the variant's one exception.
+    expect(started.output()).toMatch(/blocked switches: no-sandbox\r?\n/);
+    expect(watched.portEverAnswered).toBe(false);
+  } finally {
+    killTree(started.child);
+  }
+});
+
+test('only the test variant carries the packagedTest marker (the shipped build has none)', () => {
+  // The package.json inside app.asar is stored uncompressed, so its text is in the archive's
+  // bytes. The bundled code says `.packagedTest === true`, which this pattern doesn't match.
+  // The installer is built from the same release/win-unpacked folder in the same run.
+  const marker = /"packagedTest"\s*:\s*true/;
+  const asarText = (dir: string): string =>
+    readFileSync(join(dir, 'resources', 'app.asar')).toString('latin1');
+  expect(asarText(UNPACKED)).toMatch(marker); // positive control
+  expect(asarText(SHIPPED_UNPACKED)).not.toMatch(marker);
+  expect(existsSync(join(SHIPPED_UNPACKED, EXE_NAME))).toBe(false);
+});
+
 // ---- Fuses -------------------------------------------------------------------------------
 
 /**
@@ -339,14 +516,17 @@ test('fuses are flipped in the packaged binary (dev Electron as control)', () =>
     onlyLoadAppFromAsar: '0',
     fileProtocolExtraPrivileges: '1',
   });
-  expect(fuseStates(exePath)).toEqual({
-    runAsNode: '0',
-    nodeOptions: '0',
-    nodeCliInspect: '0',
-    asarIntegrity: '1',
-    onlyLoadAppFromAsar: '1',
-    fileProtocolExtraPrivileges: '0',
-  });
+  // Both builds: the test variant differs only in its package.json marker.
+  for (const binary of [shippedExePath, exePath]) {
+    expect(fuseStates(binary)).toEqual({
+      runAsNode: '0',
+      nodeOptions: '0',
+      nodeCliInspect: '0',
+      asarIntegrity: '1',
+      onlyLoadAppFromAsar: '1',
+      fileProtocolExtraPrivileges: '0',
+    });
+  }
 });
 
 test('ELECTRON_RUN_AS_NODE no longer turns the app into Node.js', async () => {
@@ -378,15 +558,11 @@ test('--inspect does not open a Node debugger in the packaged app', async () => 
   });
   expect(control.stderr).toContain('Debugger listening');
 
-  const running = await launchPackaged({ args: ['--inspect=0'] });
-  try {
-    await expect(running.page).toHaveTitle('Atlas Realm');
-    // Give a debugger time to announce itself if it were going to.
-    await new Promise((r) => setTimeout(r, 1000));
-    expect(running.output()).not.toContain('Debugger listening');
-  } finally {
-    await quit(running);
-  }
+  // Two layers: the inspect fuse is off (readout above), and since #20 the switch guard
+  // refuses to start at all, so no debugger can announce itself.
+  await expect(launchPackaged({ args: ['--inspect=0'] })).rejects.toThrow(
+    /exited early \(code 1\)[\s\S]*blocked switches: inspect/,
+  );
 });
 
 // Last on purpose: it damages the copied install.

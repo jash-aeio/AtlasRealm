@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-13 · **Branch:** feat/30-schema-v2-repositories (M1-3 PR)
+**Last updated:** 2026-11-13 · **Branch:** feat/30-schema-v2-repositories (M1-3 PR, main merged in after #20)
 
 ## Current milestone
-**M1 — Profiles, worlds, and project persistence** (⏳ in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-3 (#30, schema v2 + repositories) is in review. #20 and #32 are being worked on in parallel sessions.
+**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20, switch guard) is merged. M1-3 (#30, schema v2 + repositories) is in review (PR #40). #32 is being worked on in a parallel session.
 
 **M0 — Foundation and risk spikes: ✅ closed 2026-11-10, tag `v0.1.0-m0`.** Evidence: unit/integration 193/193, E2E 35/35, packaged E2E 9/9 on main @ 2fbf944; CI green. See `docs/sessions/2026-11-10-m0-close.md`.
 
@@ -89,6 +89,12 @@
   - Build: `assetsInlineLimit: 0`, so all four PNGs ship as real files under `app://atlas/assets/`.
   - The renderer sets Zod `jitless` (`src/renderer/app/zod-config.ts`). Without it, Zod 4's `new Function` probe causes a `script-src eval` CSP report.
 
+- **M1-1 Chromium switch guard (#20, merged as PR #41):** the packaged app refuses to start with debugging, sandbox-disabling, child-process injection or traffic-interception switches (SECURITY §21.1, ADR-0015).
+  - `src/main/bootstrap/switch-guard.ts` holds the deny-list (29 switches) and the checks. `src/main/index.ts` runs it first: when `app.isPackaged` and a listed switch is present, it logs `[security] refusing to start with blocked switches: …` to stderr and calls `app.exit(1)` before the lock, DB, protocol or window. No dialog.
+  - Detection uses `app.commandLine.hasSwitch` (Chromium's parser), so `-x`, `/x` and upper-case spellings are caught.
+  - `pnpm package:test` builds a **test-only variant** (`release-test/win-unpacked/AtlasRealmTest.exe`, folder only, own appId and data folder) whose asar package.json carries `atlasRealm.packagedTest: true`. That variant allows `remote-debugging-port` only. CI builds it after the installer and never uploads it.
+  - `pnpm dev` and the dev E2E suite are unaffected (not packaged).
+
 - **M1-3 schema v2 + repositories (#30, in review):** the database now has its first product tables. No UI or IPC uses them yet (M1-6/M1-7 add the commands).
   - Migration 2 adds `profile_settings`, `worlds` and `projects`. All three are STRICT and have `created_at`, `updated_at` (UTC) and `revision`.
   - CHECK constraints: names trimmed and 1–80 characters, slug IDs, semver template versions, `#rrggbb` avatar colours, preferences a JSON object of at most 16 KiB, profile ID `default` or a UUID (ADR-0014).
@@ -103,6 +109,7 @@
 
 ## Changed components
 - M1-3: `src/main/storage/migrations/index.ts`, `src/main/storage/repositories/{repository-support,profile-settings-repository,world-repository,project-repository}.ts` (new), `src/main/storage/database.ts` (type re-export); `tests/integration/storage-{migration-v2,project-repository,world-repository,profile-settings-repository}.test.ts` (new), `tests/fixtures/db/v1-app.sql` (new), `tests/integration/app-launch-info.test.ts`, `tests/e2e/storage.spec.ts`, `tests/e2e-packaged/packaged.spec.ts` (schema v2); docs: ADR-0016, lesson 012, glossary
+- M1-1: `src/main/bootstrap/switch-guard.ts` (new), `src/main/index.ts`, `package.json` (`package:test`), `electron-builder.yml` (comment), `.github/workflows/ci.yml`; `tests/security/switch-guard.test.ts` (new), `tests/e2e-packaged/packaged.spec.ts`; docs: ADR-0015, SECURITY §21.1, glossary
 - M0-8: `src/common/assets/` (new), `scripts/generate-placeholder-art.ts` (new), `resources/assets/` (new), `src/renderer/world/{world-assets.ts (new),grid-scene.ts}`, `src/renderer/app/{zod-config.ts (new),main.tsx}`, `electron.vite.config.ts`, `package.json` (script); `tests/domain/asset-manifest.test.ts` (new), `tests/e2e/world.spec.ts`, `tests/e2e-packaged/packaged.spec.ts`; docs: ADR-0013, ART_BIBLE, ASSET_PROVENANCE, glossary, lesson 011; `.claude/hooks/guard-bash.mjs` (branch checked where the command runs, for worktrees)
 - M0-6: `src/worker/` (new), `src/main/runtime-bridge/` (new), `src/common/contracts/{worker-protocol,json-size,runtime-worker,channels,atlas-api}.ts`, `src/main/ipc/{router.ts,register.ts,commands/runtime-worker.ts}`, `src/main/index.ts`, `src/preload/index.ts`, `src/renderer/app/{App.tsx,WorkerPanel.tsx}`, `tsconfig.node.json` (includes `src/worker`); `tests/integration/{worker-messaging,runtime-worker-contract}.test.ts`, `tests/e2e/worker.spec.ts` (new), `tests/e2e/shell.spec.ts` (API shape), `tests/e2e-packaged/packaged.spec.ts`
 - #24 (chore): `.github/dependabot.yml` ignores major-version bumps of `typescript` and `@types/node`. They are upgraded by hand (see Known limitations).
@@ -133,7 +140,14 @@
     - L6: migration 2 CHECKs tightened while it's still unreleased: exact UUID shape, no NUL in text columns, IANA-shaped timezone.
     - L7: settings `create` is one `INSERT … ON CONFLICT DO NOTHING RETURNING`, so a race gives `already_exists`, not a raw UNIQUE error.
     - Mutation check: disabling the spoofing check or the plain-data check fails 4 tests.
-  - Forward notes for M1-6/M1-7, recorded on #33 and #34: Zod-validate runtime types before calling a repository (F1), give preferences a strict schema (F2), map `RepositoryError.code` to IPC errors and never forward raw messages (F3), keep `guardedUpdate` private to the repositories folder (F4), decide whether projects may be created or renamed in an archived world (F5).
+  - Forward notes for M1-6/M1-7, listed in PR #40 (posting them on #33/#34 is left to the user): Zod-validate runtime types before calling a repository (F1), give preferences a strict schema (F2), map `RepositoryError.code` to IPC errors and never forward raw messages (F3), keep `guardedUpdate` private to the repositories folder (F4), decide whether projects may be created or renamed in an archived world (F5).
+- M1-1, 2026-11-11, local Windows 11: typecheck, lint, format:check pass. Unit/integration 234/234 (41 new). E2E 35/35. Packaged E2E 14/14 (5 new) on a fresh `pnpm package` + `pnpm package:test` (re-run 2026-11-13 after the review fixes).
+  - Review fixes (security-auditor M1, M2, L2, L3; invariant-reviewer suggestion): 10 more switches, among them `disable-features`, `disable-gpu-sandbox`, `in-process-gpu`, `ssl-key-log-file`, `log-net-log` and `remote-allow-origins`. The variant moved to `release-test/` with its own identity. New marker test: the shipped asar has no marker, the variant's does (positive control). The port is now polled every 50 ms until exit, not checked once afterwards. The `--js-flags` timing comment was corrected.
+  - The positive control caught a real mistake: `allow-file-access-from-files` (suggested by the review) is set by Electron itself, so listing it made every launch exit. It was removed, with a comment.
+  - The first unit run had 1 failure out of 224. Its output was lost, and 4 reruns all passed: an unidentified flaky test (see Known limitations).
+  - Packaged, shipped build: with no switches it opens its DB and keeps running (positive control). `--remote-debugging-port` in four spellings (`--`, `-`, `/`, upper case) exits 1 with the `[security]` line, the port never answers and no DB is created. `--remote-debugging-pipe`, `--no-sandbox`, `--disable-web-security`, `--js-flags` and `--proxy-server` also exit 1. `--inspect=0` is now refused outright, on top of the fuse.
+  - Packaged, test variant: all CDP smoke tests pass (so it opens the port: the positive control for the port check). `--remote-debugging-port` plus `--no-sandbox` still exits 1, reporting only `no-sandbox`.
+  - Marker checked by reading both `app.asar` files: `"atlasRealm": { "packagedTest": true }` (a boolean) in the variant, absent in the shipped build. Fuse states are the same in both.
 - M0-8, 2026-11-10, local Windows 11: typecheck, lint, format:check pass. Unit/integration 168/168 (30 new). E2E 30/30 (1 new). Packaged E2E 8/8 (1 new; run before the schema bounds were added, and those don't touch packaging). `pnpm art:placeholders --check` is clean.
   - After merging main (with M0-6): unit/integration 193/193, E2E 35/35, packaged E2E 9/9 (fresh `pnpm package`). typecheck, lint and format:check pass.
   - Hook fix: `.claude/hooks/guard-bash.mjs` now reads the branch where each sub-command runs (`cd <dir> &&`, `git -C <dir>`). It falls back to the session folder when that folder isn't a repository. Checked with 14 allow/block cases: commit or push from the worktree allowed; commit on main via cd or `-C` blocked; push to main, force push and `--no-verify` blocked.
@@ -207,7 +221,7 @@
     - Packaged without `electronFuses`, the fuse-wire, RunAsNode, inspect and tamper tests each failed.
     - Without `blockFileProtocol`, the dev E2E `file:` test failed (200 instead of 404).
   - **Manual, not automated:** a silent NSIS install (`/S /D=%TEMP%\Atlas Install Ünïcødé 测试\Atlas Realm`) exited 0 in 15 s. The installed app created `%APPDATA%\Atlas Realm\profiles\default\app.sqlite`. A silent uninstall exited 0 and removed the program and its uninstall registry entry, but **kept** the data folder. Interactive install via the wizard wasn't tried.
-  - Packaged tests connect over CDP (`--remote-debugging-port`), because the inspect fuse stops Playwright's `_electron.launch`.
+  - Packaged tests connect over CDP (`--remote-debugging-port`), because the inspect fuse stops Playwright's `_electron.launch`. Since M1-1 they drive the test-only variant, because the shipped build refuses that switch.
   - security-auditor: approve with changes. M1 (Chromium switches) is accepted and tracked in #20. L1 (shell quoting in the wrapper) and L2 (packaged `file:` test) are fixed. L3 and L4 are documented in comments and below. L5 (SHA-pinning actions) is listed below. invariant-reviewer: no violations. It asked for these docs and an uninstall check (done manually, above).
 - M0-9, 2026-11-08, local Windows 11: typecheck, lint, format:check pass. Unit/integration 100/100. E2E 13/13 (built app).
   - E2E: the page URL is `app://atlas/index.html` and all scripts come from `app:`. A `file:` script, a `file:` image and a UNC (`file://127.0.0.1/c$/...`) image all fail to load. Chromium refuses `file:` resources from a non-file page before CSP is consulted (no CSP violation event fires), and `'self'` no longer covers `file:` either.
@@ -249,7 +263,9 @@
 - Imported asset packs (later) need main-process path confinement (realpath, no symlinks) and digest checks on the bytes read. The manifest schema only checks path text.
 - Zod in the renderer runs `jitless` (no generated parsers). Fine at today's sizes; measure before parsing large data there.
 - `node:sqlite` is a release candidate API (ADR-0010). It works in the packaged build (M0-7 E2E).
-- **Release gate (#20, moved to M1):** the packaged app still accepts Chromium switches such as `--remote-debugging-port`, `--no-sandbox` and `--disable-web-security`. Any program running as the same user could drive the trusted page. Low impact while only `ping`/`launchInfo` exist. It must be fixed before any IPC command touches files, secrets or providers.
+- Packaged UI smoke tests run on the test-only variant, not the exact shipped bytes (one package.json field differs, ADR-0015). The shipped build gets the guard tests and the fuse readout. The switch guard is a deny-list: an unlisted dangerous switch would get through.
+- Switch-guard follow-ups from the security review (not done in #20): (1) an allowlist step over `process.argv` as a second layer. It reverses the deny-list decision, so it needs your call. (2) Decide "test build" at bundle time (Vite `define`) so the exception code isn't in the shipped bundle at all. (3) Refuse to start when `SSLKEYLOGFILE` is set, once provider keys exist (environment variables bypass `hasSwitch`). (4) No packaged negative test for a missing or malformed marker (unit tests only).
+- One unit-test run (M1-1) failed once with 1/224 and couldn't be reproduced in 4 reruns. Output lost; the test is unidentified. Watch CI for a repeat.
 - Unsigned build: SmartScreen warns, and asar integrity only stops corruption and casual tampering. Without a signature, a local attacker can patch the hash in the `.exe` too. Code signing is a release decision (costs money).
 - Electron's default icon is still a placeholder (not in M0-8's acceptance criteria; follow-up). The `app-update.yml` that electron-builder generates is unused (no updater).
 - The `file:` block covers the default session only. Any future `session.fromPartition` needs its own block (rule in `app-protocol.ts`).
@@ -279,11 +295,12 @@
 - [ADR-0012](../adr/0012-electron-utility-process-worker.md): Electron `utilityProcess` for the trusted worker
 - [ADR-0013](../adr/0013-art-technical-contract.md): art technical contract (tile, footprints, south-corner pivot, palette, asset manifest)
 - [ADR-0014](../adr/0014-local-profiles-storage-and-switching.md): local profiles: adopt the M0 `default` folder; switch in-process, then reload the window
-- [ADR-0016](../adr/0016-project-lifecycle-and-trash-restore.md): project lifecycle `active`/`archived`/`trashed`; restoring from trash returns to the prior state (ADR-0015 is taken by #20)
+- [ADR-0015](../adr/0015-chromium-switch-guard-and-test-variant.md): Chromium switch guard as a named deny-list; packaged smoke tests use a test-only variant marked inside `app.asar`
+- [ADR-0016](../adr/0016-project-lifecycle-and-trash-restore.md): project lifecycle `active`/`archived`/`trashed`; restoring from trash returns to the prior state
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- After #30 merges: `/start-task 31` (M1-4, graph entity IDs; migration 3 builds on schema v2). Finish #20 (M1-1) and #32 (M1-5), which are in progress in parallel sessions; then M1-2 (#29).
-  - Suggested follow-up: fix the flaky `ipc-router.test.ts` "huge binary payload" test (warm up the schema before spying, or spy only on the router's own serialization).
+- After #30 merges: `/start-task 31` (M1-4, graph entity IDs; migration 3 builds on schema v2) and `/start-task 29` (M1-2, profiles index; it edits `src/main/index.ts`). #32 (M1-5) is in progress in a parallel session.
+  - Suggested follow-up: fix the flaky `ipc-router.test.ts` "huge binary payload" test (warm up the schema before spying, or spy only on the router's own serialization). It is probably also the "unidentified flaky test" seen during #20.
   - Possible follow-ups: an app icon; removing `data:` from CSP `img-src` (needs your decision); the empty resource-timing list in the packaged test.
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.

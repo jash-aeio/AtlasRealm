@@ -42,3 +42,4 @@ test-results/
 
 # Asset staging (unreviewed generated art never gets committed)
 resources/assets/_staging/
+release-test/
