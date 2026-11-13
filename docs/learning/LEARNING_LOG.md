@@ -18,6 +18,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 012 | [Optimistic concurrency and soft delete](lessons/012-optimistic-concurrency-and-soft-delete.md) | M1 | revision, expected revision, lost update, optimistic concurrency, soft delete, CHECK constraint, STRICT table, RETURNING |
 | 013 | [Command-line switches, deny-lists and build-time markers](lessons/013-command-line-switches-and-build-markers.md) | M1 | Chromium switch, deny-list vs allowlist, same-parser rule, build-time marker, positive control |
 | 014 | [Validated manifests, discriminated unions and graceful degradation](lessons/014-validated-manifests-and-graceful-degradation.md) | M1 | manifest, strict schema, discriminated union, build-time import, graceful degradation, invisible format characters |
+| 015 | [Atomic file writes and turning untrusted text into paths](lessons/015-atomic-files-and-untrusted-ids.md) | M1 | atomic write, fsync, rename, path traversal, allowlist, branded type, fail closed, TOCTOU |
 | 016 | [Paired writes, savepoints and tombstones](lessons/016-paired-writes-savepoints-and-tombstones.md) | M1 | transaction, savepoint, nested writes, tombstone, graph entity, backfill, composite foreign key, mutation check |
 
 ## Suggested reading order for the docs

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,8 +7,10 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { _electron as electron, expect, test } from '@playwright/test';
 
-// The real built app, started twice against a throwaway userData folder: the database must
-// be created under userData, migrated, and still hold the first run's record on the second.
+import { requireDatabaseFile } from './support/profile-data';
+
+// The real built app, started twice against a throwaway userData folder: the profile index and
+// database must be created under userData, migrated, and still hold the first run's record on the second.
 let userDataDir: string;
 // The electron package's main export is the path to its executable.
 const electronBinary = createRequire(import.meta.url)('electron') as string;
@@ -55,8 +57,16 @@ test('the database lives under userData and its records survive a restart', asyn
   // The UI shows the stored count after a restart, not just the database file.
   expect((await launchOnce()).launchText).toMatch(/^Launch #2 · .* · schema v3$/);
 
+  // A fresh install gets one profile, "Default", with a UUID (ADR-0017); both launches used it.
+  const index = JSON.parse(readFileSync(join(userDataDir, 'profiles-index.json'), 'utf8')) as {
+    profiles: { id: string; displayName: string }[];
+    lastUsedProfileId: string;
+  };
+  expect(index.profiles).toEqual([{ id: index.lastUsedProfileId, displayName: 'Default' }]);
+  expect(index.lastUsedProfileId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-/);
+
   // Read the file the app wrote, after it has quit (read-only: the test never changes it).
-  const db = new DatabaseSync(join(userDataDir, 'profiles', 'default', 'app.sqlite'), {
+  const db = new DatabaseSync(requireDatabaseFile(userDataDir), {
     readOnly: true,
   });
   try {
@@ -92,7 +102,7 @@ test('a second copy of the app quits without opening the database', async () => 
     await first.close();
   }
 
-  const db = new DatabaseSync(join(lockDir, 'profiles', 'default', 'app.sqlite'), {
+  const db = new DatabaseSync(requireDatabaseFile(lockDir), {
     readOnly: true,
   });
   try {

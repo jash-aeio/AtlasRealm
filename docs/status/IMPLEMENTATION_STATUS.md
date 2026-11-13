@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-13 · **Branch:** feat/31-graph-entity-ids (M1-4 PR, worktree `AtlasRealm-31`)
+**Last updated:** 2026-11-13 · **Branch:** feat/31-graph-entity-ids (M1-4 PR, main @ 7d3abbc merged in after #29)
 
 ## Current milestone
-**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20), M1-3 (#30) and M1-5 (#32) are merged. M1-4 (#31, graph entities) is in review. M1-2 (#29) is in progress in a parallel session.
+**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20), M1-2 (#29), M1-3 (#30) and M1-5 (#32) are merged. M1-4 (#31, graph entities) is in review.
 
 **M0 — Foundation and risk spikes: ✅ closed 2026-11-10, tag `v0.1.0-m0`.** Evidence: unit/integration 193/193, E2E 35/35, packaged E2E 9/9 on main @ 2fbf944; CI green. See `docs/sessions/2026-11-10-m0-close.md`.
 
@@ -27,7 +27,7 @@
 
 - **M0-3 SQLite + migrations (#6, merged):** the app now keeps a local database. It has no product data yet, only launch facts.
   - Binding: built-in `node:sqlite` (ADR-0010). Only `src/main/storage/database.ts` imports it. Foreign keys, WAL, busy timeout, defensive mode, `trusted_schema = OFF`.
-  - File: `userData/profiles/default/app.sqlite` (DATA_MODEL §9.1 layout; `default` is a placeholder profile ID until profiles exist in M1).
+  - File: `userData/profiles/default/app.sqlite` (DATA_MODEL §9.1 layout). Since M1-2 this folder is adopted as the profile "Default"; new installs use a UUID folder (ADR-0017).
   - Migration runner (`migrate.ts`): one transaction per migration with its `schema_migrations` row and `PRAGMA user_version` bump. An existing DB is backed up first to `profiles/default/backups/`, using the online backup API; the copy is checked. A DB from a newer app is refused untouched. A failing migration leaves the old version and keeps the backup.
   - Schema v1: `app_meta` (key/value), accessed only through `AppMetaRepository`. Startup records `launch_count`, `first_launched_at`, `last_launched_at`.
   - If the DB can't be opened, startup shows an error box (a fixed message, no paths) and quits. It never creates an empty replacement.
@@ -113,6 +113,19 @@
   - Loader: Vite's `import.meta.glob` bundles the JSON into the main process at build time (no runtime file paths, no packaging change). `buildTemplateCatalog` validates each file once at startup. A bad file is listed as `{ status: 'unavailable', location, reason }` (`invalid_manifest`, `location_mismatch`, `too_many_templates`), the Zod detail goes only to the main log, and startup continues. A location that is too long or has odd characters is shown as `(unreadable location)`. At most 100 templates.
   - IPC: `template.list` (no payload, output schema-checked, bounded by the 100 cap) via `window.atlas.template.list()`.
 
+- **M1-2 profile storage (#29, merged as PR #45):** the app now has real local profiles on disk. There is no profile UI or command yet (M1-6, M1-8, M1-9).
+  - `userData/profiles-index.json` (schema v1) holds only profile IDs, display names and the last-used ID. Strict Zod schema: unknown keys refused, IDs unique, list not empty, last-used must be listed, names follow the usual name rules. Read-only on load; a bad file is reported (`unreadable`, `invalid_json`, `invalid_shape`, `newer_version`) and **never** rewritten.
+  - Writes are atomic: temp file (`wx`) in the same folder → fsync → rename, retried up to 5 times over ~0.5 s for Windows `EPERM`/`EBUSY`/`EACCES`. Leftover `profiles-index.json.<hex>.tmp` files are removed at startup.
+  - Profile IDs: `default` (legacy, M0) or a lowercase UUID, as the branded type `ProfileId` (`src/main/storage/profiles/profile-id.ts`). `profilePaths` re-checks the ID at runtime, so no path is ever built from raw index text.
+  - Startup (`openStartupProfile`, `src/main/storage/profiles/startup.ts`):
+    - index present → open the last-used profile. Its `app.sqlite` must exist and be already migrated (version > 0), else `ProfileDataMissingError`;
+    - no index, only `profiles/default/app.sqlite` → adopt as "Default" (keeps launch history);
+    - no index, no profile data → create "Default" with a new UUID (ADR-0017);
+    - no index but other profile databases exist → stop with `ProfilesIndexMissingError` (your decision: fail closed);
+    - an M0 `default` folder without `app.sqlite` is refused, not adopted.
+    - The DB is opened and migrated before a new index is written, so a failed first launch leaves no index.
+  - `src/main/index.ts` shows a separate path-free dialog for a damaged/newer index, a missing index, missing profile data, and other DB failures, then quits. Nothing is deleted.
+
 - **M1-4 graph entity IDs (#31, branch `feat/31-graph-entity-ids`):** every world and project now has a graph entity: the stable node ID the Realm Atlas (M2) and imports will build on (GRAPH_MODEL §30.5, ADR-0018). No UI or IPC uses it yet.
   - Migration 3 adds `graph_entities` (STRICT): its own UUID, `kind` (`world`/`project`), `world_id`, `project_id` (project entities only), `ownership` (`app_owned`/`external`), `source_locator` (nullable, required for `external`, ≤ 1024 characters), `tombstoned_at`, timestamps and `revision`. There are **no name or layout columns**.
   - A composite foreign key `(project_id, world_id) → projects (id, world_id)` keeps a project entity in its project's own world. Partial unique indexes allow one entity per world and one per project.
@@ -122,6 +135,7 @@
 
 ## Changed components
 - M1-4: `src/main/storage/migrations/index.ts` (migration 3), `src/main/storage/database.ts` (`withSavepoint`, `TransactionAbortedError`, transaction tracking), `src/main/storage/repositories/graph-entity-repository.ts` (new), `src/main/storage/repositories/{world,project}-repository.ts`; `tests/integration/storage-{graph-entity-repository,migration-v3}.test.ts` (new), `tests/integration/storage-{database,migration-v2}.test.ts`, `tests/e2e/storage.spec.ts`, `tests/e2e-packaged/packaged.spec.ts` (schema v3); docs: ADR-0018, lesson 016, glossary
+- M1-2: `src/main/storage/profiles/{profile-id,profiles-index,startup}.ts` (new), `src/main/storage/app-database.ts`, `src/main/storage/repositories/profile-settings-repository.ts` (shared ID pattern), `src/main/index.ts`; `tests/integration/storage-profiles-{index,index-retry,startup}.test.ts` (new), `tests/integration/{storage-app-database,app-launch-info}.test.ts`, `tests/e2e/support/profile-data.ts` (new), `tests/e2e/storage.spec.ts`, `tests/e2e-packaged/packaged.spec.ts`; docs: ADR-0017, DATA_MODEL §9.1 note, glossary, lesson 015
 - M1-5: `resources/project-templates/` (new), `src/common/contracts/project-template.ts` (new), `src/main/templates/{catalog,bundled-templates}.ts` (new), `src/main/ipc/commands/template-list.ts` (new), `src/common/contracts/{channels,atlas-api}.ts`, `src/preload/index.ts`, `src/main/ipc/register.ts`, `src/main/index.ts`; `tests/domain/project-template{,-catalog}.test.ts` (new), `tests/integration/template-list.test.ts` (new), `tests/e2e/shell.spec.ts`; docs: glossary, lesson 014
 - M1-3: `src/main/storage/migrations/index.ts`, `src/main/storage/repositories/{repository-support,profile-settings-repository,world-repository,project-repository}.ts` (new), `src/main/storage/database.ts` (type re-export); `tests/integration/storage-{migration-v2,project-repository,world-repository,profile-settings-repository}.test.ts` (new), `tests/fixtures/db/v1-app.sql` (new), `tests/integration/app-launch-info.test.ts`, `tests/e2e/storage.spec.ts`, `tests/e2e-packaged/packaged.spec.ts` (schema v2); docs: ADR-0016, lesson 012, glossary
 - M1-1: `src/main/bootstrap/switch-guard.ts` (new), `src/main/index.ts`, `package.json` (`package:test`), `electron-builder.yml` (comment), `.github/workflows/ci.yml`; `tests/security/switch-guard.test.ts` (new), `tests/e2e-packaged/packaged.spec.ts`; docs: ADR-0015, SECURITY §21.1, glossary
@@ -140,6 +154,12 @@
 
 ## Verification
 - M1-4, 2026-11-13, local Windows 11, on main @ d26825c: typecheck, lint, format:check pass. Unit/integration 427/427 (28 new across 2 new files and `storage-database.test.ts`). E2E 36/36 (the app shows "schema v3"). Packaged E2E 14/14 (fresh `pnpm package` + `package:test`; the installed app shows "schema v3" across restarts). Mutation checks: removing the transaction makes the 4 rollback tests fail; removing the aborted-transaction guards makes 3 `withSavepoint` tests fail, including a real full-disk case (`PRAGMA max_page_count`). Reviews: invariant-reviewer found no violations; security-auditor found one latent Medium issue (autocommit after SQLite cancels a transaction), which is fixed, and three Lows (two fixed, one noted under Known limitations).
+- M1-2, 2026-11-13, local Windows 11, rebased on main @ cb0034f (with #32): typecheck, lint, format:check pass. Unit/integration 451/451. E2E 36/36. Packaged E2E 14/14 on a fresh `pnpm package` + `pnpm package:test`.
+  - Index: round-trip; corrupt JSON, wrong shapes, traversal IDs (`../evil`, `..\evil`, `C:\Windows`, `CON`, upper case, braces, trailing newline) all refused with the file kept byte for byte; a newer version reported as `newer_version`; no temp file left after a write or a refused write; stale temp cleanup touches only exact temp names; rename retry (simulated `EBUSY`/`EPERM`), give-up after 5 tries with the real error, no retry on `ENOSPC`.
+  - Startup: adoption keeps launch #2 after an M0 launch; fresh start creates a UUID folder plus index; failed first open writes no index; last-used (not first) profile opened; missing DB and a version-0 DB refused; lost index with a UUID profile, or with M0 + UUID, stops with nothing written; an M0 folder with only `backups/` is refused; invalid folder names and DB-less folders ignored.
+  - E2E: a fresh install writes an index with one UUID "Default", and both launches use it. Packaged blocked-switch tests now check that no profile data at all (index or folder) was written.
+  - Reviews: invariant-reviewer approved (no violations). security-auditor: no Critical/High; 1 Medium + 4 Low, all fixed in `fix(db)` (lost index, version-0 race, M0 folder without DB, Windows rename retry + cleanup error masking + stale temp files, newer-version wording).
+  - Not checked: the startup error dialogs themselves (no test opens the app with a broken index); `pnpm dev` by hand (nothing visible changed).
 - M1-5, 2026-11-13, local Windows 11, rebased on main @ be2ad19 (with #20): typecheck, lint, format:check pass. Unit/integration 314/314 after the review fixes (303 before them). E2E 36/36 (1 new: `template.list` returns `builtin.content-campaign@1.0.0` and `builtin.generic@1.0.0` from the built main process, and the preload exposes `template.list` only).
   - Schema tests: both bundled manifests validate. Malformed fixtures are refused: unknown keys, `workflows`/`agents`, unsafe IDs (`../x`, `a/b`, `Builtin.X`), bad versions (`1.0`, `01.0.0`, `1.0.0-beta`), duplicate keys or options, a `choice` without options, empty or over-long lists. The two templates' input field keys don't overlap.
   - Catalog tests: a bad manifest becomes `invalid_manifest` and the others still load. A folder that disagrees with its manifest becomes `location_mismatch`. Overflow beyond 100 is reported once. The output is sorted and deterministic.
@@ -264,6 +284,12 @@
 - CI: see the PR checks (first CI run with E2E on windows-latest).
 
 ## Known limitations
+- Profiles (M1-2):
+  - No way to create, rename, switch or delete profiles yet (M1-6, M1-8). `profile_settings` rows are not written yet (M1-6).
+  - A lost or damaged index stops the app; there is no in-app recovery or "rebuild index" yet (M7 restore work). The dialog tells the user the file was kept.
+  - If the very first DB open on a fresh install fails after `app.sqlite` was created, the next launch sees an un-indexed profile folder and stops with "profile list missing" rather than retrying. Only happens if a brand-new DB can't be migrated (a bug or a failing disk).
+  - The startup error dialogs are not covered by automated tests.
+  - `tests/e2e/support/profile-data.ts` repeats the profile ID pattern (Playwright tests can't import main-process code easily).
 - Worker (M0-6):
   - Only spike methods. No leases, persisted runs or orchestration yet (M4).
   - No crash-loop backoff: every request after a crash starts a new worker (security M2). Add backoff and a `failed` state before M4.
@@ -289,7 +315,7 @@
 - `node:sqlite` is a release candidate API (ADR-0010). It works in the packaged build (M0-7 E2E).
 - Packaged UI smoke tests run on the test-only variant, not the exact shipped bytes (one package.json field differs, ADR-0015). The shipped build gets the guard tests and the fuse readout. The switch guard is a deny-list: an unlisted dangerous switch would get through.
 - Switch-guard follow-ups from the security review (not done in #20): (1) an allowlist step over `process.argv` as a second layer. It reverses the deny-list decision, so it needs your call. (2) Decide "test build" at bundle time (Vite `define`) so the exception code isn't in the shipped bundle at all. (3) Refuse to start when `SSLKEYLOGFILE` is set, once provider keys exist (environment variables bypass `hasSwitch`). (4) No packaged negative test for a missing or malformed marker (unit tests only).
-- One unit-test run (M1-1) failed once with 1/224 and couldn't be reproduced in 4 reruns. Output lost; the test is unidentified. Watch CI for a repeat. On 2026-11-13 under heavy load (M1-5), the timing-sensitive M0 tests in `ipc-router.test.ts` (10 MB payload) and `worker-messaging.test.ts` (cancellation after 30 ms) failed intermittently. Likely candidates; a follow-up issue if CI shows it.
+- One unit-test run (M1-1) failed once with 1/224 and couldn't be reproduced in 4 reruns. Output lost; the test is unidentified. Watch CI for a repeat. On 2026-11-13 under heavy load (M1-5), the timing-sensitive M0 tests in `ipc-router.test.ts` (10 MB payload) and `worker-messaging.test.ts` (cancellation after 30 ms) failed intermittently. Likely candidates; a follow-up issue if CI shows it. On 2026-11-13 (merging main into #31), the E2E test `atlas.spec.ts` "selecting a graph node highlights the same entity in the Pixi world" failed once in a full run (a `toHaveAttribute` timeout), then passed 3/3 alone and in a full 36/36 rerun.
 - Templates (M1-5): metadata only. No `template.get` yet (summaries leave out help texts and limits), and nothing uses the templates until `project.create` (M1-7) and the create form (M1-10). User-installed templates will need a separate loader from disk with path confinement. Bundled ones are only checked at startup, so a broken bundled template shows as unavailable instead of failing the build (a JSON syntax error does fail the build).
 - Unsigned build: SmartScreen warns, and asar integrity only stops corruption and casual tampering. Without a signature, a local attacker can patch the hash in the `.exe` too. Code signing is a release decision (costs money).
 - Electron's default icon is still a placeholder (not in M0-8's acceptance criteria; follow-up). The `app-update.yml` that electron-builder generates is unused (no updater).
@@ -314,6 +340,8 @@
   - `graph_entities(id PK, kind, world_id FK, project_id?, ownership, source_locator?, tombstoned_at?, created_at, updated_at, revision)`, with FK `(project_id, world_id) → projects (id, world_id)`, partial unique indexes `graph_entities_one_per_world` / `graph_entities_one_per_project`, and the new unique index `projects_id_world(id, world_id)`.
   - Backfills existing worlds and projects. An existing v2 database is backed up before the upgrade.
 
+- `userData/profiles-index.json` (M1-2, not in SQLite): `{ schemaVersion: 1, profiles: [{ id, displayName }], lastUsedProfileId }`. Profile folders: `profiles/<default | uuid>/`.
+
 ## Decisions
 - ADR-0001 … ADR-0006 (stack defaults and approved Nov 6 product decisions)
 - [ADR-0007](../adr/0007-pnpm-via-corepack.md): pnpm via corepack
@@ -326,11 +354,12 @@
 - [ADR-0014](../adr/0014-local-profiles-storage-and-switching.md): local profiles: adopt the M0 `default` folder; switch in-process, then reload the window
 - [ADR-0015](../adr/0015-chromium-switch-guard-and-test-variant.md): Chromium switch guard as a named deny-list; packaged smoke tests use a test-only variant marked inside `app.asar`
 - [ADR-0016](../adr/0016-project-lifecycle-and-trash-restore.md): project lifecycle `active`/`archived`/`trashed`; restoring from trash returns to the prior state
-- [ADR-0018](../adr/0018-graph-entities-own-ids-written-by-repositories.md): graph entities have their own UUIDs and are written by the world and project repositories in the same transaction (nestable through `withSavepoint`). ADR-0017 is reserved by the #29 session.
+- [ADR-0017](../adr/0017-fresh-install-profile-gets-uuid.md): a fresh install's first profile "Default" gets a UUID; only adopted M0 installs keep the ID `default`
+- [ADR-0018](../adr/0018-graph-entities-own-ids-written-by-repositories.md): graph entities have their own UUIDs and are written by the world and project repositories in the same transaction (nestable through `withSavepoint`)
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- #20, #30 and #32 are merged; #31 (M1-4) is in review. #29 (M1-2, profiles index) is in progress in the main checkout. After both merge: `/start-task 33` (M1-6, profile + world commands; needs #29 and #30). M1-7 (#34) needs #30, #31, #32 and #33. M1-7 services can wrap repository calls in `withTransaction`; read entity IDs with `GraphEntityRepository.findByProject`/`findByWorld`.
-  - Suggested follow-up: fix the flaky `ipc-router.test.ts` "huge binary payload" test (warm up the schema before spying, or spy only on the router's own serialization). It is probably also the "unidentified flaky test" seen during #20 and the load-related failures seen during #32.
-  - Possible follow-ups: an app icon; removing `data:` from CSP `img-src` (needs your decision); the empty resource-timing list in the packaged test.
+- #20, #29, #30 and #32 are merged; #31 (M1-4) is in review. Next: `/start-task 33` (M1-6, profile + world commands; needs #29 and #30, both done). M1-8 (#35, profile switching) needs #33. M1-7 (#34) needs #30, #31, #32 and #33. M1-7 services can wrap repository calls in `withTransaction`; read entity IDs with `GraphEntityRepository.findByProject`/`findByWorld`.
+  - Suggested follow-up: fix the flaky `ipc-router.test.ts` "huge binary payload" test (warm up the schema before spying, or spy only on the router's own serialization). It is probably also the "unidentified flaky test" seen during #20 and the load-related failures seen during #32 and #31.
+  - Possible follow-ups: an app icon; removing `data:` from CSP `img-src` (needs your decision); the empty resource-timing list in the packaged test; an E2E test for the startup error dialogs.
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.
