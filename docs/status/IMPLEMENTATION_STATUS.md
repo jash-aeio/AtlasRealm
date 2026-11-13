@@ -373,6 +373,7 @@
 - [ADR-0016](../adr/0016-project-lifecycle-and-trash-restore.md): project lifecycle `active`/`archived`/`trashed`; restoring from trash returns to the prior state
 - [ADR-0017](../adr/0017-fresh-install-profile-gets-uuid.md): a fresh install's first profile "Default" gets a UUID; only adopted M0 installs keep the ID `default`
 - [ADR-0018](../adr/0018-graph-entities-own-ids-written-by-repositories.md): graph entities have their own UUIDs and are written by the world and project repositories in the same transaction (nestable through `withSavepoint`)
+- [ADR-0020](../adr/0020-project-command-contracts.md): project commands name `worldId` on every call; `project.list` uses an opaque keyset cursor (50/page, max 100); archive/trash use a labelled active-runs stub until M4 and refuse if runs are active; migration v4 lets `projects.template_id` hold namespaced IDs (`builtin.generic`)
 - [ADR-0019](../adr/0019-profile-and-world-command-contracts.md): IPC domain error codes (`not_found`, `revision_conflict`, …); `profile.rename` renames only the active profile; the settings row is created at startup; themes and avatar presets are fixed lists
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 

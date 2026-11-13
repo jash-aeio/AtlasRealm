@@ -207,6 +207,8 @@ Validate the sender, command schema, target ownership, policy, and expected revi
 
 Expected failures return stable domain codes (`not_found`, `already_exists`, `revision_conflict` with the current revision, `invalid_transition`, `limit_reached`) next to the router's own codes; an ID from another profile is reported as `not_found`. (Changed by ADR-0019.)
 
+Project commands name the world as well as the project; a project outside that world is `not_found`. `project.list` pages with an opaque keyset cursor (default 50, max 100). (Changed by ADR-0020.)
+
 ### 16.2 Event envelope
 
 ```ts
