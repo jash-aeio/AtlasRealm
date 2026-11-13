@@ -74,15 +74,27 @@ test('preload exposes only the explicit API', async () => {
     profile: Object.keys(window.atlas.profile),
     profileSettings: Object.keys(window.atlas.profile.settings),
     world: Object.keys(window.atlas.world),
+    project: Object.keys(window.atlas.project),
   }));
   expect(shape).toEqual({
-    top: ['app', 'runtime', 'template', 'profile', 'world'],
+    top: ['app', 'runtime', 'template', 'profile', 'world', 'project'],
     app: ['ping', 'launchInfo'],
     runtime: ['workerStatus', 'workerCheck'],
     template: ['list'],
     profile: ['list', 'create', 'rename', 'settings'],
     profileSettings: ['get', 'update'],
     world: ['create', 'list', 'rename'],
+    project: [
+      'create',
+      'get',
+      'list',
+      'rename',
+      'updateGoal',
+      'archive',
+      'restore',
+      'trash',
+      'restoreFromTrash',
+    ],
   });
 });
 
@@ -113,6 +125,57 @@ test('profile and world commands round-trip through the built main process', asy
     createdTheme: 'meadow',
     forgedCode: 'not_found',
     worldNames: expect.arrayContaining(['E2E world']) as string[],
+  });
+});
+
+test('project commands round-trip through the built main process with a bundled template', async () => {
+  const outcome = await page.evaluate(async () => {
+    const world = await window.atlas.world.create({ name: 'E2E projects' });
+    if (!world.ok) return { step: 'world', code: world.error.code };
+    const worldId = world.data.world.id;
+    const created = await window.atlas.project.create({
+      worldId,
+      templateId: 'builtin.generic',
+      templateVersion: '1.0.0',
+      name: 'E2E project',
+      goal: 'Prove the commands work',
+    });
+    if (!created.ok) return { step: 'create', code: created.error.code };
+    const { id: projectId, revision } = created.data.project;
+    const renamed = await window.atlas.project.rename({
+      worldId,
+      projectId,
+      expectedRevision: revision,
+      name: 'Renamed project',
+    });
+    if (!renamed.ok) return { step: 'rename', code: renamed.error.code };
+    const trashed = await window.atlas.project.trash({
+      worldId,
+      projectId,
+      expectedRevision: renamed.data.project.revision,
+    });
+    if (!trashed.ok) return { step: 'trash', code: trashed.error.code };
+    const fetched = await window.atlas.project.get({ worldId, projectId });
+    const active = await window.atlas.project.list({ worldId });
+    const inTrash = await window.atlas.project.list({ worldId, status: 'trashed' });
+    return {
+      step: 'done',
+      fetched: fetched.ok
+        ? { id: fetched.data.project.id === projectId, name: fetched.data.project.name }
+        : fetched.error.code,
+      status: fetched.ok ? fetched.data.project.status : null,
+      runCheck: trashed.data.runCheck,
+      activeCount: active.ok ? active.data.projects.length : -1,
+      trashNames: inTrash.ok ? inTrash.data.projects.map((p) => p.name) : [],
+    };
+  });
+  expect(outcome).toEqual({
+    step: 'done',
+    fetched: { id: true, name: 'Renamed project' },
+    status: 'trashed',
+    runCheck: 'stub',
+    activeCount: 0,
+    trashNames: ['Renamed project'],
   });
 });
 
