@@ -125,6 +125,7 @@
 
 ## Verification
 - M1-3, 2026-11-11/13, local Windows 11: typecheck, lint, format:check pass. Unit/integration 273/273 (80 new across 4 files). E2E 35/35. Packaged E2E 9/9 (fresh `pnpm package`; the installed app shows "schema v2" across restarts). All re-run on 2026-11-13 after the review fixes.
+  - After merging main (with #20): unit/integration 314/314, E2E 35/35, packaged E2E 14/14 (fresh `pnpm package` + `pnpm package:test`). typecheck, lint and format:check pass.
   - Migration: the frozen v1 fixture (`tests/fixtures/db/v1-app.sql`) upgrades to v2, keeps `app_meta` byte for byte, and leaves a v1 backup. A test keeps the fixture's table shapes equal to what migration 1 produces.
   - Raw-SQL constraint tests (no repository): FK refuses an unknown world and deleting a world with projects. CHECKs refuse padded, empty or 81-character names, a 2001-character goal, unknown statuses, status/timestamp mismatches, unsafe template IDs, a non-UUID project ID, and bad profile settings. An 80-character non-ASCII name fits.
   - Repositories: a stale revision gives `revision_conflict` with the current revision for rename, goal, archive and trash, and the row is unchanged. Rename keeps the ID. Archive/trash round-trips never change the row count. Archived-then-trashed restores to archived. A rollback in the caller's transaction undoes a repository update. Data survives closing and reopening the file.
