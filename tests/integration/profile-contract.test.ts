@@ -1,7 +1,7 @@
 // Contract tests for `profile.*` and `profile.settings.*` (M1-6 #33). Every call goes through
 // the real router (sender → schema → size → handler → output schema) against real profile
 // folders in a temp directory.
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -215,6 +215,57 @@ describe('profile.create', () => {
     await expect(create({ displayName: emoji.repeat(81) })).resolves.toMatchObject({
       ok: false,
       error: { code: 'invalid_payload' },
+    });
+  });
+});
+
+describe('profile.create review fixes (#33 security L1–L3)', () => {
+  it('never touches a folder that already exists for the new ID', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const clash = toProfileId('11111111-1111-4111-8111-111111111111');
+    const dir = profilePaths(userData, clash).profileDir;
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'keep.txt'), 'existing data');
+    const clashing = new ProfileService(
+      new ActiveProfile(userData, { profileId: opened.profileId, db: opened.db }),
+      () => new Date(),
+      () => clash,
+    );
+
+    await expect(clashing.create('Work')).rejects.toMatchObject({ code: 'EEXIST' });
+
+    expect(existsSync(join(dir, 'keep.txt'))).toBe(true);
+    expect(readIndex().profiles).toHaveLength(1);
+  });
+
+  it.each([
+    ['Arabic letter mark', 0x061c],
+    ['soft hyphen', 0x00ad],
+    ['word joiner', 0x2060],
+    ['invisible plus', 0x2064],
+    ['BOM', 0xfeff],
+    ['tag character', 0xe0041],
+  ])('rejects a name hiding a %s', async (_label, codePoint) => {
+    // Mid-name: trim() would remove a trailing BOM, leaving a clean name.
+    const name = `Wo${String.fromCodePoint(codePoint)}rk`;
+    await expect(create({ displayName: name })).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'invalid_payload' },
+    });
+  });
+
+  it('still allows zero-width joiners, which emoji sequences need', async () => {
+    const family = [0x1f469, 0x200d, 0x1f467].map((c) => String.fromCodePoint(c)).join('');
+    await expect(create({ displayName: `Team ${family}` })).resolves.toMatchObject({ ok: true });
+  });
+
+  it('treats differently encoded but identical-looking names as duplicates', async () => {
+    const composed = `Jos${String.fromCharCode(0xe9)}`; // é as one code point
+    const decomposed = `Jose${String.fromCharCode(0x301)}`; // e + combining acute accent
+    await expect(create({ displayName: composed })).resolves.toMatchObject({ ok: true });
+    await expect(create({ displayName: decomposed })).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'already_exists' },
     });
   });
 });

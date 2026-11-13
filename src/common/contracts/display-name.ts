@@ -7,8 +7,11 @@ import { z } from 'zod';
 export const DISPLAY_NAME_MAX_CHARS = 80;
 
 // Control characters, "Trojan Source" spoofing characters (zero-width space, bidi marks,
-// embeddings, overrides, isolates), line/paragraph separators and unpaired surrogates.
-const FORBIDDEN = /[\p{Cc}\u200B\u200E\u200F\u202A-\u202E\u2066-\u2069\p{Zl}\p{Zp}]/u;
+// embeddings, overrides, isolates), other invisible characters (soft hyphen, word joiner,
+// invisible operators, BOM, tag characters), line/paragraph separators and unpaired
+// surrogates. Zero-width (non-)joiners stay allowed: emoji and some scripts need them.
+const FORBIDDEN =
+  /[\p{Cc}\u200B\u200E\u200F\u202A-\u202E\u2066-\u2069\u061C\u00AD\u2060-\u2064\uFEFF\u{E0000}-\u{E007F}\p{Zl}\p{Zp}]/u;
 const LONE_SURROGATE = /[\uD800-\uDFFF]/u;
 
 /** Trimmed, 1–80 characters (code points, as SQLite counts them), one clean line. */

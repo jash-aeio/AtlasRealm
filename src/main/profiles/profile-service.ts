@@ -5,7 +5,8 @@
 // The display name is stored in both places: the index, so the picker can list profiles
 // without opening every database, and the settings row. Only the active profile can be
 // renamed, and both copies change together (ADR-0019).
-import { rm } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
+import { dirname } from 'node:path';
 
 import { MAX_PROFILES } from '../../common/contracts/profile';
 import { CommandError } from '../ipc/router';
@@ -62,8 +63,10 @@ export function ensureProfileSettings(
 }
 
 /** Names are not keys, but two profiles that look the same in the picker are confusing. */
+// NFC first: "é" can be one code point or "e" plus a combining accent, and both look the same.
 function sameName(a: string, b: string): boolean {
-  return a.toLocaleLowerCase('en') === b.toLocaleLowerCase('en');
+  const key = (name: string) => name.normalize('NFC').toLocaleLowerCase('en');
+  return key(a) === key(b);
 }
 
 function duplicateName(): CommandError {
@@ -113,6 +116,12 @@ export class ProfileService {
       const userDataDir = this.active.userDataDir;
       const profileId = this.newId();
       const entry: ProfileEntry = { id: profileId, displayName };
+      // Claim the folder first: a non-recursive mkdir fails with EEXIST if it is already there,
+      // before any cleanup is armed. So the cleanup below can only ever remove a folder this
+      // call created itself, never existing data (#33 security L1).
+      const { profileDir } = profilePaths(userDataDir, profileId);
+      await mkdir(dirname(profileDir), { recursive: true });
+      await mkdir(profileDir);
       try {
         const db = await createProfileDatabase(userDataDir, profileId);
         try {
@@ -126,8 +135,7 @@ export class ProfileService {
         }
         await writeProfilesIndex(userDataDir, { ...index, profiles: [...index.profiles, entry] });
       } catch (error) {
-        // Only the brand-new folder, never an existing one (the ID is fresh and validated).
-        await rm(profilePaths(userDataDir, profileId).profileDir, {
+        await rm(profileDir, {
           recursive: true,
           force: true,
         }).catch(() => undefined);

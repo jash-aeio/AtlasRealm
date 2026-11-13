@@ -52,9 +52,12 @@ export function charCount(value: string): number {
 const CONTROL_CHARS = /\p{Cc}/u;
 const CONTROL_CHARS_EXCEPT_LINE_BREAKS_AND_TABS = /(?![\t\n\r])\p{Cc}/u;
 // Invisible characters that can disguise text ("Trojan Source" spoofing): zero-width space,
-// left/right marks, bidi embeddings, overrides and isolates. Zero-width (non-)joiners stay
+// left/right marks, the Arabic letter mark, bidi embeddings, overrides and isolates, the soft
+// hyphen, word joiner and invisible operators, the BOM, and tag characters (which can hide text
+// a model would read, "ASCII smuggling"). Zero-width (non-)joiners stay
 // allowed: emoji sequences and scripts such as Persian need them.
-const SPOOFING_CHARS = /[\u200B\u200E\u200F\u202A-\u202E\u2066-\u2069]/u;
+const SPOOFING_CHARS =
+  /[\u200B\u200E\u200F\u202A-\u202E\u2066-\u2069\u061C\u00AD\u2060-\u2064\uFEFF\u{E0000}-\u{E007F}]/u;
 // Unicode line and paragraph separators: a "single line" name must not contain them.
 const LINE_SEPARATORS = /[\p{Zl}\p{Zp}]/u;
 // In a `u` regex, a surrogate range matches only *unpaired* halves. SQLite would silently
