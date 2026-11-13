@@ -19,6 +19,20 @@ const api: AtlasApi = {
   template: {
     list: () => ipcRenderer.invoke(Channels.templateList),
   },
+  profile: {
+    list: () => ipcRenderer.invoke(Channels.profileList),
+    create: (input) => ipcRenderer.invoke(Channels.profileCreate, input),
+    rename: (input) => ipcRenderer.invoke(Channels.profileRename, input),
+    settings: {
+      get: () => ipcRenderer.invoke(Channels.profileSettingsGet),
+      update: (input) => ipcRenderer.invoke(Channels.profileSettingsUpdate, input),
+    },
+  },
+  world: {
+    create: (input) => ipcRenderer.invoke(Channels.worldCreate, input),
+    list: (input) => ipcRenderer.invoke(Channels.worldList, input),
+    rename: (input) => ipcRenderer.invoke(Channels.worldRename, input),
+  },
 };
 
 contextBridge.exposeInMainWorld('atlas', api);

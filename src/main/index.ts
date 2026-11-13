@@ -15,6 +15,8 @@ import {
   rendererEntryUrl,
 } from './bootstrap/window';
 import { registerIpcHandlers } from './ipc/register';
+import { ActiveProfile } from './profiles/active-profile';
+import { ensureProfileSettings } from './profiles/profile-service';
 import { spawnUtilityWorker } from './runtime-bridge/utility-transport';
 import { WorkerBridge } from './runtime-bridge/worker-bridge';
 import { ProfileDataMissingError } from './storage/app-database';
@@ -37,12 +39,19 @@ function focusMainWindow(): void {
 async function start(): Promise<void> {
   await app.whenReady();
   let db: Database;
+  let activeProfile: ActiveProfile;
   try {
     // Picks the last-used profile from profiles-index.json (adopting the M0 folder or
     // creating "Default" on the first M1 launch), then opens and migrates its database.
     const opened = await openStartupProfile(app.getPath('userData'));
     db = opened.db;
     database = db;
+    // Every profile has a settings row before any command runs (ADR-0019).
+    ensureProfileSettings(db, opened.profileId, opened.displayName);
+    activeProfile = new ActiveProfile(app.getPath('userData'), {
+      profileId: opened.profileId,
+      db,
+    });
     console.info(
       `[storage] profile ${opened.profileId} (${opened.source}), ` +
         `schema v${String(opened.migration.toVersion)}, launch #${String(opened.launch.launchCount)}`,
@@ -78,7 +87,7 @@ async function start(): Promise<void> {
   console.info(
     `[templates] ${String(templates.available.length)} available, ${String(templates.unavailable.length)} unavailable`,
   );
-  registerIpcHandlers(entryUrl, db, worker, templates);
+  registerIpcHandlers(entryUrl, db, worker, templates, activeProfile);
   createMainWindow();
 }
 
