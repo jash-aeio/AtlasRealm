@@ -29,5 +29,10 @@ E2E tests find the database through the index (`tests/e2e/support/profile-data.t
 - M7's "restore into a fresh profile" gets a UUID too, so no special case is needed there.
 - Signals to revisit: if support or debugging becomes hard because folder names are unpredictable, add a "show data folder" action rather than going back to fixed names.
 
+## Addendum (2026-11-13): a missing index when profile data exists
+The security review of #29 pointed out a consequence of this decision: with UUID folders, "no index" no longer means "first launch". If `profiles-index.json` is lost but profile folders with databases remain, creating a new "Default" would hide them behind an empty profile.
+
+Asked via AskUserQuestion on 2026-11-13. Options: **stop and explain** (chosen, recommended) or rebuild the index automatically from the folders found. Startup now adopts `profiles/default/` only when it is the *only* profile database, creates a new profile only when there is *no* profile database, and otherwise stops with `ProfilesIndexMissingError` and a dialog. Nothing is written. Rebuilding the index belongs to the M7 recovery work.
+
 ## Learning note
 A fixed name like `default` is convenient but quietly becomes a special case everywhere. Giving every new profile the same kind of ID (a UUID) means code and tests can't depend on a magic folder name; they have to ask the index, which is the real source of truth.
