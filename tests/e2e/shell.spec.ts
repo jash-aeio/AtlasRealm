@@ -71,12 +71,48 @@ test('preload exposes only the explicit API', async () => {
     app: Object.keys(window.atlas.app),
     runtime: Object.keys(window.atlas.runtime),
     template: Object.keys(window.atlas.template),
+    profile: Object.keys(window.atlas.profile),
+    profileSettings: Object.keys(window.atlas.profile.settings),
+    world: Object.keys(window.atlas.world),
   }));
   expect(shape).toEqual({
-    top: ['app', 'runtime', 'template'],
+    top: ['app', 'runtime', 'template', 'profile', 'world'],
     app: ['ping', 'launchInfo'],
     runtime: ['workerStatus', 'workerCheck'],
     template: ['list'],
+    profile: ['list', 'create', 'rename', 'settings'],
+    profileSettings: ['get', 'update'],
+    world: ['create', 'list', 'rename'],
+  });
+});
+
+test('profile and world commands round-trip through the built main process', async () => {
+  const outcome = await page.evaluate(async () => {
+    const profiles = await window.atlas.profile.list();
+    const settings = await window.atlas.profile.settings.get();
+    const created = await window.atlas.world.create({ name: 'E2E world' });
+    const forged = await window.atlas.world.rename({
+      worldId: '00000000-0000-4000-8000-000000000000',
+      expectedRevision: 1,
+      name: 'Nope',
+    });
+    const worlds = await window.atlas.world.list();
+    return {
+      activeIsListed:
+        profiles.ok &&
+        profiles.data.profiles.some((p) => p.isActive && p.id === profiles.data.activeProfileId),
+      avatar: settings.ok ? settings.data.settings.avatarPreset : 'error',
+      createdTheme: created.ok ? created.data.world.themeId : created.error.code,
+      forgedCode: forged.ok ? 'accepted' : forged.error.code,
+      worldNames: worlds.ok ? worlds.data.worlds.map((w) => w.name) : [],
+    };
+  });
+  expect(outcome).toEqual({
+    activeIsListed: true,
+    avatar: null,
+    createdTheme: 'meadow',
+    forgedCode: 'not_found',
+    worldNames: expect.arrayContaining(['E2E world']) as string[],
   });
 });
 

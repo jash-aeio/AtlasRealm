@@ -3,8 +3,23 @@
 import type { LaunchInfoOutput } from './app-launch-info';
 import type { PingInput, PingOutput } from './app-ping';
 import type { IpcResult } from './ipc-result';
+import type {
+  ProfileCreateInput,
+  ProfileCreateOutput,
+  ProfileListOutput,
+  ProfileRenameInput,
+  ProfileSettingsOutput,
+  ProfileSettingsUpdateInput,
+} from './profile';
 import type { TemplateListOutput } from './project-template';
 import type { WorkerCheckInput, WorkerCheckOutput, WorkerStatusOutput } from './runtime-worker';
+import type {
+  WorldCreateInput,
+  WorldListInput,
+  WorldListOutput,
+  WorldOutput,
+  WorldRenameInput,
+} from './world';
 
 export interface AtlasApi {
   readonly app: {
@@ -18,5 +33,23 @@ export interface AtlasApi {
   };
   readonly template: {
     readonly list: () => Promise<IpcResult<TemplateListOutput>>;
+  };
+  /** Every profile command acts on the active profile (switching is M1-8). */
+  readonly profile: {
+    readonly list: () => Promise<IpcResult<ProfileListOutput>>;
+    readonly create: (input: ProfileCreateInput) => Promise<IpcResult<ProfileCreateOutput>>;
+    readonly rename: (input: ProfileRenameInput) => Promise<IpcResult<ProfileSettingsOutput>>;
+    readonly settings: {
+      readonly get: () => Promise<IpcResult<ProfileSettingsOutput>>;
+      readonly update: (
+        input: ProfileSettingsUpdateInput,
+      ) => Promise<IpcResult<ProfileSettingsOutput>>;
+    };
+  };
+  /** Worlds of the active profile. */
+  readonly world: {
+    readonly create: (input: WorldCreateInput) => Promise<IpcResult<WorldOutput>>;
+    readonly list: (input?: WorldListInput) => Promise<IpcResult<WorldListOutput>>;
+    readonly rename: (input: WorldRenameInput) => Promise<IpcResult<WorldOutput>>;
   };
 }
