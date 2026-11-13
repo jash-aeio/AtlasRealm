@@ -155,7 +155,7 @@ test('launches from a path with spaces and non-ASCII characters and keeps data a
   const first = await launchPackaged();
   try {
     await expect(first.page).toHaveTitle('Atlas Realm');
-    await expect(first.page.getByTestId('launch-info')).toHaveText(/^Launch #1 · .* · schema v1$/);
+    await expect(first.page.getByTestId('launch-info')).toHaveText(/^Launch #1 · .* · schema v2$/);
   } finally {
     expect(await quit(first)).toBe(0);
   }
@@ -163,7 +163,7 @@ test('launches from a path with spaces and non-ASCII characters and keeps data a
   // node:sqlite works in the packaged app: the second start reads what the first one stored.
   const second = await launchPackaged();
   try {
-    await expect(second.page.getByTestId('launch-info')).toHaveText(/^Launch #2 · .* · schema v1$/);
+    await expect(second.page.getByTestId('launch-info')).toHaveText(/^Launch #2 · .* · schema v2$/);
   } finally {
     expect(await quit(second)).toBe(0);
   }

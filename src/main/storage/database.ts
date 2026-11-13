@@ -6,6 +6,8 @@ import { dirname } from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
 
 export type Database = DatabaseSync;
+/** A value that can be bound to a statement parameter. */
+export type { SQLInputValue } from 'node:sqlite';
 
 /** How long a statement waits for a lock held by another connection before failing. */
 const BUSY_TIMEOUT_MS = 5_000;
