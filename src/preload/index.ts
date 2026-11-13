@@ -16,6 +16,9 @@ const api: AtlasApi = {
     workerStatus: () => ipcRenderer.invoke(Channels.runtimeWorkerStatus),
     workerCheck: (input) => ipcRenderer.invoke(Channels.runtimeWorkerCheck, input),
   },
+  template: {
+    list: () => ipcRenderer.invoke(Channels.templateList),
+  },
 };
 
 contextBridge.exposeInMainWorld('atlas', api);

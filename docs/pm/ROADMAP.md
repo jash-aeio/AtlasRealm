@@ -11,7 +11,7 @@
 |---|---|---|---|---|---|
 | **Setup** | Repo, docs, Claude Code config, GitHub workflow | — | ✅ Done | — | — |
 | **M0** | Foundation and risk spikes: packaged Electron app with SQLite, IPC, Pixi, React Flow | Setup | ✅ Done | 9/9 (#20 moved to M1) | [v0.1.0-m0](https://github.com/jash-aeio/AtlasRealm/releases/tag/v0.1.0-m0) |
-| **M1** | Profiles, worlds, project persistence (list UI, no canvas) | M0 | 🚧 In progress | 1/11 (#20 done; #30 in review; #29, #31–#38 open) | — |
+| **M1** | Profiles, worlds, project persistence (list UI, no canvas) | M0 | 🚧 In progress | 2/11 (#20, #30 done; #32 in review; #29, #31, #33–#38 open) | — |
 | **M2** | Isometric world, placement, hotbar, library, Atlas shell | M1 | 📋 Backlog | — | — |
 | **M3** | Bundled resources, permission broker, artifacts, import commit | M1 (∥ M2) | 📋 Backlog | — | — |
 | **M4** | Durable runtime, mock + Ollama + Anthropic adapter | M3 | 📋 Backlog | — | — |
@@ -32,4 +32,4 @@ Recorded so the reasons stay visible:
 4. Each milestone is broken into ½–1 day issues **when it starts** (`/plan-milestone`), not all up front. This is just-in-time planning, because later plans improve with what earlier milestones teach.
 
 ## Current milestone detail
-[milestones/M1.md](milestones/M1.md): 11 issues, critical path M1-1 (#20) → M1-2 → M1-6 → M1-7 → M1-10 → M1-11. Ready now: #20, #30, #32. Previous: [milestones/M0.md](milestones/M0.md) (closed).
+[milestones/M1.md](milestones/M1.md): 11 issues, critical path M1-1 (#20) → M1-2 → M1-6 → M1-7 → M1-10 → M1-11. Done: #20, #30. In review: #32 (PR #42). Ready next: #31, then #29 after #32 merges. Previous: [milestones/M0.md](milestones/M0.md) (closed).

@@ -17,6 +17,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 011 | [Sprites, pivots and an asset manifest](lessons/011-sprites-pivots-and-an-asset-manifest.md) | M0 | sprite, footprint, ground pivot, asset manifest, digest, nearest-neighbour sampling, placeholder art, Zod JIT/jitless |
 | 012 | [Optimistic concurrency and soft delete](lessons/012-optimistic-concurrency-and-soft-delete.md) | M1 | revision, expected revision, lost update, optimistic concurrency, soft delete, CHECK constraint, STRICT table, RETURNING |
 | 013 | [Command-line switches, deny-lists and build-time markers](lessons/013-command-line-switches-and-build-markers.md) | M1 | Chromium switch, deny-list vs allowlist, same-parser rule, build-time marker, positive control |
+| 014 | [Validated manifests, discriminated unions and graceful degradation](lessons/014-validated-manifests-and-graceful-degradation.md) | M1 | manifest, strict schema, discriminated union, build-time import, graceful degradation, invisible format characters |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map

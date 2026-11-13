@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "kind": "project-template",
+  "id": "builtin.content-campaign",
+  "version": "1.0.0",
+  "name": "Content Campaign",
+  "description": "Plan a content campaign: a brief, a content calendar and draft posts for the channels and dates you choose.",
+  "publisher": "Atlas Realm",
+  "source": { "type": "bundled" },
+  "metadataOnly": true,
+  "metadataOnlyNote": "Template metadata only: this version records inputs and planned outputs. Workflows, agents and quality checks arrive in later milestones (M3/M4).",
+  "inputFields": [
+    {
+      "key": "organizationDescription",
+      "label": "Organization or product",
+      "help": "Who or what the campaign is about.",
+      "required": true,
+      "type": "longText",
+      "maxLength": 5000
+    },
+    {
+      "key": "audience",
+      "label": "Audience",
+      "help": "Who the posts are for.",
+      "required": true,
+      "type": "text",
+      "maxLength": 300
+    },
+    {
+      "key": "objective",
+      "label": "Objective",
+      "help": "What the campaign should achieve, e.g. sign-ups for an event.",
+      "required": true,
+      "type": "text",
+      "maxLength": 300
+    },
+    {
+      "key": "tone",
+      "label": "Tone",
+      "required": true,
+      "type": "choice",
+      "options": [
+        { "value": "friendly", "label": "Friendly" },
+        { "value": "professional", "label": "Professional" },
+        { "value": "playful", "label": "Playful" },
+        { "value": "informative", "label": "Informative" }
+      ]
+    },
+    {
+      "key": "channels",
+      "label": "Channels",
+      "help": "Where the posts would appear. Atlas Realm drafts posts. It never publishes them.",
+      "required": true,
+      "type": "multiChoice",
+      "options": [
+        { "value": "social-media", "label": "Social media" },
+        { "value": "email", "label": "Email newsletter" },
+        { "value": "blog", "label": "Blog" },
+        { "value": "website", "label": "Website" },
+        { "value": "print", "label": "Print" }
+      ]
+    },
+    {
+      "key": "campaignDates",
+      "label": "Campaign dates",
+      "required": true,
+      "type": "dateRange"
+    },
+    {
+      "key": "contentConstraints",
+      "label": "Content constraints",
+      "help": "Words to avoid, required disclaimers, length limits and similar rules.",
+      "required": false,
+      "type": "longText",
+      "maxLength": 5000
+    },
+    {
+      "key": "sourceMaterials",
+      "label": "Source materials",
+      "help": "Files that claims in the posts may rely on.",
+      "required": false,
+      "type": "fileReferences",
+      "maxFiles": 30
+    }
+  ],
+  "artifactTypes": [
+    {
+      "id": "campaign-brief",
+      "name": "Campaign brief",
+      "format": "markdown",
+      "description": "Audience, objective, tone and key messages."
+    },
+    {
+      "id": "content-calendar",
+      "name": "Content calendar",
+      "format": "csv",
+      "description": "One row per planned post: date, channel and topic."
+    },
+    {
+      "id": "post-drafts",
+      "name": "Post drafts",
+      "format": "text",
+      "description": "Draft text for each planned post, for your review."
+    }
+  ],
+  "offlineLimitations": [
+    "No live trend research: it uses only the source materials you supply.",
+    "No image generation. Posts are text only.",
+    "It never publishes or schedules posts. You publish them yourself."
+  ]
+}
