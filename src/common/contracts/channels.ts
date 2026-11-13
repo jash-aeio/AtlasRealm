@@ -10,6 +10,9 @@ export const Channels = {
   profileRename: 'profile.rename',
   profileSettingsGet: 'profile.settings.get',
   profileSettingsUpdate: 'profile.settings.update',
+  worldCreate: 'world.create',
+  worldList: 'world.list',
+  worldRename: 'world.rename',
 } as const;
 
 export type Channel = (typeof Channels)[keyof typeof Channels];

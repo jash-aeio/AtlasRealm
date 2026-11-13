@@ -28,6 +28,14 @@ import {
   profileSettingsGetCommand,
   profileSettingsUpdateCommand,
 } from './commands/profile';
+import {
+  createWorldCreateHandler,
+  createWorldListHandler,
+  createWorldRenameHandler,
+  worldCreateCommand,
+  worldListCommand,
+  worldRenameCommand,
+} from './commands/world';
 import { createCommandHandler, trustRendererEntry } from './router';
 
 export function registerIpcHandlers(
@@ -104,6 +112,26 @@ export function registerIpcHandlers(
     createCommandHandler(
       profileSettingsUpdateCommand,
       createProfileSettingsUpdateHandler(profiles),
+      isTrustedSender,
+    ),
+  );
+  ipcMain.handle(
+    worldCreateCommand.channel,
+    createCommandHandler(
+      worldCreateCommand,
+      createWorldCreateHandler(activeProfile),
+      isTrustedSender,
+    ),
+  );
+  ipcMain.handle(
+    worldListCommand.channel,
+    createCommandHandler(worldListCommand, createWorldListHandler(activeProfile), isTrustedSender),
+  );
+  ipcMain.handle(
+    worldRenameCommand.channel,
+    createCommandHandler(
+      worldRenameCommand,
+      createWorldRenameHandler(activeProfile),
       isTrustedSender,
     ),
   );
