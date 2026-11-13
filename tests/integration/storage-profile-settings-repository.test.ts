@@ -102,8 +102,22 @@ describe('ProfileSettingsRepository', () => {
 
   it('refuses preferences that are not a bounded JSON object', () => {
     const tooBig = { blob: 'x'.repeat(16_400) };
-    const bad = [tooBig, [1, 2], null] as unknown as ProfilePreferences[];
-    for (const preferences of bad.slice(0, 2)) {
+    const circular: Record<string, unknown> = { name: 'loop' };
+    circular['self'] = circular;
+    let deep: Record<string, unknown> = {};
+    for (let i = 0; i < 40; i += 1) deep = { a: deep }; // under the size limit, too deep
+    const bad = [
+      tooBig,
+      [1, 2],
+      circular,
+      deep,
+      { when: new Date(0) }, // JSON.stringify would silently turn it into a string
+      { map: new Map([['a', 1]]) }, // ...and this into {}
+      { big: 1n },
+      { notANumber: Number.NaN },
+      null,
+    ] as unknown as ProfilePreferences[];
+    for (const preferences of bad.slice(0, -1)) {
       expect(
         codeOf(() =>
           settings.create({
@@ -120,6 +134,27 @@ describe('ProfileSettingsRepository', () => {
       expect(codeOf(() => settings.update('default', 1, { preferences }))).toBe('invalid_input');
     }
     expect(settings.get('default')).toMatchObject({ preferences: {}, revision: 1 });
+  });
+
+  it('accepts nested preferences up to the depth limit', () => {
+    let nested: Record<string, unknown> = { reducedMotion: true };
+    // The top-level object is level 1, so this makes exactly 32 levels of objects.
+    for (let i = 0; i < 30; i += 1) nested = { a: nested };
+    expect(
+      settings.create({
+        profileId: 'default',
+        displayName: 'Ada',
+        timezone: 'UTC',
+        preferences: { list: [1, 'two', null, false], nested },
+      }).preferences,
+    ).toMatchObject({ list: [1, 'two', null, false] });
+  });
+
+  it('stores timezones in their canonical spelling', () => {
+    expect(
+      settings.create({ profileId: 'default', displayName: 'Ada', timezone: 'europe/amsterdam' })
+        .timezone,
+    ).toBe('Europe/Amsterdam');
   });
 
   it('accepts IANA IDs that contain offsets, such as Etc/GMT+2', () => {

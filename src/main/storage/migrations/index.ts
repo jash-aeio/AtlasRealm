@@ -25,6 +25,8 @@ const m0001AppMeta: Migration = {
 //   - length() counts characters (code points) for TEXT. The same limits live in
 //     repositories/repository-support.ts, which checks them first with clearer errors.
 //   - `x NOT GLOB '*[^a-z0-9-]*'` means "x contains no character outside a-z, 0-9 and -".
+//   - UUID columns GLOB the exact 8-4-4-4-12 lowercase hex shape.
+//   - length() stops at a NUL character, so text columns also require instr(x, char(0)) = 0.
 const m0002ProfileWorldsProjects: Migration = {
   version: 2,
   name: 'create_profile_settings_worlds_projects',
@@ -34,9 +36,9 @@ const m0002ProfileWorldsProjects: Migration = {
     CREATE TABLE profile_settings (
       profile_id       TEXT    PRIMARY KEY CHECK (
                          profile_id = 'default' OR
-                         (length(profile_id) = 36 AND profile_id NOT GLOB '*[^0-9a-f-]*')),
+                         profile_id GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
       display_name     TEXT    NOT NULL CHECK (
-                         length(display_name) BETWEEN 1 AND 80 AND
+                         length(display_name) BETWEEN 1 AND 80 AND instr(display_name, char(0)) = 0 AND
                          display_name = trim(display_name, char(9, 10, 13, 32))),
       avatar_preset    TEXT    CHECK (                 -- NULL: avatar step skipped
                          avatar_preset IS NULL OR
@@ -46,7 +48,9 @@ const m0002ProfileWorldsProjects: Migration = {
                          avatar_colour IS NULL OR
                          (length(avatar_colour) = 7 AND
                           avatar_colour GLOB '#[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]')),
-      timezone         TEXT    NOT NULL CHECK (length(timezone) BETWEEN 1 AND 64),  -- IANA ID
+      timezone         TEXT    NOT NULL CHECK (    -- IANA ID, e.g. Europe/Amsterdam
+                         length(timezone) BETWEEN 1 AND 64 AND timezone GLOB '[A-Za-z]*' AND
+                         timezone NOT GLOB '*[^A-Za-z0-9_+/-]*' AND instr(timezone, '..') = 0),
       preferences_json TEXT    NOT NULL DEFAULT '{}' CHECK (
                          length(preferences_json) <= 16384 AND
                          json_valid(preferences_json) AND
@@ -57,9 +61,11 @@ const m0002ProfileWorldsProjects: Migration = {
     ) STRICT;
 
     CREATE TABLE worlds (
-      id          TEXT    PRIMARY KEY CHECK (length(id) = 36 AND id NOT GLOB '*[^0-9a-f-]*'),
+      id          TEXT    PRIMARY KEY CHECK (
+                    id GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
       name        TEXT    NOT NULL CHECK (
-                    length(name) BETWEEN 1 AND 80 AND name = trim(name, char(9, 10, 13, 32))),
+                    length(name) BETWEEN 1 AND 80 AND instr(name, char(0)) = 0 AND
+                    name = trim(name, char(9, 10, 13, 32))),
       theme_id    TEXT    NOT NULL CHECK (
                     length(theme_id) BETWEEN 1 AND 64 AND theme_id NOT GLOB '*[^a-z0-9-]*'),
       grid_width  INTEGER NOT NULL DEFAULT 64 CHECK (grid_width BETWEEN 16 AND 256),
@@ -74,12 +80,15 @@ const m0002ProfileWorldsProjects: Migration = {
     -- are not deleted in M1: archive and trash are status + timestamp changes (PRD §5.6).
     -- A world with projects can't be deleted (RESTRICT), so no project is ever orphaned.
     CREATE TABLE projects (
-      id               TEXT    PRIMARY KEY CHECK (length(id) = 36 AND id NOT GLOB '*[^0-9a-f-]*'),
+      id               TEXT    PRIMARY KEY CHECK (
+                    id GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
       world_id         TEXT    NOT NULL REFERENCES worlds (id) ON DELETE RESTRICT,
       name             TEXT    NOT NULL CHECK (
-                         length(name) BETWEEN 1 AND 80 AND name = trim(name, char(9, 10, 13, 32))),
+                         length(name) BETWEEN 1 AND 80 AND instr(name, char(0)) = 0 AND
+                    name = trim(name, char(9, 10, 13, 32))),
       goal             TEXT    NOT NULL DEFAULT '' CHECK (
-                         length(goal) <= 2000 AND goal = trim(goal, char(9, 10, 13, 32))),
+                         length(goal) <= 2000 AND instr(goal, char(0)) = 0 AND
+                         goal = trim(goal, char(9, 10, 13, 32))),
       template_id      TEXT    NOT NULL CHECK (
                          length(template_id) BETWEEN 1 AND 64 AND
                          template_id NOT GLOB '*[^a-z0-9-]*'),

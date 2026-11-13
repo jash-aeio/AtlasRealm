@@ -188,6 +188,9 @@ describe('schema v2 constraints (raw SQL, no repository)', () => {
     ['an upper-case template ID', { template_id: 'Generic' }],
     ['a template ID with a path', { template_id: '../generic' }],
     ['a project ID that is not a UUID', { id: 'my-project' }],
+    ['a project ID of 36 dashes', { id: '-'.repeat(36) }],
+    ['a name hiding text after a NUL', { name: `A${String.fromCodePoint(0)}${'x'.repeat(500)}` }],
+    ['a goal hiding text after a NUL', { goal: `A${String.fromCodePoint(0)}${'x'.repeat(3000)}` }],
   ])('refuses %s', (_label, overrides) => {
     expect(() => {
       insertProject(overrides);
@@ -210,6 +213,19 @@ describe('schema v2 constraints (raw SQL, no repository)', () => {
     expect(() => {
       insert('../evil', '{}', null);
     }).toThrow(/CHECK/);
+    expect(() => {
+      insert('-'.repeat(36), '{}', null);
+    }).toThrow(/CHECK/);
+    for (const timezone of ['../../etc', '+02:00', '']) {
+      expect(() =>
+        db
+          .prepare(
+            `INSERT INTO profile_settings (profile_id, display_name, timezone, created_at, updated_at)
+             VALUES ('default', 'Ada', ?, ?, ?)`,
+          )
+          .run(timezone, T, T),
+      ).toThrow(/CHECK/);
+    }
     expect(() => {
       insert('default', '[1, 2]', null);
     }).toThrow(/CHECK/);

@@ -5,7 +5,7 @@
 import type { Database, SQLInputValue } from '../database';
 import {
   assertSlug,
-  assertTimezone,
+  canonicalTimezone,
   charCount,
   guardedUpdate,
   integer,
@@ -72,10 +72,38 @@ function avatarColour(value: string | null): string | null {
   return value;
 }
 
+/** Deeper than this is refused (SQLite's own JSON limit is 1000, which gives a raw error). */
+const PREFERENCES_MAX_DEPTH = 32;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) return false;
+  const prototype: unknown = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+/**
+ * True if `value` is plain JSON data (null, boolean, finite number, string, array, plain
+ * object) no deeper than `depthLeft`. Anything else (Date, Map, BigInt, undefined, NaN, a
+ * class instance) would be silently changed or refused by JSON.stringify, so it is refused
+ * here instead. The depth cap also stops circular references.
+ */
+function isJsonData(value: unknown, depthLeft: number): boolean {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (depthLeft === 0) return false;
+  if (Array.isArray(value)) return value.every((item) => isJsonData(item, depthLeft - 1));
+  if (!isPlainObject(value)) return false;
+  return Object.values(value).every((item) => isJsonData(item, depthLeft - 1));
+}
+
 function preferencesJson(value: ProfilePreferences): string {
-  // Checked at run time too: callers may pass parsed JSON that doesn't match the type.
-  if (typeof value !== 'object' || (value as unknown) === null || Array.isArray(value)) {
-    throw new RepositoryError('invalid_input', 'Preferences must be a JSON object.');
+  // Checked at run time too: callers may pass values that don't match the type.
+  if (!isPlainObject(value) || !isJsonData(value, PREFERENCES_MAX_DEPTH)) {
+    throw new RepositoryError(
+      'invalid_input',
+      `Preferences must be a JSON object of plain data, nested at most ` +
+        `${String(PREFERENCES_MAX_DEPTH)} levels.`,
+    );
   }
   const json = JSON.stringify(value);
   if (charCount(json) > LIMITS.preferencesMaxChars) {
@@ -114,22 +142,24 @@ export class ProfileSettingsRepository {
       normalizeName(input.displayName, 'Display name'),
       avatarPreset(input.avatarPreset ?? null),
       avatarColour(input.avatarColour ?? null),
-      assertTimezone(input.timezone),
+      canonicalTimezone(input.timezone),
       preferencesJson(input.preferences ?? {}),
     ];
-    if (this.get(profileId) !== undefined) {
-      throw new RepositoryError('already_exists', 'Settings for this profile already exist.');
-    }
     const at = this.now().toISOString();
+    // One statement, so no other connection can slip a row in between a check and the insert:
+    // an existing row means nothing is inserted and nothing is returned.
     const row = this.db
       .prepare(
         `INSERT INTO profile_settings (profile_id, display_name, avatar_preset, avatar_colour,
                                        timezone, preferences_json, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (profile_id) DO NOTHING
          RETURNING *`,
       )
       .get(...values, at, at);
-    if (row === undefined) throw new Error('INSERT … RETURNING returned no row.');
+    if (row === undefined) {
+      throw new RepositoryError('already_exists', 'Settings for this profile already exist.');
+    }
     return toProfileSettings(row);
   }
 
@@ -157,7 +187,7 @@ export class ProfileSettingsRepository {
     }
     if (patch.avatarPreset !== undefined) assign('avatar_preset', avatarPreset(patch.avatarPreset));
     if (patch.avatarColour !== undefined) assign('avatar_colour', avatarColour(patch.avatarColour));
-    if (patch.timezone !== undefined) assign('timezone', assertTimezone(patch.timezone));
+    if (patch.timezone !== undefined) assign('timezone', canonicalTimezone(patch.timezone));
     if (patch.preferences !== undefined) {
       assign('preferences_json', preferencesJson(patch.preferences));
     }

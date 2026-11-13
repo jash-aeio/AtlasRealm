@@ -121,7 +121,12 @@ describe('create and read', () => {
   it.each([
     ['an empty name', { name: '   ' }],
     ['an 81-character name', { name: 'x'.repeat(81) }],
-    ['a name with a NUL byte', { name: 'ok\u0000hidden' }],
+    ['a name with a NUL byte', { name: `ok${String.fromCodePoint(0)}hidden` }],
+    ['a name with a bidi override', { name: `invoice${String.fromCodePoint(0x202e)}fdp.exe` }],
+    ['a name with a zero-width space', { name: `Launch${String.fromCodePoint(0x200b)}plan` }],
+    ['a name with a line separator', { name: `Launch${String.fromCodePoint(0x2028)}plan` }],
+    ['a name with a lone surrogate', { name: `A${String.fromCharCode(0xd800)}B` }],
+    ['a goal with a bidi isolate', { goal: `Ship ${String.fromCodePoint(0x2066)}it` }],
     ['a 2001-character goal', { goal: 'x'.repeat(2001) }],
     ['an unsafe template ID', { templateId: '../generic' }],
     ['a non-semver template version', { templateVersion: 'latest' }],
@@ -138,6 +143,11 @@ describe('create and read', () => {
       'invalid_input',
     );
     expect(rowCount()).toBe(0);
+  });
+
+  it('keeps joiners that emoji sequences and scripts need', () => {
+    const family = ['👩', '👩', '👧'].join(String.fromCodePoint(0x200d)); // zero-width joiner
+    expect(newProject(`Family ${family}`).name).toBe(`Family ${family}`);
   });
 
   it('counts an emoji-heavy name in characters, like SQLite does', () => {
