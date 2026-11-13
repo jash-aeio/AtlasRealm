@@ -17,8 +17,10 @@ import {
 import { registerIpcHandlers } from './ipc/register';
 import { spawnUtilityWorker } from './runtime-bridge/utility-transport';
 import { WorkerBridge } from './runtime-bridge/worker-bridge';
-import { openAppDatabase } from './storage/app-database';
+import { ProfileDataMissingError } from './storage/app-database';
 import type { Database } from './storage/database';
+import { ProfilesIndexCorruptError } from './storage/profiles/profiles-index';
+import { openStartupProfile, ProfilesIndexMissingError } from './storage/profiles/startup';
 import { loadBundledTemplateCatalog } from './templates/bundled-templates';
 
 let database: Database | undefined;
@@ -36,24 +38,24 @@ async function start(): Promise<void> {
   await app.whenReady();
   let db: Database;
   try {
-    const opened = await openAppDatabase(app.getPath('userData'));
+    // Picks the last-used profile from profiles-index.json (adopting the M0 folder or
+    // creating "Default" on the first M1 launch), then opens and migrates its database.
+    const opened = await openStartupProfile(app.getPath('userData'));
     db = opened.db;
     database = db;
     console.info(
-      `[storage] schema v${String(opened.migration.toVersion)}, launch #${String(opened.launch.launchCount)}`,
+      `[storage] profile ${opened.profileId} (${opened.source}), ` +
+        `schema v${String(opened.migration.toVersion)}, launch #${String(opened.launch.launchCount)}`,
     );
   } catch (error) {
-    // No silent fallback to an empty database: that would look like lost data. Any
-    // pre-migration backup stays in the profile's backups/ folder (OFFLINE_AND_RECOVERY §19).
-    // The dialog shows a fixed message plus the error kind: raw messages can contain file
-    // paths (and so the Windows user name). Full details go to the local log only.
-    console.error('[storage] could not open the database', error);
-    const kind = error instanceof Error ? error.name : 'UnknownError';
-    dialog.showErrorBox(
-      'Atlas Realm could not open its data',
-      `The database could not be opened or upgraded (${kind}).\n\n` +
-        'No data was deleted. The app will now close.',
-    );
+    // No silent fallback to an empty database or a fresh profile list: either would look like
+    // lost data. Any pre-migration backup stays in the profile's backups/ folder, and a corrupt
+    // index stays where it is (OFFLINE_AND_RECOVERY §19). The dialog shows a fixed message plus
+    // the error kind: raw messages can contain file paths (and so the Windows user name). Full
+    // details go to the local log only.
+    console.error('[storage] could not open the profile', error);
+    const { title, body } = startupFailureMessage(error);
+    dialog.showErrorBox(title, `${body}\n\nNo data was deleted. The app will now close.`);
     app.quit();
     return;
   }
@@ -78,6 +80,42 @@ async function start(): Promise<void> {
   );
   registerIpcHandlers(entryUrl, db, worker, templates);
   createMainWindow();
+}
+
+/** Fixed, path-free wording for each startup failure the user can do something about. */
+function startupFailureMessage(error: unknown): { title: string; body: string } {
+  if (error instanceof ProfilesIndexCorruptError) {
+    const problem =
+      error.reason === 'newer_version'
+        ? 'was written by a newer version of Atlas Realm'
+        : `is damaged (${error.reason})`;
+    return {
+      title: 'Atlas Realm could not read its profile list',
+      body:
+        `The file profiles-index.json in the app's data folder ${problem}. ` +
+        'It was left exactly as it is, so it can be inspected or restored.',
+    };
+  }
+  if (error instanceof ProfilesIndexMissingError) {
+    return {
+      title: 'Atlas Realm could not find its profile list',
+      body:
+        "The file profiles-index.json is missing from the app's data folder, but profile " +
+        'data is still there. No new profile was created, so your existing profiles stay ' +
+        'hidden only until the file is restored.',
+    };
+  }
+  if (error instanceof ProfileDataMissingError) {
+    return {
+      title: 'Atlas Realm could not find profile data',
+      body: "The profile's database file is missing from the app's data folder.",
+    };
+  }
+  const kind = error instanceof Error ? error.name : 'UnknownError';
+  return {
+    title: 'Atlas Realm could not open its data',
+    body: `The database could not be opened or upgraded (${kind}).`,
+  };
 }
 
 /** Reads the test-variant marker from the packaged package.json. Any failure means "not a test build". */

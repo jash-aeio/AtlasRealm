@@ -5,9 +5,16 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { openAppDatabase, profilePaths } from '../../src/main/storage/app-database';
+import {
+  InvalidProfileIdError,
+  LEGACY_PROFILE_ID,
+  type ProfileId,
+  toProfileId,
+} from '../../src/main/storage/profiles/profile-id';
 import { openDatabase } from '../../src/main/storage/database';
 import { DatabaseNewerThanAppError, readSchemaVersion } from '../../src/main/storage/migrate';
 
+const PROFILE = toProfileId(LEGACY_PROFILE_ID);
 let userData: string;
 
 beforeEach(() => {
@@ -20,19 +27,24 @@ afterEach(() => {
 
 describe('profilePaths', () => {
   it('follows the DATA_MODEL §9.1 layout under userData', () => {
-    expect(profilePaths(userData)).toEqual({
+    expect(profilePaths(userData, PROFILE)).toEqual({
       profileDir: join(userData, 'profiles', 'default'),
       databaseFile: join(userData, 'profiles', 'default', 'app.sqlite'),
       backupDir: join(userData, 'profiles', 'default', 'backups'),
     });
   });
+
+  it('re-checks the ID at runtime, even if the type was forced', () => {
+    const forged = '..\\..\\Windows' as ProfileId;
+    expect(() => profilePaths(userData, forged)).toThrow(InvalidProfileIdError);
+  });
 });
 
 describe('openAppDatabase', () => {
   it('creates, migrates and records the first launch', async () => {
-    const opened = await openAppDatabase(userData);
+    const opened = await openAppDatabase(userData, PROFILE);
     try {
-      expect(existsSync(profilePaths(userData).databaseFile)).toBe(true);
+      expect(existsSync(profilePaths(userData, PROFILE).databaseFile)).toBe(true);
       expect(opened.migration.applied.length).toBeGreaterThan(0);
       expect(opened.launch.launchCount).toBe(1);
     } finally {
@@ -41,13 +53,15 @@ describe('openAppDatabase', () => {
   });
 
   it('refuses a database from a newer app version and leaves it untouched', async () => {
-    const future = openDatabase(profilePaths(userData).databaseFile);
+    const future = openDatabase(profilePaths(userData, PROFILE).databaseFile);
     future.exec('PRAGMA user_version = 999;');
     future.close();
 
-    await expect(openAppDatabase(userData)).rejects.toBeInstanceOf(DatabaseNewerThanAppError);
+    await expect(openAppDatabase(userData, PROFILE)).rejects.toBeInstanceOf(
+      DatabaseNewerThanAppError,
+    );
 
-    const check = openDatabase(profilePaths(userData).databaseFile);
+    const check = openDatabase(profilePaths(userData, PROFILE).databaseFile);
     try {
       expect(readSchemaVersion(check)).toBe(999);
     } finally {

@@ -17,6 +17,12 @@ import { join, resolve } from 'node:path';
 
 import { type Browser, chromium, expect, type Page, test } from '@playwright/test';
 
+import {
+  hasProfileData,
+  lastUsedDatabaseFile,
+  requireDatabaseFile,
+} from '../e2e/support/profile-data';
+
 // Smoke tests for the packaged app (#10, TEST_PLAN §22.2 #24). They copy release/win-unpacked
 // to a folder whose path has spaces and non-ASCII characters and run the real .exe from there.
 //
@@ -167,7 +173,7 @@ test('launches from a path with spaces and non-ASCII characters and keeps data a
   } finally {
     expect(await quit(second)).toBe(0);
   }
-  expect(existsSync(join(userDataDir, 'profiles', 'default', 'app.sqlite'))).toBe(true);
+  expect(existsSync(requireDatabaseFile(userDataDir))).toBe(true);
 });
 
 test('loads the UI and its bundled assets only from app://atlas (works offline)', async () => {
@@ -335,13 +341,19 @@ async function watchPortUntilExit(
   return { exit: await exit, portEverAnswered };
 }
 
-const dbFile = (userData: string): string => join(userData, 'profiles', 'default', 'app.sqlite');
-
 test('positive control: the shipped build starts normally without blocked switches', async () => {
   const started = startExe([]);
   try {
     // It opens its database (so it got past the guard and the lock) and keeps running.
-    await expect.poll(() => existsSync(dbFile(started.userData)), { timeout: 30_000 }).toBe(true);
+    await expect
+      .poll(
+        () => {
+          const file = lastUsedDatabaseFile(started.userData);
+          return file !== undefined && existsSync(file);
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true);
     expect(await exitOrTimeout(started.child, 1_000)).toBe('still running');
     expect(started.output()).not.toContain('[security]');
   } finally {
@@ -368,7 +380,7 @@ test('the shipped build quits on --remote-debugging-port before opening the port
         '[security] refusing to start with blocked switches: remote-debugging-port',
       );
       expect(watched.portEverAnswered, spelling).toBe(false);
-      expect(existsSync(dbFile(started.userData))).toBe(false);
+      expect(hasProfileData(started.userData)).toBe(false);
     } finally {
       killTree(started.child);
     }
@@ -390,7 +402,7 @@ test('the shipped build quits on other debugging, sandbox and proxy switches', a
     try {
       expect(await exitOrTimeout(started.child, 20_000), arg).toBe(1);
       expect(started.output()).toContain(`blocked switches: ${name}`);
-      expect(existsSync(dbFile(started.userData))).toBe(false);
+      expect(hasProfileData(started.userData)).toBe(false);
     } finally {
       killTree(started.child);
     }

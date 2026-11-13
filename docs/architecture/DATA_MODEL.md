@@ -24,6 +24,8 @@ Use the operating system's application-data directory, resolved through the desk
     backups/
 ```
 
+`<profile-id>` is a lowercase UUID, or the legacy ID `default` for a profile adopted from an M0 install; folder paths are built only from validated IDs. `profiles-index.json` holds a schema version, the profile IDs and display names, and the last-used ID; it is validated on read, written atomically, and never replaced when corrupt. (Changed by ADR-0014 and ADR-0017.)
+
 Secrets are stored through the vault; the database holds opaque references. Profile data is not automatically encrypted merely because it is local or stored in a separate directory. An app lock is not equivalent to disk encryption. Defer app-managed passwords until a clear authentication and encryption design exists; rely on the OS session initially.
 
 ### 9.2 Common conventions
