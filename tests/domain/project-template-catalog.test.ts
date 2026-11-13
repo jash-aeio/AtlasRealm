@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   MAX_PROJECT_TEMPLATES,
   TemplateListOutput,
+  UNREADABLE_TEMPLATE_LOCATION,
 } from '../../src/common/contracts/project-template';
 import {
   bundledTemplateFiles,
@@ -60,7 +61,7 @@ describe('buildTemplateCatalog', () => {
     });
     // The Zod details go to the main-process log, not into the summary.
     expect(log).toHaveBeenCalledWith(
-      '[templates] broken/1.0.0 is unavailable: invalid_manifest',
+      '[templates] "broken/1.0.0" is unavailable: invalid_manifest',
       expect.stringContaining('workflows'),
     );
   });
@@ -79,6 +80,27 @@ describe('buildTemplateCatalog', () => {
   ])('refuses a template whose %s', (_name, location, manifest) => {
     const catalog = buildTemplateCatalog({ [location]: manifest }, () => undefined);
     expect(catalog.unavailable).toEqual([{ location, reason: 'location_mismatch' }]);
+  });
+
+  it.each([
+    ['too long', `${'x'.repeat(250)}/1.0.0`],
+    ['has a space', 'my template/1.0.0'],
+    ['has a control character', 'bad‮name/1.0.0'],
+    ['is nested too deep', 'a/b/c/d/1.0.0'],
+  ])('hides a location that is %s, without failing the whole list', (_name, location) => {
+    const log = vi.fn();
+    const catalog = buildTemplateCatalog({ [location]: generic, 'generic/1.0.0': generic }, log);
+    expect(catalog.unavailable).toEqual([
+      { location: UNREADABLE_TEMPLATE_LOCATION, reason: 'location_mismatch' },
+    ]);
+    // The good template is still offered, and the list still passes its output schema.
+    expect(catalog.available.map((t) => t.id)).toEqual(['builtin.generic']);
+    expect(TemplateListOutput.safeParse({ templates: catalog.summaries }).success).toBe(true);
+    // The real location is logged, quoted, so control characters can't forge log lines.
+    expect(log).toHaveBeenCalledWith(
+      `[templates] ${JSON.stringify(location)} is unavailable: location_mismatch`,
+      expect.any(String),
+    );
   });
 
   it('accepts several versions of one template', () => {

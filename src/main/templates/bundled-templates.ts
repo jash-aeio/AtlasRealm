@@ -15,11 +15,17 @@ const BUNDLED_FILES = import.meta.glob<unknown>(
   { eager: true, import: 'default' },
 );
 
-/** Bundled template files keyed by location, e.g. `generic/1.0.0`. */
+/**
+ * Bundled template files keyed by location, e.g. `generic/1.0.0`. A key that doesn't have the
+ * expected shape (say, a future Vite changes its key format) is kept whole: it then fails the
+ * catalog's location check and shows up as unavailable instead of being silently mangled.
+ */
 export function bundledTemplateFiles(): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(BUNDLED_FILES).map(([path, json]) => [
-      path.slice(PREFIX.length, -SUFFIX.length),
+      path.startsWith(PREFIX) && path.endsWith(SUFFIX)
+        ? path.slice(PREFIX.length, -SUFFIX.length)
+        : path,
       json,
     ]),
   );

@@ -9,8 +9,10 @@ import { z } from 'zod';
 import {
   MAX_PROJECT_TEMPLATES,
   ProjectTemplateManifest,
+  TemplateLocation,
   type TemplateSummary,
   type TemplateUnavailableReason,
+  UNREADABLE_TEMPLATE_LOCATION,
 } from '../../common/contracts/project-template';
 
 export interface UnavailableTemplate {
@@ -48,8 +50,12 @@ export function buildTemplateCatalog(
   const locations = Object.keys(files).sort();
 
   const refuse = (location: string, reason: TemplateUnavailableReason, detail?: string) => {
-    unavailable.push({ location, reason });
-    log(`[templates] ${location} is unavailable: ${reason}`, detail);
+    // The real location goes to the log. The list only gets it if it fits TemplateLocation.
+    const shown = TemplateLocation.safeParse(location).success
+      ? location
+      : UNREADABLE_TEMPLATE_LOCATION;
+    unavailable.push({ location: shown, reason });
+    log(`[templates] ${JSON.stringify(location)} is unavailable: ${reason}`, detail);
   };
 
   for (const location of locations.slice(0, MAX_PROJECT_TEMPLATES)) {

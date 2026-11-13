@@ -44,8 +44,24 @@ const FieldKey = z
   .max(40)
   .regex(/^[a-z][a-zA-Z0-9]*$/, 'camelCase key');
 
-const Label = z.string().trim().min(1).max(80);
-const Help = z.string().trim().min(1).max(300);
+/**
+ * Text shown to the user. Control characters (`\p{Cc}`, including newlines and NUL) and
+ * invisible format characters (`\p{Cf}`, such as the right-to-left override U+202E) are
+ * refused: they can make a name display differently from what is stored, a classic way to
+ * disguise content. This matters once community templates use this schema (#32 security L2).
+ */
+function displayText(max: number) {
+  return z
+    .string()
+    .trim()
+    .min(1)
+    .max(max)
+    .refine((text) => !/[\p{Cc}\p{Cf}]/u.test(text), 'no control or invisible format characters');
+}
+
+const Label = displayText(80);
+const Help = displayText(300);
+const Description = displayText(500);
 
 /** Fields every input type shares. */
 const fieldBase = {
@@ -131,7 +147,7 @@ export const ProjectTemplateManifest = z
     id: TemplateId,
     version: TemplateVersion,
     name: Label,
-    description: z.string().trim().min(1).max(500),
+    description: Description,
     publisher: Label,
     source: z.strictObject({ type: z.literal('bundled') }),
     /** Always true in M1: the manifest describes the template but runs nothing. */
@@ -172,7 +188,7 @@ const AvailableTemplateSummary = z.strictObject({
   id: TemplateId,
   version: TemplateVersion,
   name: Label,
-  description: z.string().max(500),
+  description: Description,
   metadataOnly: z.literal(true),
   metadataOnlyNote: Help,
   inputFields: z
@@ -191,10 +207,23 @@ const AvailableTemplateSummary = z.strictObject({
   offlineLimitations: z.array(Help).max(20),
 });
 
+/** Shown instead of a folder that is too long or contains unexpected characters. */
+export const UNREADABLE_TEMPLATE_LOCATION = '(unreadable location)';
+
+/**
+ * Bundled folder relative to resources/project-templates, e.g. `generic/1.0.0`. The catalog
+ * replaces anything else with UNREADABLE_TEMPLATE_LOCATION, so one odd folder name can't fail
+ * this output schema and take the whole list down with it (#32 security L1).
+ */
+export const TemplateLocation = z.union([
+  // 1–4 short segments, so near-misses like `generic` or `a/generic/1.0.0` are still shown.
+  z.string().regex(/^[A-Za-z0-9._-]{1,64}(?:\/[A-Za-z0-9._-]{1,64}){0,3}$/),
+  z.literal(UNREADABLE_TEMPLATE_LOCATION),
+]);
+
 const UnavailableTemplateSummary = z.strictObject({
   status: z.literal('unavailable'),
-  /** Bundled folder relative to resources/project-templates, e.g. `generic/1.0.0`. */
-  location: z.string().max(200),
+  location: TemplateLocation,
   reason: TemplateUnavailableReason,
 });
 

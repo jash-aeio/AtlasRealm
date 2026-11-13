@@ -179,6 +179,24 @@ describe('malformed template fixtures are refused', () => {
     expect(refused({ ...generic, id })).toBe(true);
   });
 
+  it.each([
+    ['right-to-left override', 'Safe‮txt.exe'],
+    ['first-strong isolate', 'Safe⁨name'],
+    ['zero-width space', 'Sa​fe'],
+    ['NUL', 'Safe\u0000'],
+    ['newline', 'Two\nlines'],
+    ['escape', 'Safe\u001B[31m'],
+  ])('refuses display text with a %s', (_name, text) => {
+    expect(refused({ ...generic, name: text })).toBe(true);
+    expect(refused({ ...generic, description: text })).toBe(true);
+    expect(refused(withField(0, { label: text }))).toBe(true);
+    expect(refused({ ...generic, offlineLimitations: [text] })).toBe(true);
+  });
+
+  it('accepts ordinary non-English display text', () => {
+    expect(refused({ ...generic, name: 'Campaña de contenido – Ünïcödé 内容' })).toBe(false);
+  });
+
   it('accepts ordinary versions and ids', () => {
     expect(TemplateVersion.safeParse('0.1.0').success).toBe(true);
     expect(TemplateVersion.safeParse('12.3.45').success).toBe(true);
