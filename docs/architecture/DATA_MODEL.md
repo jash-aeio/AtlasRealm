@@ -46,7 +46,7 @@ Secrets are stored through the vault; the database holds opaque references. Prof
 |---|---|
 | `profile_settings` | Local profile ID, display name, avatar config, timezone, preferences |
 | `worlds` | ID, name, theme ID, grid dimensions, camera settings, archived timestamp |
-| `projects` | ID, world ID, name, goal, template ID/version, status, settings revision |
+| `projects` | ID, world ID, name, goal, template ID/version (namespaced ID such as `builtin.generic`, schema v4, changed by ADR-0020), status, settings revision |
 | `building_placements` | ID, world ID, project ID nullable, service kind nullable, appearance ID, tile position, rotation; exactly one target; unique placed project |
 | `hotbar_slots` | World ID, slot 0–9, target type, target ID; unique world/slot |
 | `resource_packages` | ID, kind, version, source, source revision, digest, license metadata, review state |

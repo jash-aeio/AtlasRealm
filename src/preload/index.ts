@@ -33,6 +33,17 @@ const api: AtlasApi = {
     list: (input) => ipcRenderer.invoke(Channels.worldList, input),
     rename: (input) => ipcRenderer.invoke(Channels.worldRename, input),
   },
+  project: {
+    create: (input) => ipcRenderer.invoke(Channels.projectCreate, input),
+    get: (input) => ipcRenderer.invoke(Channels.projectGet, input),
+    list: (input) => ipcRenderer.invoke(Channels.projectList, input),
+    rename: (input) => ipcRenderer.invoke(Channels.projectRename, input),
+    updateGoal: (input) => ipcRenderer.invoke(Channels.projectUpdateGoal, input),
+    archive: (input) => ipcRenderer.invoke(Channels.projectArchive, input),
+    restore: (input) => ipcRenderer.invoke(Channels.projectRestore, input),
+    trash: (input) => ipcRenderer.invoke(Channels.projectTrash, input),
+    restoreFromTrash: (input) => ipcRenderer.invoke(Channels.projectRestoreFromTrash, input),
+  },
 };
 
 contextBridge.exposeInMainWorld('atlas', api);

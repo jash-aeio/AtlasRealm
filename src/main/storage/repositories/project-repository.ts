@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { type Database, withSavepoint } from '../database';
 import { GraphEntityRepository } from './graph-entity-repository';
 import {
-  assertSlug,
+  assertTemplateId,
   assertVersion,
   guardedUpdate,
   type GuardedUpdate,
@@ -50,6 +50,18 @@ export interface NewProject {
   readonly goal?: string;
   readonly templateId: string;
   readonly templateVersion: string;
+}
+
+/** Where a page ended: the sort key of its last project. */
+export interface ProjectPageKey {
+  readonly name: string;
+  readonly id: string;
+}
+
+export interface ProjectPage {
+  readonly projects: Project[];
+  /** Pass as `after` to get the next page; null on the last page. */
+  readonly next: ProjectPageKey | null;
 }
 
 function isProjectStatus(value: string): value is ProjectStatus {
@@ -95,7 +107,7 @@ export class ProjectRepository {
   create(input: NewProject): Project {
     const name = normalizeName(input.name, 'Project name');
     const goal = normalizeText(input.goal ?? '', 'Project goal', LIMITS.goalMaxChars);
-    const templateId = assertSlug(input.templateId, 'Template ID');
+    const templateId = assertTemplateId(input.templateId, 'Template ID');
     const templateVersion = assertVersion(input.templateVersion, 'Template version');
     // Checked first for a clear error; the foreign key still guards the insert itself.
     if (this.db.prepare('SELECT 1 FROM worlds WHERE id = ?').get(input.worldId) === undefined) {
@@ -126,8 +138,8 @@ export class ProjectRepository {
   }
 
   /**
-   * A world's projects with the given statuses (active only by default), by name. Unpaged for
-   * now: the project commands (M1-7) add cursor paging on top of this query path.
+   * A world's projects with the given statuses (active only by default), by name. Unpaged:
+   * the IPC commands use pageByWorld instead.
    */
   listByWorld(worldId: string, statuses: readonly ProjectStatus[] = ['active']): Project[] {
     const wanted = PROJECT_STATUSES.filter((status) => statuses.includes(status));
@@ -140,6 +152,55 @@ export class ProjectRepository {
       )
       .all(worldId, ...wanted)
       .map(toProject);
+  }
+
+  /**
+   * One page of a world's projects with one status, in the same order as listByWorld.
+   *
+   * Keyset paging: instead of "skip N rows", the next page starts strictly after the last
+   * (name, id) the caller saw. Projects created, renamed or trashed between two page loads
+   * can't shift the rest of the list, so nothing is shown twice or skipped because of an
+   * offset. `id` breaks ties between equal names, which makes the order total.
+   */
+  pageByWorld(
+    worldId: string,
+    status: ProjectStatus,
+    options: { readonly after?: ProjectPageKey; readonly limit: number },
+  ): ProjectPage {
+    const limit = Math.trunc(options.limit);
+    if (limit < 1) throw new RepositoryError('invalid_input', 'Page size must be at least 1.');
+    const after = options.after;
+    // One extra row tells us whether another page exists without a second COUNT query.
+    const rows = (
+      after === undefined
+        ? this.db
+            .prepare(
+              `SELECT * FROM projects WHERE world_id = ? AND status = ?
+               ORDER BY name COLLATE NOCASE, id LIMIT ?`,
+            )
+            .all(worldId, status, limit + 1)
+        : this.db
+            .prepare(
+              `SELECT * FROM projects WHERE world_id = ? AND status = ?
+                 AND (name COLLATE NOCASE > ? OR (name COLLATE NOCASE = ? AND id > ?))
+               ORDER BY name COLLATE NOCASE, id LIMIT ?`,
+            )
+            .all(worldId, status, after.name, after.name, after.id, limit + 1)
+    ).map(toProject);
+    const projects = rows.slice(0, limit);
+    const last = projects.at(-1);
+    return {
+      projects,
+      next: rows.length > limit && last !== undefined ? { name: last.name, id: last.id } : null,
+    };
+  }
+
+  /** All of a world's projects, trashed ones included (for the per-world cap). */
+  countByWorld(worldId: string): number {
+    const row = this.db
+      .prepare('SELECT COUNT(*) AS n FROM projects WHERE world_id = ?')
+      .get(worldId);
+    return integer(row ?? {}, 'n');
   }
 
   /** Changes the display name. The ID, and everything that refers to it, stays the same. */

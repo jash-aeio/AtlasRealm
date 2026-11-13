@@ -176,6 +176,83 @@ describe('create and read', () => {
   });
 });
 
+describe('keyset paging (M1-7)', () => {
+  /** Follows `next` until the last page and returns every page's names. */
+  function allPages(limit: number): string[][] {
+    const pages: string[][] = [];
+    let after: { name: string; id: string } | undefined;
+    for (;;) {
+      const page = projects.pageByWorld(world.id, 'active', { after, limit });
+      pages.push(page.projects.map((p) => p.name));
+      if (page.next === null) return pages;
+      after = page.next;
+    }
+  }
+
+  it('walks every project once, in listByWorld order, ignoring case', () => {
+    for (const name of ['delta', 'Alpha', 'charlie', 'Bravo', 'echo']) newProject(name);
+    expect(allPages(2)).toEqual([['Alpha', 'Bravo'], ['charlie', 'delta'], ['echo']]);
+    expect(allPages(5)).toEqual([['Alpha', 'Bravo', 'charlie', 'delta', 'echo']]);
+  });
+
+  it('breaks ties between equal names by ID, so no duplicate name is skipped', () => {
+    const ids = [newProject('Same'), newProject('Same'), newProject('Same')].map((p) => p.id);
+    const seen: string[] = [];
+    let after: { name: string; id: string } | undefined;
+    do {
+      const page = projects.pageByWorld(world.id, 'active', { after, limit: 1 });
+      seen.push(...page.projects.map((p) => p.id));
+      after = page.next ?? undefined;
+    } while (after !== undefined);
+    expect(seen).toEqual([...ids].sort());
+  });
+
+  it('does not shift later pages when projects change between page loads', () => {
+    for (const name of ['A', 'B', 'C', 'D']) newProject(name);
+    const first = projects.pageByWorld(world.id, 'active', { limit: 2 });
+    expect(first.projects.map((p) => p.name)).toEqual(['A', 'B']);
+    // Trashing "A" leaves B, C, D: an offset page 2 ("skip 2") would be just "D", skipping "C".
+    const a = first.projects[0];
+    if (a === undefined) throw new Error('missing');
+    projects.trash(a.id, a.revision);
+    const second = projects.pageByWorld(world.id, 'active', {
+      after: first.next ?? undefined,
+      limit: 2,
+    });
+    expect(second.projects.map((p) => p.name)).toEqual(['C', 'D']);
+    expect(second.next).toBeNull();
+  });
+
+  it('filters by status and world', () => {
+    newProject('Active');
+    projects.archive(newProject('Archived').id, 1);
+    const other = new WorldRepository(db, tick).create({ name: 'Other', themeId: 'meadow' });
+    projects.create({
+      worldId: other.id,
+      name: 'Elsewhere',
+      templateId: 'g',
+      templateVersion: '1.0.0',
+    });
+
+    const names = (status: 'active' | 'archived' | 'trashed') =>
+      projects.pageByWorld(world.id, status, { limit: 10 }).projects.map((p) => p.name);
+    expect(names('active')).toEqual(['Active']);
+    expect(names('archived')).toEqual(['Archived']);
+    expect(names('trashed')).toEqual([]);
+  });
+
+  it('counts a world’s projects in every status', () => {
+    newProject('One');
+    projects.archive(newProject('Two').id, 1);
+    projects.trash(newProject('Three').id, 1);
+    expect(projects.countByWorld(world.id)).toBe(3);
+  });
+
+  it('rejects a page size below 1', () => {
+    expect(() => projects.pageByWorld(world.id, 'active', { limit: 0 })).toThrow(RepositoryError);
+  });
+});
+
 describe('expected-revision updates', () => {
   it('renames, keeping the ID and bumping revision and updated_at', () => {
     const created = newProject('Old name');
