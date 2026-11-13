@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import {
+  CommandError,
   createCommandHandler,
   MAX_PAYLOAD_BYTES,
   trustRendererEntry,
@@ -119,6 +120,39 @@ describe('createCommandHandler', () => {
       error: { code: 'internal_error' },
     });
     consoleError.mockRestore();
+  });
+
+  it('returns a CommandError as its stable domain code, without logging it', async () => {
+    const consoleError = vi.spyOn(console, 'error');
+    const handle = createCommandHandler(
+      echo,
+      () => {
+        throw new CommandError('not_found', 'That world does not exist.');
+      },
+      isTrusted,
+    );
+
+    await expect(handle(trustedSender, { text: 'hi' })).resolves.toEqual({
+      ok: false,
+      error: { code: 'not_found', message: 'That world does not exist.' },
+    });
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it('passes the current revision along with a revision_conflict', async () => {
+    const handle = createCommandHandler(
+      echo,
+      () => {
+        throw new CommandError('revision_conflict', 'Changed elsewhere.', 7);
+      },
+      isTrusted,
+    );
+
+    await expect(handle(trustedSender, { text: 'hi' })).resolves.toEqual({
+      ok: false,
+      error: { code: 'revision_conflict', message: 'Changed elsewhere.', currentRevision: 7 },
+    });
   });
 });
 

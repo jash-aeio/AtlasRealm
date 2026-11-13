@@ -29,6 +29,34 @@ export interface InvokeSender {
 
 export type SenderCheck = (sender: InvokeSender) => boolean;
 
+/** Codes a handler may return on purpose. The router's own checks own the other codes. */
+export type CommandErrorCode = Extract<
+  IpcErrorCode,
+  | 'invalid_payload'
+  | 'not_found'
+  | 'already_exists'
+  | 'revision_conflict'
+  | 'invalid_transition'
+  | 'limit_reached'
+>;
+
+/**
+ * Thrown by a handler (or the service it calls) to report an expected failure with a stable
+ * code (ADR-0019). The message is shown to the user, so it must be fixed text: no paths, IDs
+ * or payload content. Anything else a handler throws becomes `internal_error`.
+ */
+export class CommandError extends Error {
+  override readonly name = 'CommandError';
+  constructor(
+    readonly code: CommandErrorCode,
+    message: string,
+    /** Only for `revision_conflict`. */
+    readonly currentRevision?: number,
+  ) {
+    super(message);
+  }
+}
+
 export type CommandHandler<I extends z.ZodType, O extends z.ZodType> = (
   input: z.output<I>,
 ) => z.input<O> | Promise<z.input<O>>;
@@ -88,6 +116,18 @@ export function createCommandHandler<I extends z.ZodType, O extends z.ZodType>(
       const data = definition.output.parse(await handler(parsed.data));
       return { ok: true, data };
     } catch (error) {
+      if (error instanceof CommandError) {
+        return error.currentRevision === undefined
+          ? fail(error.code, error.message)
+          : {
+              ok: false,
+              error: {
+                code: error.code,
+                message: error.message,
+                currentRevision: error.currentRevision,
+              },
+            };
+      }
       // Details stay in the main process. Never log the payload: later commands may carry
       // user content or secrets.
       console.error(`[ipc] ${definition.channel} handler failed`, error);
