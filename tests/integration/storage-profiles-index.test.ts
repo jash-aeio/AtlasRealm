@@ -16,6 +16,7 @@ import {
   ProfilesIndexCorruptError,
   profilesIndexPath,
   readProfilesIndex,
+  removeStaleIndexTempFiles,
   writeProfilesIndex,
 } from '../../src/main/storage/profiles/profiles-index';
 
@@ -94,9 +95,16 @@ describe('readProfilesIndex', () => {
     expect(readdirSync(userData)).toEqual([]);
   });
 
-  it('round-trips a written index', () => {
-    writeProfilesIndex(userData, validIndex());
+  it('round-trips a written index', async () => {
+    await writeProfilesIndex(userData, validIndex());
     expect(readProfilesIndex(userData)).toEqual({ kind: 'ok', index: validIndex() });
+  });
+
+  it('reports an index from a newer app version as newer, not damaged, and keeps it', () => {
+    const content = JSON.stringify({ schemaVersion: 2, profiles: 'whatever the future holds' });
+    writeRaw(content);
+    expectCorrupt('newer_version');
+    expect(readFileSync(profilesIndexPath(userData), 'utf8')).toBe(content);
   });
 
   it('refuses invalid JSON and keeps the file byte for byte', () => {
@@ -107,7 +115,8 @@ describe('readProfilesIndex', () => {
   });
 
   it.each([
-    ['a newer schema version', { ...validIndex(), schemaVersion: 2 }],
+    ['a schema version given as text', { ...validIndex(), schemaVersion: '2' }],
+    ['schema version 0', { ...validIndex(), schemaVersion: 0 }],
     ['an empty profile list', { ...validIndex(), profiles: [] }],
     ['an unknown top-level key', { ...validIndex(), dataDir: 'D:\\elsewhere' }],
     [
@@ -163,33 +172,45 @@ describe('readProfilesIndex', () => {
 });
 
 describe('writeProfilesIndex', () => {
-  it('replaces the previous index and leaves no temp file behind', () => {
-    writeProfilesIndex(userData, validIndex());
+  it('replaces the previous index and leaves no temp file behind', async () => {
+    await writeProfilesIndex(userData, validIndex());
     const next = { ...validIndex(), lastUsedProfileId: toProfileId(LEGACY_PROFILE_ID) };
-    writeProfilesIndex(userData, next);
+    await writeProfilesIndex(userData, next);
 
     expect(readProfilesIndex(userData)).toEqual({ kind: 'ok', index: next });
     expect(readdirSync(userData)).toEqual([PROFILES_INDEX_FILE]);
   });
 
-  it('refuses to write an invalid index and keeps the old one', () => {
-    writeProfilesIndex(userData, validIndex());
+  it('refuses to write an invalid index and keeps the old one', async () => {
+    await writeProfilesIndex(userData, validIndex());
     const before = readFileSync(profilesIndexPath(userData), 'utf8');
     const invalid = { ...validIndex(), profiles: [] } as unknown as ProfilesIndex;
 
-    expect(() => {
-      writeProfilesIndex(userData, invalid);
-    }).toThrow();
+    await expect(writeProfilesIndex(userData, invalid)).rejects.toThrow();
     expect(readFileSync(profilesIndexPath(userData), 'utf8')).toBe(before);
     expect(readdirSync(userData)).toEqual([PROFILES_INDEX_FILE]);
   });
 
-  it('writes only IDs, names, the last-used ID and the schema version', () => {
-    writeProfilesIndex(userData, validIndex());
+  it('writes only IDs, names, the last-used ID and the schema version', async () => {
+    await writeProfilesIndex(userData, validIndex());
     const json = JSON.parse(readFileSync(profilesIndexPath(userData), 'utf8')) as Record<
       string,
       unknown
     >;
     expect(Object.keys(json).sort()).toEqual(['lastUsedProfileId', 'profiles', 'schemaVersion']);
+  });
+});
+
+describe('removeStaleIndexTempFiles', () => {
+  it('removes only leftover temp files, never the index or look-alikes', async () => {
+    await writeProfilesIndex(userData, validIndex());
+    const keep = ['profiles-index.json.tmp', 'profiles-index.json.ABCDEF123456.tmp', 'notes.tmp'];
+    for (const name of [...keep, 'profiles-index.json.0123456789ab.tmp']) {
+      writeFileSync(join(userData, name), 'x');
+    }
+
+    removeStaleIndexTempFiles(userData);
+
+    expect(readdirSync(userData).sort()).toEqual([PROFILES_INDEX_FILE, ...keep].sort());
   });
 });

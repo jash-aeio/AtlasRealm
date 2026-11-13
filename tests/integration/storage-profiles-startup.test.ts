@@ -1,10 +1,22 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { openAppDatabase, profilePaths } from '../../src/main/storage/app-database';
+import {
+  openAppDatabase,
+  ProfileDataMissingError,
+  profilePaths,
+} from '../../src/main/storage/app-database';
 import { openDatabase } from '../../src/main/storage/database';
 import { readSchemaVersion } from '../../src/main/storage/migrate';
 import { MIGRATIONS } from '../../src/main/storage/migrations';
@@ -17,7 +29,7 @@ import {
 } from '../../src/main/storage/profiles/profiles-index';
 import {
   openStartupProfile,
-  ProfileDataMissingError,
+  ProfilesIndexMissingError,
   type StartupProfile,
 } from '../../src/main/storage/profiles/startup';
 
@@ -105,7 +117,7 @@ describe('openStartupProfile: later launches', () => {
 
   it('opens the last-used profile, not the first one listed', async () => {
     for (const id of [LEGACY, WORK]) (await openAppDatabase(userData, id)).db.close();
-    writeProfilesIndex(userData, {
+    await writeProfilesIndex(userData, {
       schemaVersion: 1,
       profiles: [
         { id: LEGACY, displayName: 'Default' },
@@ -120,7 +132,7 @@ describe('openStartupProfile: later launches', () => {
   });
 
   it('refuses a listed profile whose database is gone, instead of creating an empty one', async () => {
-    writeProfilesIndex(userData, {
+    await writeProfilesIndex(userData, {
       schemaVersion: 1,
       profiles: [{ id: WORK, displayName: 'Work' }],
       lastUsedProfileId: WORK,
@@ -168,5 +180,73 @@ describe('openStartupProfile: untrusted index', () => {
 
     await expect(openStartupProfile(userData)).rejects.toBeInstanceOf(ProfilesIndexCorruptError);
     expect(readdirSync(userData)).toEqual(['profiles-index.json']);
+  });
+});
+
+describe('openStartupProfile: no index, but profile data exists', () => {
+  const nothingWritten = (): void => {
+    expect(existsSync(profilesIndexPath(userData))).toBe(false);
+  };
+
+  it('stops when a UUID profile exists, instead of hiding it behind a new empty profile', async () => {
+    (await openAppDatabase(userData, WORK)).db.close();
+
+    await expect(openStartupProfile(userData)).rejects.toBeInstanceOf(ProfilesIndexMissingError);
+    nothingWritten();
+    expect(readdirSync(join(userData, 'profiles'))).toEqual([WORK]);
+  });
+
+  it('stops when the M0 folder and another profile both exist', async () => {
+    await seedM0Install();
+    (await openAppDatabase(userData, WORK)).db.close();
+
+    await expect(openStartupProfile(userData)).rejects.toBeInstanceOf(ProfilesIndexMissingError);
+    nothingWritten();
+  });
+
+  it('does not adopt an M0 folder whose database is gone', async () => {
+    mkdirSync(join(userData, 'profiles', 'default', 'backups'), { recursive: true });
+
+    await expect(openStartupProfile(userData)).rejects.toBeInstanceOf(ProfileDataMissingError);
+    nothingWritten();
+    expect(existsSync(profilePaths(userData, LEGACY).databaseFile)).toBe(false);
+  });
+
+  it('ignores folders that are not valid profile IDs or hold no database', async () => {
+    mkdirSync(join(userData, 'profiles', 'not-a-profile'), { recursive: true });
+    writeFileSync(join(userData, 'profiles', 'not-a-profile', 'app.sqlite'), '');
+    mkdirSync(join(userData, 'profiles', WORK), { recursive: true });
+
+    opened = await openStartupProfile(userData);
+    expect(opened.source).toBe('created');
+    expect(opened.profileId).not.toBe(WORK);
+  });
+});
+
+describe('openStartupProfile: housekeeping and races', () => {
+  it('removes a temp file left by a crashed index write', async () => {
+    const stale = join(userData, 'profiles-index.json.0123456789ab.tmp');
+    writeFileSync(stale, '{');
+
+    opened = await openStartupProfile(userData);
+    expect(existsSync(stale)).toBe(false);
+  });
+
+  it('refuses a listed profile whose database is brand new (it vanished before the open)', async () => {
+    // A version-0 file is what SQLite leaves if the real file disappears just before opening.
+    openDatabase(profilePaths(userData, WORK).databaseFile).close();
+    await writeProfilesIndex(userData, {
+      schemaVersion: 1,
+      profiles: [{ id: WORK, displayName: 'Work' }],
+      lastUsedProfileId: WORK,
+    });
+
+    await expect(openStartupProfile(userData)).rejects.toBeInstanceOf(ProfileDataMissingError);
+    const check = openDatabase(profilePaths(userData, WORK).databaseFile);
+    try {
+      expect(readSchemaVersion(check)).toBe(0);
+    } finally {
+      check.close();
+    }
   });
 });

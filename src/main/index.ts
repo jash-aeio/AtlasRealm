@@ -17,9 +17,10 @@ import {
 import { registerIpcHandlers } from './ipc/register';
 import { spawnUtilityWorker } from './runtime-bridge/utility-transport';
 import { WorkerBridge } from './runtime-bridge/worker-bridge';
+import { ProfileDataMissingError } from './storage/app-database';
 import type { Database } from './storage/database';
 import { ProfilesIndexCorruptError } from './storage/profiles/profiles-index';
-import { openStartupProfile, ProfileDataMissingError } from './storage/profiles/startup';
+import { openStartupProfile, ProfilesIndexMissingError } from './storage/profiles/startup';
 import { loadBundledTemplateCatalog } from './templates/bundled-templates';
 
 let database: Database | undefined;
@@ -84,17 +85,30 @@ async function start(): Promise<void> {
 /** Fixed, path-free wording for each startup failure the user can do something about. */
 function startupFailureMessage(error: unknown): { title: string; body: string } {
   if (error instanceof ProfilesIndexCorruptError) {
+    const problem =
+      error.reason === 'newer_version'
+        ? 'was written by a newer version of Atlas Realm'
+        : `is damaged (${error.reason})`;
     return {
       title: 'Atlas Realm could not read its profile list',
       body:
-        `The file profiles-index.json in the app's data folder is damaged (${error.reason}). ` +
+        `The file profiles-index.json in the app's data folder ${problem}. ` +
         'It was left exactly as it is, so it can be inspected or restored.',
+    };
+  }
+  if (error instanceof ProfilesIndexMissingError) {
+    return {
+      title: 'Atlas Realm could not find its profile list',
+      body:
+        "The file profiles-index.json is missing from the app's data folder, but profile " +
+        'data is still there. No new profile was created, so your existing profiles stay ' +
+        'hidden only until the file is restored.',
     };
   }
   if (error instanceof ProfileDataMissingError) {
     return {
       title: 'Atlas Realm could not find profile data',
-      body: "The last-used profile's database file is missing from the app's data folder.",
+      body: "The profile's database file is missing from the app's data folder.",
     };
   }
   const kind = error instanceof Error ? error.name : 'UnknownError';
