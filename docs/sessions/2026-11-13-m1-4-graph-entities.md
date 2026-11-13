@@ -31,7 +31,13 @@ because the main checkout holds the parallel #29 session's uncommitted work.
   the trash/restore tombstone round trip, and no layout columns.
 
 ## Done
-_(filled in during the work)_
+- **Slice 1** (4b3029d): migration 3 creates `graph_entities` (STRICT, own UUID, scope, ownership, optional source locator, tombstone, revision; no name or layout columns). A composite foreign key `(project_id, world_id)` keeps a project entity in its project's world, and partial unique indexes allow one entity per world and per project. v2 worlds and projects are backfilled with SQL-built version 4 UUIDs; trashed projects start tombstoned. The v1 → v2 test now runs only the first two migrations.
+- **Slice 2** (d20281e): `withSavepoint` in `database.ts`; `GraphEntityRepository`; world/project create, project trash and restore write the entity in the same transaction. 13 new integration tests. A mutation check (removing the transaction on purpose) made the 4 rollback tests fail, which shows they really test atomicity.
+- **Docs:** ADR-0018 (ADR-0017 was already claimed by the #29 session), lesson 015, five glossary terms.
+- **Checks:** typecheck, lint and format clean; unit/integration 421/421 passing (27 files).
+
+Routine choices (spec defaults, not asked): archiving a project does not tombstone its entity; the backfill uses the record's `created_at` as the entity's `created_at`; the tombstone methods match on the entity's current state instead of taking an expected revision (the project change already checked it); `source_locator` is capped at 1024 characters.
 
 ## Open questions
-_(none yet)_
+- Lesson number 015 may clash with the parallel #29 session if it also writes a lesson; renumber at merge if so.
+- DATA_MODEL's "content/index revision" column is left for the indexing work (M2/M3).
