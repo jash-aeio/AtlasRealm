@@ -23,6 +23,16 @@ Routine choices (spec defaults, not asked): `create` refuses an archived world (
 - Unit/integration: 646/646 (new: `project-contract.test.ts` 52, `storage-migration-v4.test.ts`, keyset paging tests in `storage-project-repository.test.ts`).
 - E2E: 38/38 (new: project round trip in the built app; the preload API shape now includes `project`).
 - Packaged E2E: not run locally. Its schema expectation was bumped to v4.
+- After review: 644/644 unit/integration (4 database-level template-ID cases moved to the repository's rule, 2 tests added), E2E rerun after the fixes: 38/38.
+
+## Reviews
+- **invariant-reviewer:** no violations. Note: the per-world cap relies on the count and insert running synchronously in the main process (added to Known limitations).
+- **security-auditor:** approve; no Critical/High/Medium.
+  - L2 fixed: `ProjectSummary.name` is now a bounded plain string on output, so one oddly stored name (e.g. from a future restore) can't break every page. Test + mutation check.
+  - L3 fixed: v4's template_id rule is now a superset of v2's, so an old row like `a--b-` can't make the upgrade fail; the repository enforces the exact shape for new rows. Test added.
+  - L1 deferred (status Next task): invisible variation selectors and filler characters in names/goals. It touches the shared text rules, and it matters once goals reach prompts (M3).
+  - Question raised: projects in an archived world can still be renamed/restored; only `create` is refused. Left open for M1-10.
+- Also fixed while writing the lesson: a repository paging test added a project that cancelled out the change it was testing; it now proves what its comment says.
 
 ## How each acceptance criterion is shown
 - Service with all operations, revisions, paged list scoped to profile + world: `project-contract.test.ts` (`project.list`, the lifecycle tests, stale-revision tests).
@@ -33,4 +43,5 @@ Routine choices (spec defaults, not asked): `create` refuses an archived world (
 
 ## Open questions / follow-ups
 - M4: replace the stub probe with real run handling; archive should then request cancellation (ADR-0020).
-- Lesson 018 (keyset paging and rebuilding a SQLite table) is written during `/ship`.
+- Lesson 018: [keyset paging and rebuilding a SQLite table](../learning/lessons/018-keyset-paging-and-table-rebuilds.md).
+- Nothing was written by the user this session; all code was written by Claude (CLAUDE.md learning mode).
