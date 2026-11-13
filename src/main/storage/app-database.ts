@@ -1,5 +1,6 @@
 // Opens a profile database: resolve the path, open, migrate, record the launch.
 // Takes the userData folder as a plain string so it runs (and is tested) without Electron.
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { type Database, openDatabase } from './database';
@@ -69,6 +70,27 @@ export async function openAppDatabase(
     const migration = await migrate(db, MIGRATIONS, { backupDir: paths.backupDir });
     const launch = new AppMetaRepository(db).recordLaunch();
     return { db, migration, launch };
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+}
+
+/**
+ * Creates a brand-new profile database (`profile.create`): open and migrate, but no launch
+ * record, so the profile's launch history starts when it is first really used. Refuses a
+ * profile that already has a database. On failure the connection is closed again.
+ */
+export async function createProfileDatabase(
+  userDataDir: string,
+  profileId: ProfileId,
+): Promise<Database> {
+  const paths = profilePaths(userDataDir, profileId);
+  if (existsSync(paths.databaseFile)) throw new Error('The profile already has a database.');
+  const db = openDatabase(paths.databaseFile);
+  try {
+    await migrate(db, MIGRATIONS, { backupDir: paths.backupDir });
+    return db;
   } catch (error) {
     db.close();
     throw error;

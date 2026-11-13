@@ -28,10 +28,16 @@ export function toCommandError(error: unknown): unknown {
   return new CommandError(code, message, error.currentRevision);
 }
 
-/** Runs `work`, translating repository errors on the way out. */
+/** Runs `work` (sync or async), translating repository errors on the way out. */
 export function withRepositoryErrors<T>(work: () => T): T {
   try {
-    return work();
+    const result = work();
+    if (result instanceof Promise) {
+      return result.catch((error: unknown) => {
+        throw toCommandError(error);
+      }) as T;
+    }
+    return result;
   } catch (error) {
     throw toCommandError(error);
   }
