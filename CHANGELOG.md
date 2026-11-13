@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ### Added
+- Project storage (M1-3, #30): the local database now has tables for profile settings, worlds and projects (schema v2), with rules the database enforces itself: tidy, length-limited names, a fixed list of project statuses, and every project belonging to exactly one world. A project keeps the same ID when renamed. Archiving and trashing never delete anything, and restoring from the trash puts a project back where it was (ADR-0016). Every change checks that nobody else changed the record in the meantime, so edits can't silently overwrite each other. Existing databases are backed up and upgraded automatically. Nothing in the UI uses this yet; project commands and screens come next in M1.
 - Project templates (M1-5, #32): the app ships two starter templates, **Generic** and **Content Campaign**, each with its own input fields, planned outputs and offline limitations. They are metadata only for now: no workflows or agents until M3/M4, and each template says so. The app checks every template at startup. A broken one is listed as unavailable with a reason, and the app still starts. Developers can list them through the new `template.list` query. They don't show up in the UI yet (that comes with the project list, M1-10).
 
 ### Security
