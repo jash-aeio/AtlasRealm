@@ -1,10 +1,12 @@
 // Repository for `worlds`: the only code that reads or writes that table.
 // A world is identified by its UUID, never its name. Like projects, worlds are archived, not
 // deleted (and the schema refuses to delete a world that still has projects).
+// Creating a world also records its graph entity, in the same transaction (M1-4).
 // Every change takes the revision the caller last read; see guardedUpdate.
 import { randomUUID } from 'node:crypto';
 
-import type { Database } from '../database';
+import { type Database, withSavepoint } from '../database';
+import { GraphEntityRepository } from './graph-entity-repository';
 import {
   assertGridSize,
   assertSlug,
@@ -54,11 +56,15 @@ function toWorld(row: Row): World {
 }
 
 export class WorldRepository {
+  private readonly graph: GraphEntityRepository;
+
   constructor(
     private readonly db: Database,
     private readonly now: () => Date = () => new Date(),
     private readonly newId: () => string = randomUUID,
-  ) {}
+  ) {
+    this.graph = new GraphEntityRepository(db, newId);
+  }
 
   create(input: NewWorld): World {
     const name = normalizeName(input.name, 'World name');
@@ -66,15 +72,20 @@ export class WorldRepository {
     const gridWidth = assertGridSize(input.gridWidth ?? DEFAULT_GRID_SIZE, 'Grid width');
     const gridHeight = assertGridSize(input.gridHeight ?? DEFAULT_GRID_SIZE, 'Grid height');
     const at = this.now().toISOString();
-    const row = this.db
-      .prepare(
-        `INSERT INTO worlds (id, name, theme_id, grid_width, grid_height, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         RETURNING *`,
-      )
-      .get(this.newId(), name, themeId, gridWidth, gridHeight, at, at);
-    if (row === undefined) throw new Error('INSERT … RETURNING returned no row.');
-    return toWorld(row);
+    // The world and its graph entity are saved together or not at all.
+    return withSavepoint(this.db, (db) => {
+      const row = db
+        .prepare(
+          `INSERT INTO worlds (id, name, theme_id, grid_width, grid_height, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           RETURNING *`,
+        )
+        .get(this.newId(), name, themeId, gridWidth, gridHeight, at, at);
+      if (row === undefined) throw new Error('INSERT … RETURNING returned no row.');
+      const world = toWorld(row);
+      this.graph.createForWorld(world.id, at);
+      return world;
+    });
   }
 
   get(id: string): World | undefined {

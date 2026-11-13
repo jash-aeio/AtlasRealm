@@ -104,3 +104,30 @@ export function withTransaction<T>(db: Database, work: (db: Database) => T): T {
     throw error;
   }
 }
+
+/**
+ * Like withTransaction, but it also works inside a transaction that is already open. With no
+ * open transaction it simply calls withTransaction. Inside one, it marks a SAVEPOINT (a named
+ * checkpoint): if `work` throws, only the writes since the checkpoint are undone and the outer
+ * transaction carries on; if `work` succeeds, its writes join the outer transaction and are
+ * committed (or rolled back) with it. Repositories use this for writes that must happen
+ * together, so a caller can still group several of those calls in its own transaction.
+ */
+export function withSavepoint<T>(db: Database, work: (db: Database) => T): T {
+  if (!inTransaction(db)) return withTransaction(db, work);
+  // One fixed name is enough: savepoints nest, and RELEASE / ROLLBACK TO act on the most
+  // recent one with that name.
+  db.exec('SAVEPOINT nested_write;');
+  try {
+    const result = work(db);
+    if (result instanceof Promise) {
+      throw new Error('withSavepoint: work must be synchronous (it returned a Promise)');
+    }
+    db.exec('RELEASE nested_write;');
+    return result;
+  } catch (error) {
+    // ROLLBACK TO undoes the writes but keeps the savepoint open; RELEASE then removes it.
+    if (inTransaction(db)) db.exec('ROLLBACK TO nested_write; RELEASE nested_write;');
+    throw error;
+  }
+}
