@@ -33,11 +33,12 @@ because the main checkout holds the parallel #29 session's uncommitted work.
 ## Done
 - **Slice 1** (4b3029d): migration 3 creates `graph_entities` (STRICT, own UUID, scope, ownership, optional source locator, tombstone, revision; no name or layout columns). A composite foreign key `(project_id, world_id)` keeps a project entity in its project's world, and partial unique indexes allow one entity per world and per project. v2 worlds and projects are backfilled with SQL-built version 4 UUIDs; trashed projects start tombstoned. The v1 → v2 test now runs only the first two migrations.
 - **Slice 2** (d20281e): `withSavepoint` in `database.ts`; `GraphEntityRepository`; world/project create, project trash and restore write the entity in the same transaction. 13 new integration tests. A mutation check (removing the transaction on purpose) made the 4 rollback tests fail, which shows they really test atomicity.
-- **Docs:** ADR-0018 (ADR-0017 was already claimed by the #29 session), lesson 015, five glossary terms.
+- **Review fixes (/ship):** the security review found a latent Medium issue. After SQLite rolls back a whole transaction by itself (disk full, I/O error), a caller that caught the error and carried on would make the next `withSavepoint` commit on its own. `withTransaction` now tracks the transactions it opened. `withSavepoint` joins only those, marks one aborted when SQLite cancelled it, and then refuses further writes (`TransactionAbortedError`) and the commit. It also refuses to join a transaction it didn't open, and keeps the original error if undoing a savepoint fails. Six new tests, including a real full-disk case (`PRAGMA max_page_count`); a mutation check made three of them fail without the guards. The E2E and packaged specs now expect "schema v3". The invariant review found no violations.
+- **Docs:** ADR-0018 (ADR-0017 was already claimed by the #29 session), lesson 016 (015 is taken by the #29 session), five glossary terms.
 - **Checks:** typecheck, lint and format clean; unit/integration 421/421 passing (27 files).
 
 Routine choices (spec defaults, not asked): archiving a project does not tombstone its entity; the backfill uses the record's `created_at` as the entity's `created_at`; the tombstone methods match on the entity's current state instead of taking an expected revision (the project change already checked it); `source_locator` is capped at 1024 characters.
 
 ## Open questions
-- Lesson number 015 may clash with the parallel #29 session if it also writes a lesson; renumber at merge if so.
+- The LEARNING_LOG row for lesson 016 sits right after 014; if #29 lands lesson 015 first, the rows may conflict at merge (keep both, in order).
 - DATA_MODEL's "content/index revision" column is left for the indexing work (M2/M3).

@@ -1,4 +1,4 @@
-# Lesson 015: Paired writes, savepoints and tombstones
+# Lesson 016: Paired writes, savepoints and tombstones
 **Milestone:** M1 · **Date:** 2026-11-13 · **Related:** `src/main/storage/database.ts`, `repositories/graph-entity-repository.ts`, migration 3, ADR-0018, GRAPH_MODEL §30.5
 
 ## The concept (plain words)
@@ -30,6 +30,7 @@ The tests prove it by forcing write 2 to fail: they queue an entity ID that alre
 - Opening a second `BEGIN` inside a transaction, or catching an error and carrying on as if the half-done write never happened.
 - Using `DELETE` for "remove from view". The ID is lost, so links and history break.
 - Storing layout (x/y) on the entity. Positions are cosmetic and change all the time, while identity must not.
+- Catching an error inside a transaction and carrying on. After a disk-full or I/O error, SQLite may have cancelled the *whole* transaction, so later writes would be saved one by one. Our helpers mark the transaction aborted and refuse to go on (`TransactionAbortedError`).
 - `await` inside a transaction. Other code would run while it is still open, so our helpers refuse promises.
 
 ## Try it (5–15 min exercise)

@@ -111,6 +111,6 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Invisible format characters (bidi controls)** | Unicode characters that show nothing themselves but change how text is displayed. A right-to-left override (U+202E) can make `txt.exe` look like `exe.txt`. We refuse them in display text | `project-template.ts` |
 | **Graph entity** | The stable node ID a world or project has in the Realm Atlas graph. It has its own UUID, separate from the name and from any position on screen | `graph-entity-repository.ts`, ADR-0018 |
 | **Tombstone** | A mark saying "this is gone" (a timestamp) on a row that is kept instead of deleted. A trashed project's graph entity is tombstoned, and restoring clears it | `graph_entities.tombstoned_at` |
-| **Savepoint** | A named checkpoint inside a transaction. Rolling back to it undoes only the writes made since, and the outer transaction carries on. It lets all-or-nothing steps nest | `withSavepoint` (`database.ts`), lesson 015 |
+| **Savepoint** | A named checkpoint inside a transaction. Rolling back to it undoes only the writes made since, and the outer transaction carries on. It lets all-or-nothing steps nest | `withSavepoint` (`database.ts`), lesson 016 |
 | **Backfill** | Filling a new table or column for data that already existed before the change, as part of the migration | migration 3 |
 | **Composite foreign key** | A foreign key made of two columns together, e.g. `(project_id, world_id)` must match a real project *in that world* | migration 3 |
