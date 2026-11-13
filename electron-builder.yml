@@ -31,7 +31,9 @@ npmRebuild: false
 # code-signed: unsigned, a local attacker can patch the stored hash too. Chromium switches
 # such as --remote-debugging-port have no fuse, so main refuses them at startup instead
 # (src/main/bootstrap/switch-guard.ts, #20). `pnpm package:test` builds a test-only variant
-# in release/test with extraMetadata.atlasRealm.packagedTest=true (ADR-0015).
+# in release-test/ (own name AtlasRealmTest.exe, appId and data folder) with
+# extraMetadata.atlasRealm.packagedTest=true (ADR-0015). Its `-c.key.path=value` options are
+# deep-merged over this file, so extraMetadata.productName below is overridden, not lost.
 electronFuses:
   runAsNode: false # ELECTRON_RUN_AS_NODE can't turn the app into a plain Node.js
   enableNodeOptionsEnvironmentVariable: false # NODE_OPTIONS can't inject code

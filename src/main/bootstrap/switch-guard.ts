@@ -9,26 +9,41 @@ export const BLOCKED_SWITCHES = [
   // Debuggers: attach to the renderer or main process and run code there.
   'remote-debugging-port',
   'remote-debugging-pipe',
+  'remote-allow-origins',
   'inspect',
   'inspect-brk',
   'inspect-port',
   'js-flags',
+  'wait-for-debugger',
+  'renderer-startup-dialog',
   // Sandbox and isolation: remove the walls between web content and the system.
+  // disable-features is refused whatever its value: it can switch off site isolation and
+  // Windows sandbox features under other names.
   'no-sandbox',
   'disable-web-security',
   'disable-site-isolation-trials',
+  'disable-features',
+  'disable-gpu-sandbox',
+  'in-process-gpu',
   'single-process',
+  'unsafely-treat-insecure-origin-as-secure',
+  // Not listed: allow-file-access-from-files. Electron adds it to its own command line, so
+  // refusing it would stop every launch (the packaged positive control showed this). file:
+  // loads are blocked separately (app-protocol.ts blockFileProtocol).
   // Child-process injection: run another program in front of our renderer/GPU/utility.
   'renderer-cmd-prefix',
   'gpu-launcher',
   'utility-cmd-prefix',
   'browser-subprocess-path',
-  // Traffic interception: reroute or accept forged HTTPS (later: provider API keys).
+  // Traffic interception: reroute, decrypt or accept forged HTTPS (later: provider API keys).
   'proxy-server',
   'proxy-pac-url',
   'ignore-certificate-errors',
+  'ignore-certificate-errors-spki-list',
   'host-rules',
   'host-resolver-rules',
+  'ssl-key-log-file',
+  'log-net-log',
 ] as const;
 
 export type BlockedSwitch = (typeof BLOCKED_SWITCHES)[number];

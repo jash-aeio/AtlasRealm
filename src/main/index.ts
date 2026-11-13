@@ -87,8 +87,10 @@ function readIsTestBuild(): boolean {
 
 /**
  * The packaged app refuses Chromium switches that bypass its security boundary (#20,
- * SECURITY §21.1). Runs before anything else: no lock, DB, protocol or window yet. Electron
- * applies --remote-debugging-port only after this script has run, so the port never opens.
+ * SECURITY §21.1). Runs before anything else: no lock, DB, protocol or window yet. Almost all
+ * listed switches act only when the DevTools server or a child process starts, after this
+ * script, so e.g. the debugging port never opens. Exception: --js-flags already reached V8 in
+ * this process at startup; refusing still keeps it out of renderers and ends the process.
  * `pnpm dev` and the dev E2E tests are not packaged and keep their switches.
  */
 function refuseBlockedSwitches(): boolean {

@@ -26,13 +26,15 @@ import { type Browser, chromium, expect, type Page, test } from '@playwright/tes
 //
 // Two builds (#20, ADR-0015). The shipped build (release/win-unpacked, `pnpm package`) refuses
 // --remote-debugging-port, so the UI smoke tests drive the test-only variant
-// (release/test/win-unpacked, `pnpm package:test`). It is identical except for a marker in
-// the package.json inside app.asar that allows that one switch. The shipped build gets the
-// switch-guard tests and the fuse readout.
+// (release-test/win-unpacked, `pnpm package:test`). Same bundled code, plus a marker in the
+// package.json inside app.asar that allows that one switch. It has its own exe name, appId and
+// data folder, so it can't be mistaken for the real app. The shipped build gets the
+// switch-guard tests, the marker check and the fuse readout.
 
-const UNPACKED = resolve('release', 'test', 'win-unpacked');
+const UNPACKED = resolve('release-test', 'win-unpacked');
 const SHIPPED_UNPACKED = resolve('release', 'win-unpacked');
-const EXE_NAME = 'Atlas Realm.exe';
+const EXE_NAME = 'AtlasRealmTest.exe';
+const SHIPPED_EXE_NAME = 'Atlas Realm.exe';
 const devElectron = createRequire(import.meta.url)('electron') as string;
 
 test.describe.configure({ mode: 'serial' });
@@ -44,11 +46,11 @@ let shippedExePath: string;
 let userDataDir: string;
 
 test.beforeAll(async () => {
-  if (!existsSync(join(SHIPPED_UNPACKED, EXE_NAME))) {
+  if (!existsSync(join(SHIPPED_UNPACKED, SHIPPED_EXE_NAME))) {
     throw new Error('No packaged app in release/win-unpacked. Run `pnpm package` first.');
   }
   if (!existsSync(join(UNPACKED, EXE_NAME))) {
-    throw new Error('No test variant in release/test/win-unpacked. Run `pnpm package:test`.');
+    throw new Error('No test variant in release-test/win-unpacked. Run `pnpm package:test`.');
   }
   root = mkdtempSync(join(tmpdir(), 'atlas packaged Ünïcødé 测试 '));
   installDir = join(root, 'Program Fïles (x86) 地图', 'Atlas Realm');
@@ -59,7 +61,7 @@ test.beforeAll(async () => {
   if (!existsSync(exePath)) throw new Error(`Copy failed: ${exePath} is missing`);
   const shippedDir = join(root, 'shipped Fïles 地图', 'Atlas Realm');
   await cp(SHIPPED_UNPACKED, shippedDir, { recursive: true });
-  shippedExePath = join(shippedDir, EXE_NAME);
+  shippedExePath = join(shippedDir, SHIPPED_EXE_NAME);
   if (!existsSync(shippedExePath)) throw new Error(`Copy failed: ${shippedExePath} is missing`);
 });
 
@@ -310,6 +312,29 @@ async function portAnswers(port: number): Promise<boolean> {
   }
 }
 
+/**
+ * Polls the port every 50 ms from start until the process exits (or the timeout), so a port
+ * that opened briefly and closed again is still caught.
+ */
+async function watchPortUntilExit(
+  child: ChildProcess,
+  port: number,
+  ms: number,
+): Promise<{ exit: number | null | 'still running'; portEverAnswered: boolean }> {
+  let portEverAnswered = false;
+  // An object, so lint sees that the .finally callback changes it.
+  const state = { done: false };
+  const exit = exitOrTimeout(child, ms).finally(() => {
+    state.done = true;
+  });
+  while (!state.done) {
+    if (await portAnswers(port)) portEverAnswered = true;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  if (await portAnswers(port)) portEverAnswered = true;
+  return { exit: await exit, portEverAnswered };
+}
+
 const dbFile = (userData: string): string => join(userData, 'profiles', 'default', 'app.sqlite');
 
 test('positive control: the shipped build starts normally without blocked switches', async () => {
@@ -337,11 +362,12 @@ test('the shipped build quits on --remote-debugging-port before opening the port
     const port = await freePort();
     const started = startExe([`${spelling}=${String(port)}`]);
     try {
-      expect(await exitOrTimeout(started.child, 20_000), spelling).toBe(1);
+      const watched = await watchPortUntilExit(started.child, port, 20_000);
+      expect(watched.exit, spelling).toBe(1);
       expect(started.output()).toContain(
         '[security] refusing to start with blocked switches: remote-debugging-port',
       );
-      expect(await portAnswers(port)).toBe(false);
+      expect(watched.portEverAnswered, spelling).toBe(false);
       expect(existsSync(dbFile(started.userData))).toBe(false);
     } finally {
       killTree(started.child);
@@ -356,6 +382,9 @@ test('the shipped build quits on other debugging, sandbox and proxy switches', a
     ['--disable-web-security', 'disable-web-security'],
     ['--js-flags=--allow-natives-syntax', 'js-flags'],
     ['--proxy-server=127.0.0.1:1', 'proxy-server'],
+    ['--disable-features=IsolateOrigins,site-per-process', 'disable-features'],
+    ['--disable-gpu-sandbox', 'disable-gpu-sandbox'],
+    ['--ssl-key-log-file=keys.log', 'ssl-key-log-file'],
   ] as const) {
     const started = startExe([arg]);
     try {
@@ -372,13 +401,26 @@ test('the test variant allows only --remote-debugging-port and still refuses the
   const port = await freePort();
   const started = startExe([`--remote-debugging-port=${String(port)}`, '--no-sandbox'], exePath);
   try {
-    expect(await exitOrTimeout(started.child, 20_000)).toBe(1);
+    const watched = await watchPortUntilExit(started.child, port, 20_000);
+    expect(watched.exit).toBe(1);
     // Only no-sandbox is reported: remote-debugging-port is the variant's one exception.
     expect(started.output()).toMatch(/blocked switches: no-sandbox\r?\n/);
-    expect(await portAnswers(port)).toBe(false);
+    expect(watched.portEverAnswered).toBe(false);
   } finally {
     killTree(started.child);
   }
+});
+
+test('only the test variant carries the packagedTest marker (the shipped build has none)', () => {
+  // The package.json inside app.asar is stored uncompressed, so its text is in the archive's
+  // bytes. The bundled code says `.packagedTest === true`, which this pattern doesn't match.
+  // The installer is built from the same release/win-unpacked folder in the same run.
+  const marker = /"packagedTest"\s*:\s*true/;
+  const asarText = (dir: string): string =>
+    readFileSync(join(dir, 'resources', 'app.asar')).toString('latin1');
+  expect(asarText(UNPACKED)).toMatch(marker); // positive control
+  expect(asarText(SHIPPED_UNPACKED)).not.toMatch(marker);
+  expect(existsSync(join(SHIPPED_UNPACKED, EXE_NAME))).toBe(false);
 });
 
 // ---- Fuses -------------------------------------------------------------------------------
