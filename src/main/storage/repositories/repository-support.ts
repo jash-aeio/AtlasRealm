@@ -32,6 +32,7 @@ export const LIMITS = {
   nameMaxChars: 80,
   goalMaxChars: 2000,
   slugMaxChars: 64,
+  templateIdMaxChars: 100,
   timezoneMaxChars: 64,
   templateVersionMaxChars: 32,
   preferencesMaxChars: 16_384,
@@ -113,6 +114,20 @@ export function assertSlug(value: string, field: string): string {
     throw new RepositoryError(
       'invalid_input',
       `${field} must be 1–${String(LIMITS.slugMaxChars)} characters of a-z, 0-9 and "-".`,
+    );
+  }
+  return value;
+}
+
+// Lowercase words joined by single "." or "-" (TemplateId in contracts/project-template.ts).
+const TEMPLATE_ID = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+
+/** A namespaced template ID such as `builtin.generic` (migration v4). */
+export function assertTemplateId(value: string, field: string): string {
+  if (value.length > LIMITS.templateIdMaxChars || !TEMPLATE_ID.test(value)) {
+    throw new RepositoryError(
+      'invalid_input',
+      `${field} must be lowercase words joined by "." or "-", at most ${String(LIMITS.templateIdMaxChars)} characters.`,
     );
   }
   return value;

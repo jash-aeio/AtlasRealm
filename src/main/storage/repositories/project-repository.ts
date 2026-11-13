@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { type Database, withSavepoint } from '../database';
 import { GraphEntityRepository } from './graph-entity-repository';
 import {
-  assertSlug,
+  assertTemplateId,
   assertVersion,
   guardedUpdate,
   type GuardedUpdate,
@@ -107,7 +107,7 @@ export class ProjectRepository {
   create(input: NewProject): Project {
     const name = normalizeName(input.name, 'Project name');
     const goal = normalizeText(input.goal ?? '', 'Project goal', LIMITS.goalMaxChars);
-    const templateId = assertSlug(input.templateId, 'Template ID');
+    const templateId = assertTemplateId(input.templateId, 'Template ID');
     const templateVersion = assertVersion(input.templateVersion, 'Template version');
     // Checked first for a clear error; the foreign key still guards the insert itself.
     if (this.db.prepare('SELECT 1 FROM worlds WHERE id = ?').get(input.worldId) === undefined) {

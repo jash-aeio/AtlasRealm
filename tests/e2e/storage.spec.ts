@@ -53,9 +53,9 @@ async function launchOnce(): Promise<{ userData: string; launchText: string }> {
 test('the database lives under userData and its records survive a restart', async () => {
   const first = await launchOnce();
   expect(first.userData).toBe(userDataDir);
-  expect(first.launchText).toMatch(/^Launch #1 · .* · schema v3$/);
+  expect(first.launchText).toMatch(/^Launch #1 · .* · schema v4$/);
   // The UI shows the stored count after a restart, not just the database file.
-  expect((await launchOnce()).launchText).toMatch(/^Launch #2 · .* · schema v3$/);
+  expect((await launchOnce()).launchText).toMatch(/^Launch #2 · .* · schema v4$/);
 
   // A fresh install gets one profile, "Default", with a UUID (ADR-0017); both launches used it.
   const index = JSON.parse(readFileSync(join(userDataDir, 'profiles-index.json'), 'utf8')) as {
@@ -70,7 +70,7 @@ test('the database lives under userData and its records survive a restart', asyn
     readOnly: true,
   });
   try {
-    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 3 });
+    expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 4 });
     expect(db.prepare("SELECT value FROM app_meta WHERE key = 'launch_count'").get()).toEqual({
       value: '2',
     });
