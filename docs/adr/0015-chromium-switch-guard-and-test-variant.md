@@ -28,11 +28,13 @@ Two questions:
 
 ## Decision
 - **Named deny-list** in `src/main/bootstrap/switch-guard.ts`, grouped as debuggers, sandbox/isolation, child-process injection and traffic interception. When `app.isPackaged` and any is present, main writes one line to stderr and calls `app.exit(1)` before the single-instance lock, DB, protocol or any window. Detection uses `app.commandLine.hasSwitch`, Chromium's own parser, so `-x`, `/x` and upper-case spellings are caught too (checked by E2E).
-- **Test-only variant:** `pnpm package:test` runs `electron-builder --win dir` into `release/test/` with `-c.extraMetadata.atlasRealm.packagedTest=true`. The marker lives in the package.json inside `app.asar`; it is never read from the environment. The variant allows only `remote-debugging-port`; every other blocked switch stays blocked. It's a folder only: no installer, never uploaded by CI.
+- **Test-only variant:** `pnpm package:test` runs `electron-builder --win dir` into `release-test/` with `-c.extraMetadata.atlasRealm.packagedTest=true`. The marker lives in the package.json inside `app.asar`; it is never read from the environment. The variant allows only `remote-debugging-port`; every other blocked switch stays blocked. It's a folder only: no installer, never uploaded by CI. It has its own identity (`AtlasRealmTest.exe`, appId `…atlasrealm.test`, its own data folder) and lives outside `release/`, so it can't be mistaken for, or packaged with, the real app. A packaged test checks that the shipped `app.asar` has no marker (with the variant as positive control).
 
 ## Consequences
 - The shipped build can't be debugged with Chromium switches. Debug with `pnpm dev`, or build the variant.
 - Adding a switch to the list is a one-line change plus a unit test (`tests/security/switch-guard.test.ts` runs over the whole list).
+- `--js-flags` reaches V8 at process start, before the guard runs. Refusing it still keeps the flags out of renderers and ends the process at once. Every other listed switch acts later (DevTools server, child processes).
+- `allow-file-access-from-files` can't be listed: Electron adds it to its own command line, so refusing it stopped every launch (found by the packaged positive control). `file:` loads are blocked separately.
 - Asar integrity protects the marker only as far as it protects the asar: until the `.exe` is code-signed, a local attacker who can patch files could also flip it. Same limit as every other asar-based check.
 - Revisit if: a new Chromium switch turns out to bypass the boundary (add it), or legitimate arguments start appearing that an allowlist could describe cleanly.
 

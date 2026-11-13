@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ## [Unreleased]
 
+### Security
+- Chromium switch guard (M1-1, #20): the installed app now refuses to start when it is launched with switches that would let another program take over its trusted window, such as `--remote-debugging-port`, `--no-sandbox` or `--disable-web-security` (29 switches in all, ADR-0015). It exits before it opens the database or a window. `pnpm dev` is unaffected. Packaged smoke tests use a separate test-only build that allows only the debugging port and is never shipped.
+
 ## [0.1.0-m0] - 2026-11-10 — M0: Foundation and risk spikes
 
 ### Added

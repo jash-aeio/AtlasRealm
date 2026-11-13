@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-11 · **Branch:** docs/plan-m1 (M1 planning PR)
+**Last updated:** 2026-11-13 · **Branch:** feat/20-chromium-switch-guard (M1-1 PR)
 
 ## Current milestone
-**M1 — Profiles, worlds, and project persistence** (⏳ planned 2026-11-11: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). Nothing implemented yet.
+**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20, switch guard) is in review; nothing else started.
 
 **M0 — Foundation and risk spikes: ✅ closed 2026-11-10, tag `v0.1.0-m0`.** Evidence: unit/integration 193/193, E2E 35/35, packaged E2E 9/9 on main @ 2fbf944; CI green. See `docs/sessions/2026-11-10-m0-close.md`.
 
@@ -90,9 +90,9 @@
   - The renderer sets Zod `jitless` (`src/renderer/app/zod-config.ts`). Without it, Zod 4's `new Function` probe causes a `script-src eval` CSP report.
 
 - **M1-1 Chromium switch guard (#20, branch `feat/20-chromium-switch-guard`):** the packaged app refuses to start with debugging, sandbox-disabling, child-process injection or traffic-interception switches (SECURITY §21.1, ADR-0015).
-  - `src/main/bootstrap/switch-guard.ts` holds the deny-list (19 switches) and the checks. `src/main/index.ts` runs it first: when `app.isPackaged` and a listed switch is present, it logs `[security] refusing to start with blocked switches: …` to stderr and calls `app.exit(1)` before the lock, DB, protocol or window. No dialog.
+  - `src/main/bootstrap/switch-guard.ts` holds the deny-list (29 switches) and the checks. `src/main/index.ts` runs it first: when `app.isPackaged` and a listed switch is present, it logs `[security] refusing to start with blocked switches: …` to stderr and calls `app.exit(1)` before the lock, DB, protocol or window. No dialog.
   - Detection uses `app.commandLine.hasSwitch` (Chromium's parser), so `-x`, `/x` and upper-case spellings are caught.
-  - `pnpm package:test` builds a **test-only variant** (`release/test/win-unpacked`, folder only) whose asar package.json carries `atlasRealm.packagedTest: true`. That variant allows `remote-debugging-port` only. CI builds it after the installer and never uploads it.
+  - `pnpm package:test` builds a **test-only variant** (`release-test/win-unpacked/AtlasRealmTest.exe`, folder only, own appId and data folder) whose asar package.json carries `atlasRealm.packagedTest: true`. That variant allows `remote-debugging-port` only. CI builds it after the installer and never uploads it.
   - `pnpm dev` and the dev E2E suite are unaffected (not packaged).
 
 ## Changed components
@@ -111,7 +111,9 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
-- M1-1, 2026-11-11, local Windows 11: typecheck, lint, format:check pass. Unit/integration 224/224 (31 new). E2E 35/35. Packaged E2E 13/13 (4 new) on a fresh `pnpm package` + `pnpm package:test`.
+- M1-1, 2026-11-11, local Windows 11: typecheck, lint, format:check pass. Unit/integration 234/234 (41 new). E2E 35/35. Packaged E2E 14/14 (5 new) on a fresh `pnpm package` + `pnpm package:test` (re-run 2026-11-13 after the review fixes).
+  - Review fixes (security-auditor M1, M2, L2, L3; invariant-reviewer suggestion): 10 more switches, among them `disable-features`, `disable-gpu-sandbox`, `in-process-gpu`, `ssl-key-log-file`, `log-net-log` and `remote-allow-origins`. The variant moved to `release-test/` with its own identity. New marker test: the shipped asar has no marker, the variant's does (positive control). The port is now polled every 50 ms until exit, not checked once afterwards. The `--js-flags` timing comment was corrected.
+  - The positive control caught a real mistake: `allow-file-access-from-files` (suggested by the review) is set by Electron itself, so listing it made every launch exit. It was removed, with a comment.
   - The first unit run had 1 failure out of 224. Its output was lost, and 4 reruns all passed: an unidentified flaky test (see Known limitations).
   - Packaged, shipped build: with no switches it opens its DB and keeps running (positive control). `--remote-debugging-port` in four spellings (`--`, `-`, `/`, upper case) exits 1 with the `[security]` line, the port never answers and no DB is created. `--remote-debugging-pipe`, `--no-sandbox`, `--disable-web-security`, `--js-flags` and `--proxy-server` also exit 1. `--inspect=0` is now refused outright, on top of the fuse.
   - Packaged, test variant: all CDP smoke tests pass (so it opens the port: the positive control for the port check). `--remote-debugging-port` plus `--no-sandbox` still exits 1, reporting only `no-sandbox`.
@@ -232,6 +234,7 @@
 - Zod in the renderer runs `jitless` (no generated parsers). Fine at today's sizes; measure before parsing large data there.
 - `node:sqlite` is a release candidate API (ADR-0010). It works in the packaged build (M0-7 E2E).
 - Packaged UI smoke tests run on the test-only variant, not the exact shipped bytes (one package.json field differs, ADR-0015). The shipped build gets the guard tests and the fuse readout. The switch guard is a deny-list: an unlisted dangerous switch would get through.
+- Switch-guard follow-ups from the security review (not done in #20): (1) an allowlist step over `process.argv` as a second layer. It reverses the deny-list decision, so it needs your call. (2) Decide "test build" at bundle time (Vite `define`) so the exception code isn't in the shipped bundle at all. (3) Refuse to start when `SSLKEYLOGFILE` is set, once provider keys exist (environment variables bypass `hasSwitch`). (4) No packaged negative test for a missing or malformed marker (unit tests only).
 - One unit-test run (M1-1) failed once with 1/224 and couldn't be reproduced in 4 reruns. Output lost; the test is unidentified. Watch CI for a repeat.
 - Unsigned build: SmartScreen warns, and asar integrity only stops corruption and casual tampering. Without a signature, a local attacker can patch the hash in the `.exe` too. Code signing is a release decision (costs money).
 - Electron's default icon is still a placeholder (not in M0-8's acceptance criteria; follow-up). The `app-update.yml` that electron-builder generates is unused (no updater).
@@ -261,6 +264,6 @@
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- Start M1 with `/start-task 20` (M1-1, Chromium switch guard; it goes first because M1-2 also edits `src/main/index.ts`). #30 (schema v2) and #32 (templates) are also Ready and parallel-safe.
+- After the #20 PR merges: `/start-task 29` (M1-2, profiles index; it also edits `src/main/index.ts`). #30 (schema v2) and #32 (templates) are Ready and parallel-safe.
   - Possible follow-ups: an app icon; removing `data:` from CSP `img-src` (needs your decision); the empty resource-timing list in the packaged test.
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.

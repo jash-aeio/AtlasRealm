@@ -4,8 +4,8 @@
 Stop the packaged app from starting with Chromium switches that bypass its security boundary (for example `--remote-debugging-port`, which would let another program run code inside our trusted page). Release gate before the M3 permission broker.
 
 ## Decisions (you, via AskUserQuestion)
-- **Smoke tests:** a test-only package variant. `pnpm package:test` writes `atlasRealm.packagedTest: true` into the package.json inside its `app.asar` and outputs a folder in `release/test`. It allows `--remote-debugging-port` only. It's never installed or uploaded. → [ADR-0015](../adr/0015-chromium-switch-guard-and-test-variant.md)
-- **Switch list:** a named deny-list (19 switches in four groups), not an allowlist. → ADR-0015
+- **Smoke tests:** a test-only package variant. `pnpm package:test` writes `atlasRealm.packagedTest: true` into the package.json inside its `app.asar` and outputs a folder in `release-test/` with its own name (`AtlasRealmTest.exe`), appId and data folder. It allows `--remote-debugging-port` only. It's never installed or uploaded. → [ADR-0015](../adr/0015-chromium-switch-guard-and-test-variant.md)
+- **Switch list:** a named deny-list (29 switches in four groups; 10 added after the security review), not an allowlist. → ADR-0015
 
 Routine choices (not asked):
 - Exit with code 1 and one stderr line, **no dialog**. A modal box would hang automated launches, and a person who typed a debug switch by mistake can read the log.
@@ -16,6 +16,12 @@ Routine choices (not asked):
 1. `feat(shell)`: `src/main/bootstrap/switch-guard.ts` with the list, `findBlockedSwitches` and `isPackagedTestBuild`. The guard runs at the very top of `src/main/index.ts`. 31 unit tests.
 2. `test(packaged)`: the `package:test` script and a CI step. The packaged spec copies both builds. Smoke tests use the variant. New guard tests use the shipped build, with a positive control (starts normally without switches).
 3. `docs`: SECURITY §21.1 rule, ADR-0015, glossary (Chromium switch, deny-list/allowlist), IMPLEMENTATION_STATUS, the builder-config comment, the M1 decision table.
+
+## Review (2026-11-13, `/ship`)
+- invariant-reviewer: approve, no violations. Suggested `remote-allow-origins`, now added.
+- security-auditor: approve with changes. Fixed: M1 (10 more switches), M2 (variant in `release-test/` as `AtlasRealmTest.exe` with its own appId and data folder, plus a test that the shipped asar has no marker), L2 (comment on `--js-flags` timing), L3 (port polled during the run).
+- Not fixed here, listed in IMPLEMENTATION_STATUS: an allowlist layer (it reverses your deny-list choice), bundle-time test flag, the `SSLKEYLOGFILE` environment variable, and a packaged test for a malformed marker.
+- Lesson: the reviewer also suggested `allow-file-access-from-files`. Electron sets it itself, so blocking it stopped every launch. The packaged positive control caught this immediately. Unit tests with a fake command line never could have.
 
 ## Things learned
 - Electron applies `--remote-debugging-port` only after the main script has run, so exiting at the top of main means the port never opens. The E2E checks this.
