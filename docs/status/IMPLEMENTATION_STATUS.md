@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-13 · **Branch:** feat/20-chromium-switch-guard (M1-1 PR)
+**Last updated:** 2026-11-13 · **Branch:** feat/32-project-templates (M1-5 PR)
 
 ## Current milestone
-**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20, switch guard) is in review; nothing else started.
+**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20) merged. M1-5 (#32, templates) and M1-3 (#30, schema v2) in review.
 
 **M0 — Foundation and risk spikes: ✅ closed 2026-11-10, tag `v0.1.0-m0`.** Evidence: unit/integration 193/193, E2E 35/35, packaged E2E 9/9 on main @ 2fbf944; CI green. See `docs/sessions/2026-11-10-m0-close.md`.
 
@@ -95,7 +95,14 @@
   - `pnpm package:test` builds a **test-only variant** (`release-test/win-unpacked/AtlasRealmTest.exe`, folder only, own appId and data folder) whose asar package.json carries `atlasRealm.packagedTest: true`. That variant allows `remote-debugging-port` only. CI builds it after the installer and never uploads it.
   - `pnpm dev` and the dev E2E suite are unaffected (not packaged).
 
+- **M1-5 project template metadata (#32, branch `feat/32-project-templates`):** two bundled templates, **Generic** and **Content Campaign** (PRD §18.1, §18.2), are checked at startup and listed through `template.list`. They are **metadata only**: input fields, artifact types and offline limitations. There are no workflows or agents until M3/M4, and every manifest says so (`metadataOnly: true`). No UI shows them yet (M1-10).
+  - Manifests: `resources/project-templates/<folder>/<version>/template.json`, in the DATA_MODEL §10.1 envelope (`schemaVersion`, `kind: "project-template"`, `id: builtin.<folder>`, `version`, `publisher`, `source: bundled`).
+  - Schema: `src/common/contracts/project-template.ts` (Zod, strict objects). It refuses unknown keys (including `workflows`/`agents`), IDs with `/`, `..` or capitals, versions that aren't plain `MAJOR.MINOR.PATCH`, control or invisible format characters in display text, duplicate field keys or option values, and over-long strings or lists. Input field types: `text`, `longText`, `date`, `dateRange`, `choice`, `multiChoice`, `fileReferences`. Generic and Content Campaign share no input field keys (§18.6).
+  - Loader: Vite's `import.meta.glob` bundles the JSON into the main process at build time (no runtime file paths, no packaging change). `buildTemplateCatalog` validates each file once at startup. A bad file is listed as `{ status: 'unavailable', location, reason }` (`invalid_manifest`, `location_mismatch`, `too_many_templates`), the Zod detail goes only to the main log, and startup continues. A location that is too long or has odd characters is shown as `(unreadable location)`. At most 100 templates.
+  - IPC: `template.list` (no payload, output schema-checked, bounded by the 100 cap) via `window.atlas.template.list()`.
+
 ## Changed components
+- M1-5: `resources/project-templates/` (new), `src/common/contracts/project-template.ts` (new), `src/main/templates/{catalog,bundled-templates}.ts` (new), `src/main/ipc/commands/template-list.ts` (new), `src/common/contracts/{channels,atlas-api}.ts`, `src/preload/index.ts`, `src/main/ipc/register.ts`, `src/main/index.ts`; `tests/domain/project-template{,-catalog}.test.ts` (new), `tests/integration/template-list.test.ts` (new), `tests/e2e/shell.spec.ts`; docs: glossary, lesson 014
 - M1-1: `src/main/bootstrap/switch-guard.ts` (new), `src/main/index.ts`, `package.json` (`package:test`), `electron-builder.yml` (comment), `.github/workflows/ci.yml`; `tests/security/switch-guard.test.ts` (new), `tests/e2e-packaged/packaged.spec.ts`; docs: ADR-0015, SECURITY §21.1, glossary
 - M0-8: `src/common/assets/` (new), `scripts/generate-placeholder-art.ts` (new), `resources/assets/` (new), `src/renderer/world/{world-assets.ts (new),grid-scene.ts}`, `src/renderer/app/{zod-config.ts (new),main.tsx}`, `electron.vite.config.ts`, `package.json` (script); `tests/domain/asset-manifest.test.ts` (new), `tests/e2e/world.spec.ts`, `tests/e2e-packaged/packaged.spec.ts`; docs: ADR-0013, ART_BIBLE, ASSET_PROVENANCE, glossary, lesson 011; `.claude/hooks/guard-bash.mjs` (branch checked where the command runs, for worktrees)
 - M0-6: `src/worker/` (new), `src/main/runtime-bridge/` (new), `src/common/contracts/{worker-protocol,json-size,runtime-worker,channels,atlas-api}.ts`, `src/main/ipc/{router.ts,register.ts,commands/runtime-worker.ts}`, `src/main/index.ts`, `src/preload/index.ts`, `src/renderer/app/{App.tsx,WorkerPanel.tsx}`, `tsconfig.node.json` (includes `src/worker`); `tests/integration/{worker-messaging,runtime-worker-contract}.test.ts`, `tests/e2e/worker.spec.ts` (new), `tests/e2e/shell.spec.ts` (API shape), `tests/e2e-packaged/packaged.spec.ts`
@@ -111,6 +118,13 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- M1-5, 2026-11-13, local Windows 11, rebased on main @ be2ad19 (with #20): typecheck, lint, format:check pass. Unit/integration 314/314 after the review fixes (303 before them). E2E 36/36 (1 new: `template.list` returns `builtin.content-campaign@1.0.0` and `builtin.generic@1.0.0` from the built main process, and the preload exposes `template.list` only).
+  - Schema tests: both bundled manifests validate. Malformed fixtures are refused: unknown keys, `workflows`/`agents`, unsafe IDs (`../x`, `a/b`, `Builtin.X`), bad versions (`1.0`, `01.0.0`, `1.0.0-beta`), duplicate keys or options, a `choice` without options, empty or over-long lists. The two templates' input field keys don't overlap.
+  - Catalog tests: a bad manifest becomes `invalid_manifest` and the others still load. A folder that disagrees with its manifest becomes `location_mismatch`. Overflow beyond 100 is reported once. The output is sorted and deterministic.
+  - Before the rebase (2026-11-13), three unit runs under heavy load (a peer session on the same machine) gave 2, 1 and 0 failures out of 262. The failures were always in M0 timing tests (`ipc-router` 10 MB payload, `worker-messaging` cancellation) and passed when re-run alone. Likely the same flake as the M1-1 note under Known limitations.
+  - Not re-run: packaged E2E. The build-time import is the same in a packaged build and is covered by the dev-build E2E.
+  - invariant-reviewer: no violations. security-auditor: approve, no Critical/High/Medium. Fixed with tests: L1 (one long or odd folder name failed the output schema for the whole list; such locations are now shown as `(unreadable location)` and logged JSON-quoted), L2 (display text refuses control and invisible format characters such as U+202E), S2 (an unexpected glob key is kept whole). Mutation checks: undoing L1 failed 3 of the 4 new location tests, and undoing L2 failed all 6 new display-text tests.
+  - Not acted on: S1 (Vite's glob follows symlinks, so a symlink committed under `resources/` could pull in an outside file at build time; a CI "no symlinks" check is a possible follow-up). S3 (a disk loader for user-installed templates needs path confinement and a size cap) is noted under Known limitations.
 - M1-1, 2026-11-11, local Windows 11: typecheck, lint, format:check pass. Unit/integration 234/234 (41 new). E2E 35/35. Packaged E2E 14/14 (5 new) on a fresh `pnpm package` + `pnpm package:test` (re-run 2026-11-13 after the review fixes).
   - Review fixes (security-auditor M1, M2, L2, L3; invariant-reviewer suggestion): 10 more switches, among them `disable-features`, `disable-gpu-sandbox`, `in-process-gpu`, `ssl-key-log-file`, `log-net-log` and `remote-allow-origins`. The variant moved to `release-test/` with its own identity. New marker test: the shipped asar has no marker, the variant's does (positive control). The port is now polled every 50 ms until exit, not checked once afterwards. The `--js-flags` timing comment was corrected.
   - The positive control caught a real mistake: `allow-file-access-from-files` (suggested by the review) is set by Electron itself, so listing it made every launch exit. It was removed, with a comment.
@@ -235,7 +249,8 @@
 - `node:sqlite` is a release candidate API (ADR-0010). It works in the packaged build (M0-7 E2E).
 - Packaged UI smoke tests run on the test-only variant, not the exact shipped bytes (one package.json field differs, ADR-0015). The shipped build gets the guard tests and the fuse readout. The switch guard is a deny-list: an unlisted dangerous switch would get through.
 - Switch-guard follow-ups from the security review (not done in #20): (1) an allowlist step over `process.argv` as a second layer. It reverses the deny-list decision, so it needs your call. (2) Decide "test build" at bundle time (Vite `define`) so the exception code isn't in the shipped bundle at all. (3) Refuse to start when `SSLKEYLOGFILE` is set, once provider keys exist (environment variables bypass `hasSwitch`). (4) No packaged negative test for a missing or malformed marker (unit tests only).
-- One unit-test run (M1-1) failed once with 1/224 and couldn't be reproduced in 4 reruns. Output lost; the test is unidentified. Watch CI for a repeat.
+- One unit-test run (M1-1) failed once with 1/224 and couldn't be reproduced in 4 reruns. Output lost; the test is unidentified. Watch CI for a repeat. On 2026-11-13 under heavy load (M1-5), the timing-sensitive M0 tests in `ipc-router.test.ts` (10 MB payload) and `worker-messaging.test.ts` (cancellation after 30 ms) failed intermittently. Likely candidates; a follow-up issue if CI shows it.
+- Templates (M1-5): metadata only. No `template.get` yet (summaries leave out help texts and limits), and nothing uses the templates until `project.create` (M1-7) and the create form (M1-10). User-installed templates will need a separate loader from disk with path confinement. Bundled ones are only checked at startup, so a broken bundled template shows as unavailable instead of failing the build (a JSON syntax error does fail the build).
 - Unsigned build: SmartScreen warns, and asar integrity only stops corruption and casual tampering. Without a signature, a local attacker can patch the hash in the `.exe` too. Code signing is a release decision (costs money).
 - Electron's default icon is still a placeholder (not in M0-8's acceptance criteria; follow-up). The `app-update.yml` that electron-builder generates is unused (no updater).
 - The `file:` block covers the default session only. Any future `session.fromPartition` needs its own block (rule in `app-protocol.ts`).
@@ -264,6 +279,6 @@
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- After the #20 PR merges: `/start-task 29` (M1-2, profiles index; it also edits `src/main/index.ts`). #30 (schema v2) and #32 (templates) are Ready and parallel-safe.
+- #20 is merged. #32 (templates) and #30 (schema v2, PR #40) are in review. Next: `/start-task 29` (M1-2, profiles index; it also edits `src/main/index.ts`, so rebase after #32 merges). M1-7 (#34) needs #30, #31, #32 and #33.
   - Possible follow-ups: an app icon; removing `data:` from CSP `img-src` (needs your decision); the empty resource-timing list in the packaged test.
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.

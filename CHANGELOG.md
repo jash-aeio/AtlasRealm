@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ## [Unreleased]
 
+### Added
+- Project templates (M1-5, #32): the app ships two starter templates, **Generic** and **Content Campaign**, each with its own input fields, planned outputs and offline limitations. They are metadata only for now: no workflows or agents until M3/M4, and each template says so. The app checks every template at startup. A broken one is listed as unavailable with a reason, and the app still starts. Developers can list them through the new `template.list` query. They don't show up in the UI yet (that comes with the project list, M1-10).
+
 ### Security
 - Chromium switch guard (M1-1, #20): the installed app now refuses to start when it is launched with switches that would let another program take over its trusted window, such as `--remote-debugging-port`, `--no-sandbox` or `--disable-web-security` (29 switches in all, ADR-0015). It exits before it opens the database or a window. `pnpm dev` is unaffected. Packaged smoke tests use a separate test-only build that allows only the debugging port and is never shipped.
 

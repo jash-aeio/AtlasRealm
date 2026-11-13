@@ -51,3 +51,16 @@ Routine choices (not asked):
 - `pnpm test`: **flaky under load.** 3 runs gave 2 failures, then 1, then 0, out of 262 tests. The failures were always in M0 tests (`ipc-router` "huge binary payload", `worker-messaging` cancellation timing), never in template tests. Re-run on their own, those two files passed 41/41. A peer session was shipping #20 on the same machine at the time. Worth a follow-up issue if it happens again on an idle machine or in CI.
 - `pnpm test:e2e`: 36/36 passed, including `template.list` from the built main process.
 - Process slip: this session briefly switched the shared checkout to `main` while a peer session was shipping #20 there. It switched back at once, and the peer's uncommitted files (CHANGELOG entry, lesson 012) carried over unchanged. All further work stayed in this worktree.
+
+## 2026-11-13: `/ship`
+- #20 merged first (`be2ad19`). This branch was rebased onto it with no conflicts. After the rebase: typecheck, lint and format were clean, unit/integration 303/303, E2E 36/36.
+- **invariant-reviewer:** no violations. The manifests honestly say metadata only, the offline limitations match PRD §18.1/§18.2, and a bad template is shown as unavailable without stopping startup.
+- **security-auditor:** approve, two Low findings, both fixed in `fix(templates): …`:
+  - L1: one very long or odd folder name made the whole `template.list` output fail its schema, so every template would vanish. Such locations now show as `(unreadable location)`, and the real one is logged JSON-quoted.
+  - L2: display text (names, labels, help texts, descriptions) now refuses control characters and invisible format characters, such as the right-to-left override that can disguise `txt.exe` as `exe.txt`.
+  - S2 also done: an unexpected glob key is kept whole instead of being sliced.
+  - Not done: S1, a CI check against symlinks under `resources/` (a build-time risk only; possible follow-up). S3, path confinement for a future disk loader (recorded under Known limitations).
+- Mutation checks: undoing L1 failed 3 of the 4 new location tests, and undoing L2 failed all 6 new text tests. Final run: unit/integration 314/314.
+- Routine choice (not asked): newlines are now refused in help texts too, since no manifest uses them and the summary UI shows one line. A future multi-line help text would need an explicit allowance.
+- Docs: status, roadmap (1/11 done), changelog, glossary (graceful degradation, invisible format characters), lesson 014.
+- You wrote no code yourself in this task. Claude wrote all of it, per the project rule.
