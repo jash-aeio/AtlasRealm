@@ -120,3 +120,6 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Savepoint** | A named checkpoint inside a transaction. Rolling back to it undoes only the writes made since, and the outer transaction carries on. It lets all-or-nothing steps nest | `withSavepoint` (`database.ts`), lesson 016 |
 | **Backfill** | Filling a new table or column for data that already existed before the change, as part of the migration | migration 3 |
 | **Composite foreign key** | A foreign key made of two columns together, e.g. `(project_id, world_id)` must match a real project *in that world* | migration 3 |
+| **Domain error code** | A stable word for an expected failure of a well-formed request (`not_found`, `revision_conflict`, `limit_reached`). The UI branches on it; bugs stay `internal_error` | `ipc-result.ts`, `CommandError` (`router.ts`), ADR-0019, lesson 017 |
+| **Active profile** | The profile whose database is open right now. Every profile and world command acts on it only; switching (M1-8) swaps it | `ActiveProfile` (`src/main/profiles/active-profile.ts`) |
+| **Application service** | Main-process code between IPC handlers and repositories that combines several stores into one operation (e.g. the profiles index plus a settings row) | `ProfileService` (`profile-service.ts`) |

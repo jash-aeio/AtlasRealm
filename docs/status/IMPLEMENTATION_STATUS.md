@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-13 · **Branch:** feat/31-graph-entity-ids (M1-4 PR, main @ 7d3abbc merged in after #29)
+**Last updated:** 2026-11-13 · **Branch:** feat/33-profile-world-commands (M1-6 PR, on main @ 27a2523)
 
 ## Current milestone
-**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20), M1-2 (#29), M1-3 (#30) and M1-5 (#32) are merged. M1-4 (#31, graph entities) is in review.
+**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20), M1-2 (#29), M1-3 (#30), M1-4 (#31) and M1-5 (#32) are merged. M1-6 (#33, profile + world commands) is in review.
 
 **M0 — Foundation and risk spikes: ✅ closed 2026-11-10, tag `v0.1.0-m0`.** Evidence: unit/integration 193/193, E2E 35/35, packaged E2E 9/9 on main @ 2fbf944; CI green. See `docs/sessions/2026-11-10-m0-close.md`.
 
@@ -126,14 +126,24 @@
     - The DB is opened and migrated before a new index is written, so a failed first launch leaves no index.
   - `src/main/index.ts` shows a separate path-free dialog for a damaged/newer index, a missing index, missing profile data, and other DB failures, then quits. Nothing is deleted.
 
-- **M1-4 graph entity IDs (#31, branch `feat/31-graph-entity-ids`):** every world and project now has a graph entity: the stable node ID the Realm Atlas (M2) and imports will build on (GRAPH_MODEL §30.5, ADR-0018). No UI or IPC uses it yet.
+- **M1-4 graph entity IDs (#31, merged as PR #44):** every world and project now has a graph entity: the stable node ID the Realm Atlas (M2) and imports will build on (GRAPH_MODEL §30.5, ADR-0018). No UI or IPC uses it yet.
   - Migration 3 adds `graph_entities` (STRICT): its own UUID, `kind` (`world`/`project`), `world_id`, `project_id` (project entities only), `ownership` (`app_owned`/`external`), `source_locator` (nullable, required for `external`, ≤ 1024 characters), `tombstoned_at`, timestamps and `revision`. There are **no name or layout columns**.
   - A composite foreign key `(project_id, world_id) → projects (id, world_id)` keeps a project entity in its project's own world. Partial unique indexes allow one entity per world and one per project.
   - Upgrading a v2 database backfills entities for existing worlds and projects (UUIDs built with `randomblob`). Trashed projects start tombstoned.
   - `WorldRepository.create` and `ProjectRepository.create` insert the record and its entity in one transaction. `ProjectRepository.trash` sets the tombstone and `restoreFromTrash` clears it, in the same transaction as the status change. Archiving doesn't tombstone. `GraphEntityRepository` has no delete method.
   - `withSavepoint` (`database.ts`): opens a transaction, or nests in one that `withTransaction` opened through a SQLite SAVEPOINT. If SQLite cancels the whole transaction by itself (disk full, I/O error), the transaction is marked aborted: further writes throw `TransactionAbortedError` and it won't commit, so writes never autocommit half a unit. It refuses to join a transaction it didn't open.
 
+- **M1-6 profile and world commands (#33, branch `feat/33-profile-world-commands`):** the renderer can manage profiles, profile settings and worlds through validated IPC commands only (ARCHITECTURE §16.1, ADR-0019). There is no UI for them yet (M1-9).
+  - Commands: `profile.list`, `profile.create`, `profile.rename`, `profile.settings.get`, `profile.settings.update` (avatar preset/colour, timezone; expected revision), `world.create`, `world.list`, `world.rename`. The preload exposes them as `window.atlas.profile.*` (with `profile.settings.*`) and `window.atlas.world.*`. The E2E test "preload exposes only the explicit API" checks the exact shape.
+  - Every command runs through the router (sender → strict Zod input → 64 KiB size cap → handler → output schema) and reads the database through `ActiveProfile.current()`. M1-8 swaps that holder.
+  - Domain error codes: `not_found`, `already_exists`, `revision_conflict` (+ `currentRevision`), `invalid_transition`, `limit_reached`. Handlers throw `CommandError`; `withRepositoryErrors` turns repository errors into fixed, user-safe messages. Another profile's world ID is `not_found` (test "cannot see or rename another profile's world").
+  - `profile.create` claims a fresh UUID folder (a non-recursive `mkdir`, so it never reuses one), creates a migrated DB without a launch record (`createProfileDatabase`) plus default settings, then adds the index entry. It does not switch profiles. If anything fails, it removes only the folder it created.
+  - `profile.rename` works on the active profile only: it checks the revision, writes the index, then updates the settings row, and puts the old index back if the row update fails. At startup, `ensureProfileSettings` creates a missing settings row (no avatar, system timezone or `UTC`) and repairs a name that differs from the index.
+  - Fixed lists: themes `meadow`, avatar presets `default`. Caps: 50 profiles, 100 worlds per profile. Profile names are unique ignoring case after NFC normalisation.
+  - Name rules (contract and repositories) now also refuse the Arabic letter mark, soft hyphen, word joiner/invisible operators, BOM and tag characters (security review L2).
+
 ## Changed components
+- M1-6: `src/common/contracts/{profile,world,display-name}.ts` (new), `src/common/contracts/{ipc-result,channels,atlas-api}.ts`, `src/main/ipc/router.ts` (`CommandError`), `src/main/ipc/repository-errors.ts` (new), `src/main/ipc/commands/{profile,world}.ts` (new), `src/main/ipc/register.ts`, `src/main/profiles/{active-profile,profile-service}.ts` (new), `src/main/storage/app-database.ts` (`createProfileDatabase`), `src/main/storage/repositories/repository-support.ts` (more invisible characters refused), `src/main/index.ts`, `src/preload/index.ts`; `tests/integration/{profile-contract,world-contract,ipc-repository-errors}.test.ts` (new), `tests/integration/{ipc-router,storage-project-repository}.test.ts`, `tests/e2e/shell.spec.ts`; docs: ADR-0019, ARCHITECTURE §16.1 note, lesson 017, glossary
 - M1-4: `src/main/storage/migrations/index.ts` (migration 3), `src/main/storage/database.ts` (`withSavepoint`, `TransactionAbortedError`, transaction tracking), `src/main/storage/repositories/graph-entity-repository.ts` (new), `src/main/storage/repositories/{world,project}-repository.ts`; `tests/integration/storage-{graph-entity-repository,migration-v3}.test.ts` (new), `tests/integration/storage-{database,migration-v2}.test.ts`, `tests/e2e/storage.spec.ts`, `tests/e2e-packaged/packaged.spec.ts` (schema v3); docs: ADR-0018, lesson 016, glossary
 - M1-2: `src/main/storage/profiles/{profile-id,profiles-index,startup}.ts` (new), `src/main/storage/app-database.ts`, `src/main/storage/repositories/profile-settings-repository.ts` (shared ID pattern), `src/main/index.ts`; `tests/integration/storage-profiles-{index,index-retry,startup}.test.ts` (new), `tests/integration/{storage-app-database,app-launch-info}.test.ts`, `tests/e2e/support/profile-data.ts` (new), `tests/e2e/storage.spec.ts`, `tests/e2e-packaged/packaged.spec.ts`; docs: ADR-0017, DATA_MODEL §9.1 note, glossary, lesson 015
 - M1-5: `resources/project-templates/` (new), `src/common/contracts/project-template.ts` (new), `src/main/templates/{catalog,bundled-templates}.ts` (new), `src/main/ipc/commands/template-list.ts` (new), `src/common/contracts/{channels,atlas-api}.ts`, `src/preload/index.ts`, `src/main/ipc/register.ts`, `src/main/index.ts`; `tests/domain/project-template{,-catalog}.test.ts` (new), `tests/integration/template-list.test.ts` (new), `tests/e2e/shell.spec.ts`; docs: glossary, lesson 014
@@ -153,6 +163,7 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- M1-6, 2026-11-13, local Windows 11, on main @ 27a2523: typecheck, lint, format:check pass. Unit/integration 569/570: the one failure is the known-flaky router test "rejects a huge binary payload". It timed out (5.6–6.3 s) in all three full runs this session and passes 27/27 when its file runs alone. New: `profile-contract` 47, `world-contract` 24, `ipc-repository-errors` 7, router +2, repository name rules +6. E2E 37/37 (new: a profile/world round trip through the built app, where a forged world ID returns `not_found`). On the final build, the first E2E run hit one flaky world-canvas test; the world spec then passed 9/9 and the full suite 37/37. Earlier the same day the worker-startup spec failed once the same way. Packaged E2E was not run (no packaging change). Reviews: invariant-reviewer found no violations. security-auditor found no Critical/High/Medium issues and 4 Lows: L1 (cleanup could remove a pre-existing folder), L2 (missing invisible characters) and L3 (names not NFC-normalised before comparing) are fixed with tests; L4 is listed under Known limitations.
 - M1-4, 2026-11-13, local Windows 11, on main @ d26825c: typecheck, lint, format:check pass. Unit/integration 427/427 (28 new across 2 new files and `storage-database.test.ts`). E2E 36/36 (the app shows "schema v3"). Packaged E2E 14/14 (fresh `pnpm package` + `package:test`; the installed app shows "schema v3" across restarts). Mutation checks: removing the transaction makes the 4 rollback tests fail; removing the aborted-transaction guards makes 3 `withSavepoint` tests fail, including a real full-disk case (`PRAGMA max_page_count`). Reviews: invariant-reviewer found no violations; security-auditor found one latent Medium issue (autocommit after SQLite cancels a transaction), which is fixed, and three Lows (two fixed, one noted under Known limitations).
 - M1-2, 2026-11-13, local Windows 11, rebased on main @ cb0034f (with #32): typecheck, lint, format:check pass. Unit/integration 451/451. E2E 36/36. Packaged E2E 14/14 on a fresh `pnpm package` + `pnpm package:test`.
   - Index: round-trip; corrupt JSON, wrong shapes, traversal IDs (`../evil`, `..\evil`, `C:\Windows`, `CON`, upper case, braces, trailing newline) all refused with the file kept byte for byte; a newer version reported as `newer_version`; no temp file left after a write or a refused write; stale temp cleanup touches only exact temp names; rename retry (simulated `EBUSY`/`EPERM`), give-up after 5 tries with the real error, no retry on `ENOSPC`.
@@ -284,8 +295,14 @@
 - CI: see the PR checks (first CI run with E2E on windows-latest).
 
 ## Known limitations
+- Profile and world commands (M1-6):
+  - The 50-profile and 100-world caps are only checked when creating. A hand-edited index with more profiles, or a database with more than 100 worlds (a future import or restore), makes `profile.list`/`world.list` fail their output check and return `internal_error` (security review L4). Fix before imports and restore arrive: enforce the caps on read or add paging.
+  - Profile preferences are stored but not exposed over IPC (no schema yet).
+  - Only one theme (`meadow`) and one avatar preset (`default`) exist until more art ships.
+  - The renamed-in-index-but-not-in-settings repair runs only at startup; it is covered by an integration test, not E2E.
+  - Duplicate-name detection normalises Unicode (NFC) and ignores case, but doesn't catch lookalikes from other scripts (e.g. Cyrillic "А" vs Latin "A").
 - Profiles (M1-2):
-  - No way to create, rename, switch or delete profiles yet (M1-6, M1-8). `profile_settings` rows are not written yet (M1-6).
+  - Profiles can be created and the active one renamed through commands (M1-6), but not switched (M1-8) or deleted yet. There is no profile UI yet (M1-9).
   - A lost or damaged index stops the app; there is no in-app recovery or "rebuild index" yet (M7 restore work). The dialog tells the user the file was kept.
   - If the very first DB open on a fresh install fails after `app.sqlite` was created, the next launch sees an un-indexed profile folder and stops with "profile list missing" rather than retrying. Only happens if a brand-new DB can't be migrated (a bug or a failing disk).
   - The startup error dialogs are not covered by automated tests.
@@ -360,7 +377,10 @@
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- #20, #29, #30 and #32 are merged; #31 (M1-4) is in review. Next: `/start-task 33` (M1-6, profile + world commands; needs #29 and #30, both done). M1-8 (#35, profile switching) needs #33. M1-7 (#34) needs #30, #31, #32 and #33. M1-7 services can wrap repository calls in `withTransaction`; read entity IDs with `GraphEntityRepository.findByProject`/`findByWorld`.
+- #20, #29, #30, #31 and #32 are merged; #33 (M1-6) is in review. Once it merges, M1-7 (#34, project commands) and M1-8 (#35, profile switching) are both ready and touch mostly different files (#34 adds `project*` commands; #35 owns switching), so they can run in parallel worktrees.
+  - M1-7: throw `CommandError` / wrap repository calls in `withRepositoryErrors`; read the DB through `ActiveProfile.current()`; reuse `DisplayName`/`Revision` from `src/common/contracts/display-name.ts`; read entity IDs with `GraphEntityRepository.findByProject`/`findByWorld`. Projects need paging (ARCHITECTURE §16.1).
+  - M1-8: give `ActiveProfile` a way to replace its state (the field is `readonly` until then), and refuse commands during a switch with `profile_switching` (ADR-0014). Open the target profile with `openAppDatabase`, which records a launch.
+  - Follow-up from the #33 security review (L4): enforce the profile/world caps on read, or add paging, before imports and restore.
   - Suggested follow-up: fix the flaky `ipc-router.test.ts` "huge binary payload" test (warm up the schema before spying, or spy only on the router's own serialization). It is probably also the "unidentified flaky test" seen during #20 and the load-related failures seen during #32 and #31.
   - Possible follow-ups: an app icon; removing `data:` from CSP `img-src` (needs your decision); the empty resource-timing list in the packaged test; an E2E test for the startup error dialogs.
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.

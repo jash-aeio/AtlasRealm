@@ -53,5 +53,24 @@ was rewritten with escapes. This is the same "Trojan Source" risk the name rules
 - `pnpm test:e2e`: the first run had 36/37 (the worker-startup spec failed once and then passed
   5/5 on its own); the rerun had 37/37, including the new profile/world round-trip test.
 
+## Review (/ship)
+- **invariant-reviewer:** no violations.
+- **security-auditor:** no Critical/High/Medium findings. Four Lows:
+  - **L1 (fixed):** if a folder already existed for the new ID, the failure cleanup could have
+    removed it. `profile.create` now claims the folder with a non-recursive `mkdir`, so cleanup
+    only runs for a folder this call created. Test: "never touches a folder that already exists".
+  - **L2 (fixed):** names could still hide some invisible characters: the Arabic letter mark, soft
+    hyphen, word joiner, invisible operators, BOM and tag characters ("ASCII smuggling", which
+    hides text a model would read). Both the contract and the repository rules refuse them now.
+    Tests cover both layers. One thing a test taught us: `trim()` removes a trailing BOM, so the
+    test puts the character in the middle of the name.
+  - **L3 (fixed):** names are NFC-normalised before the duplicate check, so "José" written two
+    different ways counts as the same name.
+  - **L4 (follow-up):** the caps are checked only when creating, so data that arrives another way
+    (a hand-edited index, a future import) could make the list commands fail. Listed under Known
+    limitations and in the next-task notes.
+- After the fixes: unit/integration 569/570 (the same flaky router test, which passes alone), and
+  E2E 37/37 on the second run (the first run hit a flaky world-canvas test once).
+
 ## Open questions
-- None blocking. Follow-up still open from earlier sessions: fix the flaky router test.
+- None blocking. Follow-ups: fix the flaky router test; security L4 (caps on read or paging).
