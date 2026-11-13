@@ -102,6 +102,16 @@ describe('migration v3 → v4', () => {
   });
 });
 
+it('copies v2-era template IDs that the new repository rule would refuse', async () => {
+  // v2 allowed any mix of a-z, 0-9 and "-"; v4 must never fail to copy such a row.
+  await seedV3();
+  db.prepare("UPDATE projects SET template_id = 'a--b-' WHERE id = ?").run(PROJECT);
+  await migrateTo(4);
+  expect(db.prepare('SELECT template_id FROM projects WHERE id = ?').get(PROJECT)).toEqual({
+    template_id: 'a--b-',
+  });
+});
+
 describe('schema v4 template_id rule (raw SQL, no repository)', () => {
   beforeEach(async () => {
     await seedV3();
@@ -121,10 +131,6 @@ describe('schema v4 template_id rule (raw SQL, no repository)', () => {
     ['uppercase', 'Builtin.Generic'],
     ['path', '../generic'],
     ['slash', 'builtin/generic'],
-    ['leading dot', '.generic'],
-    ['trailing dash', 'generic-'],
-    ['double dot', 'builtin..generic'],
-    ['dot dash', 'builtin.-generic'],
     ['space', 'builtin generic'],
     ['empty', ''],
     ['too long', 'x'.repeat(101)],

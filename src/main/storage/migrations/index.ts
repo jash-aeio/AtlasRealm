@@ -189,7 +189,8 @@ const m0003GraphEntities: Migration = {
 // a dangling reference, so foreign keys stay on throughout:
 //   copy graph rows aside → drop graph_entities → swap in the new projects → recreate
 //   graph_entities (same definition as v3) → copy the rows back.
-// Every column, value and index is kept; only the template_id rule changes.
+// Every column, value and index is kept; only the template_id rule changes, and it only gets
+// looser, so the copy can never fail on an existing row.
 const m0004TemplateIdNamespaces: Migration = {
   version: 4,
   name: 'allow_namespaced_template_ids',
@@ -204,13 +205,12 @@ const m0004TemplateIdNamespaces: Migration = {
       goal             TEXT    NOT NULL DEFAULT '' CHECK (
                          length(goal) <= 2000 AND instr(goal, char(0)) = 0 AND
                          goal = trim(goal, char(9, 10, 13, 32))),
-      -- Lowercase words joined by single "." or "-": builtin.generic, content-campaign.
+      -- A superset of v2's rule (adds "." and allows up to 100 characters), so every
+      -- existing row is guaranteed to copy over. The repository (assertTemplateId) enforces
+      -- the exact shape for new rows: lowercase words joined by single "." or "-".
       template_id      TEXT    NOT NULL CHECK (
                          length(template_id) BETWEEN 1 AND 100 AND
-                         template_id NOT GLOB '*[^a-z0-9.-]*' AND
-                         template_id NOT GLOB '[.-]*' AND
-                         template_id NOT GLOB '*[.-]' AND
-                         template_id NOT GLOB '*[.-][.-]*'),
+                         template_id NOT GLOB '*[^a-z0-9.-]*'),
       template_version TEXT    NOT NULL CHECK (    -- semver, e.g. 1.0.0
                          length(template_version) BETWEEN 5 AND 32 AND
                          template_version NOT GLOB '*[^0-9a-z.+-]*'),

@@ -211,11 +211,10 @@ describe('keyset paging (M1-7)', () => {
     for (const name of ['A', 'B', 'C', 'D']) newProject(name);
     const first = projects.pageByWorld(world.id, 'active', { limit: 2 });
     expect(first.projects.map((p) => p.name)).toEqual(['A', 'B']);
-    // An offset-based page 2 would now start at "D" and skip "C".
+    // Trashing "A" leaves B, C, D: an offset page 2 ("skip 2") would be just "D", skipping "C".
     const a = first.projects[0];
     if (a === undefined) throw new Error('missing');
     projects.trash(a.id, a.revision);
-    newProject('AA');
     const second = projects.pageByWorld(world.id, 'active', {
       after: first.next ?? undefined,
       limit: 2,

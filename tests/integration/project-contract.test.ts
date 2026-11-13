@@ -382,6 +382,17 @@ describe('project.list', () => {
     });
   });
 
+  it('still lists a page when a stored name breaks the input rules (e.g. from a restore)', async () => {
+    const project = await createProject('Fine');
+    // The database accepts this name; the IPC input rules would not.
+    const odd = `Odd${String.fromCharCode(0x200b)}name`;
+    opened.db.prepare('UPDATE projects SET name = ? WHERE id = ?').run(odd, project.id);
+    await expect(list({ worldId: world.id })).resolves.toMatchObject({
+      ok: true,
+      data: { projects: [{ id: project.id, name: odd }] },
+    });
+  });
+
   it('answers not_found for an unknown world instead of an empty list', async () => {
     await expect(list({ worldId: UNKNOWN_ID })).resolves.toMatchObject({
       ok: false,

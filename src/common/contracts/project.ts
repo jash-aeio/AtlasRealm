@@ -59,8 +59,9 @@ export const RunCheck = z.literal('stub');
 export const ProjectSummary = z.strictObject({
   id: ProjectId,
   worldId: WorldId,
-  name: DisplayName,
-  // Plain bounded strings on output: one row with unusual stored text must not fail a page.
+  // Plain bounded strings on output: one row with unusual stored text must not fail a page
+  // (input still uses DisplayName / ProjectGoal, and the repository checks again).
+  name: z.string().max(400),
   goal: z.string().max(PROJECT_GOAL_MAX_CHARS * 2),
   templateId: z.string().max(100),
   templateVersion: z.string().max(32),
