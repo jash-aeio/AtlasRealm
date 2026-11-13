@@ -23,6 +23,7 @@
     "test:watch": "vitest",
     "test:e2e": "electron-vite build && playwright test",
     "package": "electron-vite build && node scripts/electron-builder.ts --win --publish never",
+    "package:test": "electron-vite build && node scripts/electron-builder.ts --win dir --publish never -c.directories.output=release-test -c.appId=io.github.jash-aeio.atlasrealm.test -c.productName=AtlasRealmTest -c.extraMetadata.productName=AtlasRealmTest -c.win.executableName=AtlasRealmTest -c.extraMetadata.atlasRealm.packagedTest=true",
     "test:e2e:packaged": "playwright test --config playwright.packaged.config.ts",
     "art:placeholders": "node scripts/generate-placeholder-art.ts"
   },

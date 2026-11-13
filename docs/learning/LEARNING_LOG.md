@@ -15,6 +15,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 009 | [Dependency updates and semver](lessons/009-dependency-updates-and-semver.md) | M0 | semantic versioning, Dependabot groups, ignore rules, @types/node vs runtime Node |
 | 010 | [Worker processes, request IDs and cancellation](lessons/010-worker-processes-and-cancellation.md) | M0 | utility process, message passing, request IDs, AbortController, crash detection, stale replies |
 | 011 | [Sprites, pivots and an asset manifest](lessons/011-sprites-pivots-and-an-asset-manifest.md) | M0 | sprite, footprint, ground pivot, asset manifest, digest, nearest-neighbour sampling, placeholder art, Zod JIT/jitless |
+| 013 | [Command-line switches, deny-lists and build-time markers](lessons/013-command-line-switches-and-build-markers.md) | M1 | Chromium switch, deny-list vs allowlist, same-parser rule, build-time marker, positive control |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map
