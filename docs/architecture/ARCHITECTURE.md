@@ -205,6 +205,8 @@ The suggested folders are logical boundaries. Claude can adapt naming to an exis
 
 Validate the sender, command schema, target ownership, policy, and expected revision. Renderer-supplied paths and IDs are untrusted inputs. Queries are paginated, bounded, and scoped to the active profile/world as appropriate.
 
+Expected failures return stable domain codes (`not_found`, `already_exists`, `revision_conflict` with the current revision, `invalid_transition`, `limit_reached`) next to the router's own codes; an ID from another profile is reported as `not_found`. (Changed by ADR-0019.)
+
 ### 16.2 Event envelope
 
 ```ts
