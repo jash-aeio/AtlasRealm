@@ -3,6 +3,7 @@
 // profile's local ID (`default` or a UUID). Every change takes the revision the caller last
 // read; see guardedUpdate.
 import type { Database, SQLInputValue } from '../database';
+import { PROFILE_ID_PATTERN } from '../profiles/profile-id';
 import {
   assertSlug,
   canonicalTimezone,
@@ -51,7 +52,7 @@ export interface ProfileSettingsPatch {
   readonly preferences?: ProfilePreferences;
 }
 
-const PROFILE_ID = /^(?:default|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+const PROFILE_ID = PROFILE_ID_PATTERN;
 const COLOUR = /^#[0-9a-f]{6}$/;
 
 function assertProfileId(value: string): string {
