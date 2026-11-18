@@ -20,12 +20,14 @@ import { ensureProfileSettings } from './profiles/profile-service';
 import { spawnUtilityWorker } from './runtime-bridge/utility-transport';
 import { WorkerBridge } from './runtime-bridge/worker-bridge';
 import { ProfileDataMissingError } from './storage/app-database';
-import type { Database } from './storage/database';
 import { ProfilesIndexCorruptError } from './storage/profiles/profiles-index';
 import { openStartupProfile, ProfilesIndexMissingError } from './storage/profiles/startup';
 import { loadBundledTemplateCatalog } from './templates/bundled-templates';
 
-let database: Database | undefined;
+// Set once the startup profile is open. A profile switch replaces what it holds (M1-8 #35).
+let activeProfile: ActiveProfile | undefined;
+// The app's one window. A profile switch reloads exactly this one (#35 security L3).
+let mainWindow: BrowserWindow | undefined;
 // Trusted background work runs in a separate utility process (ARCHITECTURE §7.2, ADR-0012).
 const worker = new WorkerBridge(spawnUtilityWorker);
 
@@ -38,20 +40,18 @@ function focusMainWindow(): void {
 
 async function start(): Promise<void> {
   await app.whenReady();
-  let db: Database;
-  let activeProfile: ActiveProfile;
+  let active: ActiveProfile;
   try {
     // Picks the last-used profile from profiles-index.json (adopting the M0 folder or
     // creating "Default" on the first M1 launch), then opens and migrates its database.
     const opened = await openStartupProfile(app.getPath('userData'));
-    db = opened.db;
-    database = db;
-    // Every profile has a settings row before any command runs (ADR-0019).
-    ensureProfileSettings(db, opened.profileId, opened.displayName);
-    activeProfile = new ActiveProfile(app.getPath('userData'), {
+    active = new ActiveProfile(app.getPath('userData'), {
       profileId: opened.profileId,
-      db,
+      db: opened.db,
     });
+    activeProfile = active;
+    // Every profile has a settings row before any command runs (ADR-0019).
+    ensureProfileSettings(opened.db, opened.profileId, opened.displayName);
     console.info(
       `[storage] profile ${opened.profileId} (${opened.source}), ` +
         `schema v${String(opened.migration.toVersion)}, launch #${String(opened.launch.launchCount)}`,
@@ -87,8 +87,57 @@ async function start(): Promise<void> {
   console.info(
     `[templates] ${String(templates.available.length)} available, ${String(templates.unavailable.length)} unavailable`,
   );
-  registerIpcHandlers(entryUrl, db, worker, templates, activeProfile);
-  createMainWindow();
+  registerIpcHandlers(entryUrl, worker, templates, active, reloadMainWindow);
+  mainWindow = createMainWindow();
+}
+
+/** How long a profile switch keeps commands refused while waiting for the old page to go. */
+const RELOAD_GATE_TIMEOUT_MS = 10_000;
+
+/**
+ * Reloads the window after a profile switch (ADR-0014), so no renderer state from the old
+ * profile survives. Resolves when the new page has committed ('did-navigate' fires before its
+ * scripts run, so its first commands already see the new profile), when the main page fails to
+ * load, or after a timeout, so the command gate can never stay closed for good.
+ */
+function reloadMainWindow(): Promise<void> {
+  const window = mainWindow;
+  if (window === undefined || window.isDestroyed()) return Promise.resolve();
+  const contents = window.webContents;
+  return new Promise((resolve) => {
+    // A page can't keep itself alive with a beforeunload handler: the old profile's page
+    // must go (#35 security L1).
+    const forceUnload = (event: Electron.Event): void => {
+      event.preventDefault();
+    };
+    // Only the main page counts; a failing subframe must not open the gate early.
+    const failed = (
+      _event: Electron.Event,
+      _code: number,
+      _description: string,
+      _url: string,
+      isMainFrame: boolean,
+    ): void => {
+      if (isMainFrame) done();
+    };
+    const done = (): void => {
+      clearTimeout(timer);
+      contents.off('did-navigate', done);
+      contents.off('did-fail-load', failed);
+      contents.off('destroyed', done);
+      contents.off('will-prevent-unload', forceUnload);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      console.error('[profiles] the window did not reload in time after a profile switch');
+      done();
+    }, RELOAD_GATE_TIMEOUT_MS);
+    contents.on('did-navigate', done);
+    contents.on('did-fail-load', failed);
+    contents.on('destroyed', done);
+    contents.on('will-prevent-unload', forceUnload);
+    contents.reload();
+  });
 }
 
 /** Fixed, path-free wording for each startup failure the user can do something about. */
@@ -177,7 +226,10 @@ if (refuseBlockedSwitches()) {
     // with worker_stopped rather than worker_crashed.
     worker.stop();
     // Closing checkpoints the WAL back into app.sqlite, leaving one tidy file.
-    if (database?.isOpen) database.close();
+    // During a switch this includes the target database being opened (#35 security L2).
+    for (const db of activeProfile?.databasesForShutdown() ?? []) {
+      if (db.isOpen) db.close();
+    }
   });
   void start();
 }

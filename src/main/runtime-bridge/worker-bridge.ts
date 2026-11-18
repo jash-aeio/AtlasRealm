@@ -8,6 +8,8 @@
 //   `worker_crashed`, and the crash is logged and kept in `status()`. Nothing is retried
 //   automatically: the work may have been half done (PRODUCT_RULES: never blindly repeat).
 //   The next request starts a fresh worker.
+// - A profile switch pauses the worker (ends it on purpose, like stop()) and resumes it with a
+//   fresh process for the new profile (M1-8 #35, ADR-0014). Nothing carries over.
 //
 // Electron stays out of this file: the process is reached through a WorkerTransport, so the
 // logic is unit-tested with an in-memory transport. utility-transport.ts is the real one.
@@ -77,6 +79,8 @@ export class WorkerBridge {
   #staleRepliesDropped = 0;
   /** Set by stop(): the app is quitting, so no worker may start again. */
   #stopped = false;
+  /** Set by pause() until resume(): a profile switch is under way, so no worker may start. */
+  #paused = false;
 
   constructor(spawn: WorkerSpawner) {
     this.#spawn = spawn;
@@ -84,10 +88,11 @@ export class WorkerBridge {
 
   /**
    * Starts a worker if none is running. Called at startup and before each request. Does
-   * nothing after stop(), so a request racing the app's quit can't fork a new process.
+   * nothing after stop() or while paused, so a request racing the app's quit or a profile
+   * switch can't fork a new process.
    */
   start(): void {
-    if (this.#stopped || this.#transport !== undefined) return;
+    if (this.#stopped || this.#paused || this.#transport !== undefined) return;
     const transport = this.#spawn();
     this.#transport = transport;
     this.#state = 'starting';
@@ -107,11 +112,38 @@ export class WorkerBridge {
    */
   stop(): void {
     this.#stopped = true;
+    this.#end('The worker was stopped.');
+  }
+
+  /**
+   * Ends the worker on purpose for a profile switch. Pending requests fail with
+   * `worker_stopped` and are not retried: the old profile's work must not finish unnoticed
+   * (ARCHITECTURE §7.4). Requests made while paused fail the same way and start nothing.
+   */
+  pause(): void {
+    this.#paused = true;
+    const pending = this.#pending.size;
+    this.#end('The worker was stopped for a profile switch. The request was not retried.');
+    if (pending > 0) {
+      console.info(
+        `[runtime] worker stopped for a profile switch; ${String(pending)} pending request(s) failed`,
+      );
+    }
+  }
+
+  /** Ends a pause and starts a fresh worker (unless the app is quitting). */
+  resume(): void {
+    this.#paused = false;
+    this.start();
+  }
+
+  #end(text: string): void {
     this.#state = 'stopped';
+    this.#pid = null;
     const transport = this.#transport;
     if (transport === undefined) return;
     this.#transport = undefined;
-    this.#failAll('worker_stopped', 'The worker was stopped.');
+    this.#failAll('worker_stopped', text);
     transport.kill();
   }
 

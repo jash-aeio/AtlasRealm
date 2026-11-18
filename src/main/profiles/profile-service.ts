@@ -74,10 +74,6 @@ function duplicateName(): CommandError {
 }
 
 export class ProfileService {
-  // Index writes are async (temp file, flush, rename). This chain runs one profile change at a
-  // time, so two changes can't both read the old index and the second silently undo the first.
-  private queue: Promise<unknown> = Promise.resolve();
-
   constructor(
     private readonly active: ActiveProfile,
     private readonly now: () => Date = () => new Date(),
@@ -97,7 +93,7 @@ export class ProfileService {
 
   /**
    * Creates a profile folder, its migrated database with default settings, and its index
-   * entry. It does not switch to the new profile (that is M1-8). If the index can't be written,
+   * entry. It does not switch to the new profile (profile.switch does that). If the index can't be written,
    * the folder this call just created is removed again, so no half-made profile is left.
    */
   create(displayName: string): Promise<ProfileEntry> {
@@ -216,9 +212,8 @@ export class ProfileService {
     return read.index;
   }
 
+  /** Shares one queue with profile switching, so index writes never overlap (ADR-0014). */
   private exclusive<T>(work: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(work, work);
-    this.queue = run.catch(() => undefined);
-    return run;
+    return this.active.exclusive(work);
   }
 }
