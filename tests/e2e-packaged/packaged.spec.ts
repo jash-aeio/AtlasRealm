@@ -17,6 +17,7 @@ import { join, resolve } from 'node:path';
 
 import { type Browser, chromium, expect, type Page, test } from '@playwright/test';
 
+import { openDeveloperSpikes } from '../e2e/support/onboarding';
 import {
   hasProfileData,
   lastUsedDatabaseFile,
@@ -161,6 +162,7 @@ test('launches from a path with spaces and non-ASCII characters and keeps data a
   const first = await launchPackaged();
   try {
     await expect(first.page).toHaveTitle('Atlas Realm');
+    await openDeveloperSpikes(first.page);
     await expect(first.page.getByTestId('launch-info')).toHaveText(/^Launch #1 · .* · schema v4$/);
   } finally {
     expect(await quit(first)).toBe(0);
@@ -169,6 +171,7 @@ test('launches from a path with spaces and non-ASCII characters and keeps data a
   // node:sqlite works in the packaged app: the second start reads what the first one stored.
   const second = await launchPackaged();
   try {
+    await openDeveloperSpikes(second.page);
     await expect(second.page.getByTestId('launch-info')).toHaveText(/^Launch #2 · .* · schema v4$/);
   } finally {
     expect(await quit(second)).toBe(0);
@@ -214,6 +217,7 @@ test('bundled placeholder art ships in app.asar and loads offline from app://atl
   const running = await launchPackaged();
   try {
     const { page } = running;
+    await openDeveloperSpikes(page);
     // The world decodes its art before it reports ready; a missing file would leave it failed.
     await expect(page.getByTestId('world')).toHaveAttribute('data-state', 'ready');
     const size = await page.evaluate(
@@ -469,6 +473,7 @@ test('the worker utility process runs from inside app.asar with the fuses on (M0
   let pid: number | null = null;
   try {
     const { page } = running;
+    await openDeveloperSpikes(page);
     await expect(page.getByTestId('worker-status')).toContainText('Worker running · pid');
     const check = await page.evaluate(() => window.atlas.runtime.workerCheck());
     expect(check).toMatchObject({

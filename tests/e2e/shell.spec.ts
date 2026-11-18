@@ -9,6 +9,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { openDeveloperSpikes } from './support/onboarding';
+
 // Smoke + security probes against the built app (out/). Launched without
 // ELECTRON_RENDERER_URL, so it loads the production index.html and production CSP.
 let app: ElectronApplication;
@@ -191,6 +193,8 @@ test('template.list returns the bundled templates from the built main process', 
 });
 
 test('app.ping round-trips through the main process', async () => {
+  // The IPC check panel sits under "Developer spikes" on the main screen (M1-9).
+  await openDeveloperSpikes(page);
   await page.getByLabel('Message').fill('round trip');
   await page.getByRole('button', { name: 'Send app.ping' }).click();
   await expect(page.getByTestId('ping-result')).toContainText('pong: round trip (main process,');

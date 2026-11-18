@@ -12,6 +12,8 @@ import {
 
 import type { WorkerStatusOutput } from '../../src/common/contracts/runtime-worker';
 
+import { openDeveloperSpikes } from './support/onboarding';
+
 // M0-6 (#9): the built app forks a real utility process. These tests drive it through the
 // spike IPC commands and the "Worker check (M0 spike)" panel, then kill the process from
 // outside to prove a crash is detected, reported and recovered from.
@@ -34,6 +36,8 @@ test.beforeEach(async () => {
   userDataDir = mkdtempSync(join(tmpdir(), 'atlas-e2e-worker-'));
   app = await electron.launch({ args: ['.', `--user-data-dir=${userDataDir}`], env: cleanEnv() });
   page = await app.firstWindow();
+  // The worker panel now sits under "Developer spikes" on the main screen (M1-9).
+  await openDeveloperSpikes(page);
 });
 
 test.afterEach(async () => {

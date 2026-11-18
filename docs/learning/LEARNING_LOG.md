@@ -23,6 +23,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 017 | [Domain errors across the IPC boundary](lessons/017-domain-errors-across-the-ipc-boundary.md) | M1 | domain error code, internal error, fixed messages, not-found vs forbidden, active profile |
 | 018 | [Keyset paging and rebuilding a SQLite table](lessons/018-keyset-paging-and-table-rebuilds.md) | M1 | offset vs keyset paging, cursor, tie-breaker, table rebuild, foreign-key-safe ordering, stub |
 | 019 | [Swapping a live resource safely](lessons/019-swapping-a-live-resource-safely.md) | M1 | make-before-break, command gate, refuse vs queue, window reload, worker pause, mutation check |
+| 020 | [Derived state, and the renderer as a cache](lessons/020-derived-state-and-renderer-cache.md) | M1 | derived state, cache, re-read after write, newest reload wins, focus management, empty state |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map

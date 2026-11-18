@@ -11,6 +11,7 @@ import {
 } from '@playwright/test';
 
 import type { WorkerStatusOutput } from '../../src/common/contracts/runtime-worker';
+import { openDeveloperSpikes } from './support/onboarding';
 
 // M1-8 (#35): profile switching in the real built app. A switch reloads the window (no renderer
 // state survives), the new profile shows none of the old one's data, the worker is a fresh
@@ -33,7 +34,14 @@ const cleanEnv = (): Record<string, string> =>
 async function launch(): Promise<void> {
   app = await electron.launch({ args: ['.', `--user-data-dir=${userDataDir}`], env: cleanEnv() });
   page = await app.firstWindow();
-  await expect(page.getByTestId('launch-info')).toContainText('Launch #');
+  await expectAppReady();
+}
+
+/** The app has read its profile and shows first launch or the main screen (M1-9). */
+async function expectAppReady(): Promise<void> {
+  await expect(
+    page.locator('main[data-screen="onboarding"], main[data-screen="main"]'),
+  ).toBeVisible();
 }
 
 test.beforeEach(async () => {
@@ -121,7 +129,7 @@ async function switchAndWaitForReload(profileId: string): Promise<void> {
         if (!String(error).includes('context was destroyed')) throw error;
       }),
   ]);
-  await expect(page.getByTestId('launch-info')).toContainText('Launch #');
+  await expectAppReady();
 }
 
 test('switching reloads the window, isolates data, restarts the worker and survives a restart', async () => {
@@ -138,14 +146,10 @@ test('switching reloads the window, isolates data, restarts the worker and survi
   expect(await activeProfileId()).toBe(profileB);
   expect(await worldNames()).toEqual([]);
 
-  // A new worker process; the old one is gone. The panel shows the real, refreshed state.
+  // A new worker process; the old one is gone.
   await expect.poll(async () => (await workerStatus()).pid).not.toBe(oldPid);
   const newPid = await runningWorkerPid();
   await expect.poll(workerMetrics).toEqual([newPid]);
-  await page.getByRole('button', { name: 'Refresh worker status' }).click();
-  await expect(page.getByTestId('worker-status')).toContainText(
-    `Worker running · pid ${String(newPid)}`,
-  );
 
   // The choice survives a restart, and switching back shows A's data again.
   await app.close();
@@ -153,6 +157,16 @@ test('switching reloads the window, isolates data, restarts the worker and survi
   expect(await activeProfileId()).toBe(profileB);
   expect(await worldNames()).toEqual([]);
   await switchAndWaitForReload(profileA);
+  expect(await worldNames()).toEqual(['Home A']);
+
+  // After the switches, the worker panel (under Developer spikes, which A's world unlocks
+  // without creating anything) shows the real, refreshed state.
+  await openDeveloperSpikes(page);
+  const currentPid = await runningWorkerPid();
+  await page.getByRole('button', { name: 'Refresh worker status' }).click();
+  await expect(page.getByTestId('worker-status')).toContainText(
+    `Worker running · pid ${String(currentPid)}`,
+  );
   expect(await worldNames()).toEqual(['Home A']);
 });
 

@@ -129,3 +129,7 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Make-before-break** | Replacing something live by preparing the replacement fully before releasing the original, so a failure leaves the original in place | profile switching (`profile-session.ts`), ADR-0021, lesson 019 |
 | **Command gate** | A switch that makes every incoming command fail with one clear code (`profile_switching`) while a risky change runs, instead of running or queueing it | `refuseWhileSwitching` (`active-profile.ts`), lesson 019 |
 | **Stub** | A stand-in that returns a fixed answer until the real code exists; must be labelled (e.g. `runCheck: 'stub'`) so nothing claims it was verified | `noActiveRunsStub` |
+| **Onboarding** | The first-launch steps that get a new user to a usable state (here: profile → optional avatar → world). Shown while the active profile has no world | `src/renderer/onboarding/`, ADR-0022 |
+| **Derived state** | A value computed from data you already have instead of stored separately, so it can't drift (e.g. "first launch" = "no world yet") | `src/renderer/state/session.ts` |
+| **Empty state** | What a screen shows when there's nothing in it yet; it should say so plainly and point to the next action | `src/renderer/app/MainScreen.tsx` |
+| **Focus management** | Moving keyboard focus on purpose (e.g. to a new step's heading) so keyboard and screen-reader users don't get lost | `src/renderer/onboarding/Onboarding.tsx` |

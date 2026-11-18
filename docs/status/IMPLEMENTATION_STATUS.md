@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-18 · **Branch:** feat/35-profile-switching (M1-8 PR, on main @ ace8326)
+**Last updated:** 2026-11-18 · **Branch:** feat/36-first-launch-ui (M1-9 PR, merged with main @ 7961f8b; worked in the worktree `D:/MyProjectsJCB/AtlasRealm-36`)
 
 ## Current milestone
-**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20), M1-2 (#29), M1-3 (#30), M1-4 (#31), M1-5 (#32), M1-6 (#33) and M1-7 (#34) are merged. M1-8 (#35, profile switching) is in review. M1-9 (#36) is in progress in a parallel worktree (`D:/MyProjectsJCB/AtlasRealm-36`).
+**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20), M1-2 (#29), M1-3 (#30), M1-4 (#31), M1-5 (#32), M1-6 (#33), M1-7 (#34) and M1-8 (#35, PR #50) are merged. M1-9 (#36, first-launch UI, PR #51) is in review.
 
 **M0 — Foundation and risk spikes: ✅ closed 2026-11-10, tag `v0.1.0-m0`.** Evidence: unit/integration 193/193, E2E 35/35, packaged E2E 9/9 on main @ 2fbf944; CI green. See `docs/sessions/2026-11-10-m0-close.md`.
 
@@ -133,7 +133,15 @@
   - `WorldRepository.create` and `ProjectRepository.create` insert the record and its entity in one transaction. `ProjectRepository.trash` sets the tombstone and `restoreFromTrash` clears it, in the same transaction as the status change. Archiving doesn't tombstone. `GraphEntityRepository` has no delete method.
   - `withSavepoint` (`database.ts`): opens a transaction, or nests in one that `withTransaction` opened through a SQLite SAVEPOINT. If SQLite cancels the whole transaction by itself (disk full, I/O error), the transaction is marked aborted: further writes throw `TransactionAbortedError` and it won't commit, so writes never autocommit half a unit. It refuses to join a transaction it didn't open.
 
-- **M1-7 project commands (#34, branch `feat/34-project-commands`):** the renderer can create, read, list, rename, re-goal, archive, restore, trash and restore-from-trash projects through validated IPC commands (PRD §5.6, ARCHITECTURE §16.1, ADR-0020). There is no UI for them yet (M1-10).
+- **M1-9 first-launch UI (#36, branch `feat/36-first-launch-ui`):** the app now opens on a real first-launch flow instead of the M0 spike page (PRD §5.1, ADR-0022). Everything runs offline through the existing `window.atlas` commands; no account, network or file access is involved.
+  - **Onboarding** (`src/renderer/onboarding/`) shows while the active profile has no active world. The rule is derived from `world.list`, with no stored flag. Steps: (1) profile picker: list, rename the active profile, create a profile, and **switch** to another profile (`profile.switch`; the main process reloads the window into that profile, which shows its own first launch or world; errors such as `profile_unavailable` are shown); (2) avatar: one **placeholder** SVG figure in six art-bible colours (`avatarPreset: 'default'` + colour), with Skip and Back; (3) create world: name + theme (only Meadow). Each step's heading takes keyboard focus.
+  - **Main screen** (`src/renderer/app/MainScreen.tsx`): world name (a selector with several worlds), profile chip with the avatar, Settings toggle, and a conflict notice when a reload followed a `revision_conflict`. The home view asks `project.list` (limit 1) before saying "No projects in this world yet". "Create project" is **disabled** with "the project form arrives with the next update (M1-10)".
+  - **Settings** (`SettingsView.tsx`): the same profile picker, change or remove the avatar, rename the world (keeps its ID).
+  - **Developer spikes**: the M0 panels (world grid, Realm Atlas mock, launch info, IPC ping, worker) sit in a collapsed `<details>` labelled "Developer spikes (M0 mock data, not your projects)". They mount only while it is open.
+  - **Session store** (`src/renderer/state/session.ts`): caches the profile list, settings and worlds; re-reads all three after every command; reloads with a notice on `revision_conflict`; only the newest reload may write. Forms check names with the shared `DisplayName` rule for clear messages; the main process still validates.
+  - E2E: `tests/e2e/onboarding.spec.ts` runs the whole first launch with the network emulated offline, by keyboard alone, and checks that no http/ws request was attempted; the world survives a restart and onboarding doesn't return. Other specs reach the M0 panels through `tests/e2e/support/onboarding.ts`.
+
+- **M1-7 project commands (#34, merged as PR #48):** the renderer can create, read, list, rename, re-goal, archive, restore, trash and restore-from-trash projects through validated IPC commands (PRD §5.6, ARCHITECTURE §16.1, ADR-0020). There is no UI for them yet (M1-10).
   - Commands: `project.create`, `project.get`, `project.list`, `project.rename`, `project.updateGoal`, `project.archive`, `project.restore`, `project.trash`, `project.restoreFromTrash`, exposed as `window.atlas.project.*`. The E2E shape test checks the exact list.
   - Every call names `worldId`. `ProjectService` (`src/main/services/project-service.ts`) refuses a project outside that world with `not_found`, the same answer as for an unknown ID or another profile's project (tests "answers not_found … in another world", "cannot see another profile's project"). Every change takes `expectedRevision`.
   - `project.list`: one status (`active` by default), sorted by name then ID, 50 per page (max 100), with an opaque keyset cursor bound to its world and status. Tampered or foreign cursors are `invalid_payload`. An unknown world is `not_found`, not an empty list.
@@ -141,7 +149,7 @@
   - Archive and trash ask an active-runs probe that is a **stub until M4** (`noActiveRunsStub`, always "none"). Their results carry `runCheck: 'stub'`. If a probe reports runs, both refuse with `invalid_transition`.
   - Nothing is deleted. The lifecycle test counts `projects` and `graph_entities` rows before and after. Rename keeps the ID across a database close/reopen (test "finds the project by ID after a rename and a restart").
   - Schema v4 fixes a mismatch between M1-3 and M1-5: the database refused namespaced template IDs (`builtin.generic`), so no project could be created from a bundled template. The E2E test creates one from `builtin.generic` in the built app.
-- **M1-6 profile and world commands (#33, merged as PR #46):** the renderer can manage profiles, profile settings and worlds through validated IPC commands only (ARCHITECTURE §16.1, ADR-0019). There is no UI for them yet (M1-9).
+- **M1-6 profile and world commands (#33, merged as PR #46):** the renderer can manage profiles, profile settings and worlds through validated IPC commands only (ARCHITECTURE §16.1, ADR-0019). Since M1-9 the first-launch and Settings screens use them.
   - Commands: `profile.list`, `profile.create`, `profile.rename`, `profile.settings.get`, `profile.settings.update` (avatar preset/colour, timezone; expected revision), `world.create`, `world.list`, `world.rename`. The preload exposes them as `window.atlas.profile.*` (with `profile.settings.*`) and `window.atlas.world.*`. The E2E test "preload exposes only the explicit API" checks the exact shape.
   - Every command runs through the router (sender → strict Zod input → 64 KiB size cap → handler → output schema) and reads the database through `ActiveProfile.current()`. M1-8 swaps that holder.
   - Domain error codes: `not_found`, `already_exists`, `revision_conflict` (+ `currentRevision`), `invalid_transition`, `limit_reached`. Handlers throw `CommandError`; `withRepositoryErrors` turns repository errors into fixed, user-safe messages. Another profile's world ID is `not_found` (test "cannot see or rename another profile's world").
@@ -150,7 +158,7 @@
   - Fixed lists: themes `meadow`, avatar presets `default`. Caps: 50 profiles, 100 worlds per profile. Profile names are unique ignoring case after NFC normalisation.
   - Name rules (contract and repositories) now also refuse the Arabic letter mark, soft hyphen, word joiner/invisible operators, BOM and tag characters (security review L2).
 
-- **M1-8 profile switching (#35, branch `feat/35-profile-switching`):** the renderer can switch to another listed profile with `window.atlas.profile.switch({ profileId })` (ARCHITECTURE §7.4, ADR-0014, ADR-0021). There is no switching UI yet (M1-9/M1-10).
+- **M1-8 profile switching (#35, merged as PR #50):** the renderer can switch to another listed profile with `window.atlas.profile.switch({ profileId })` (ARCHITECTURE §7.4, ADR-0014, ADR-0021). The profile picker (M1-9) is its UI.
   - Order (`ProfileSession`, `src/main/services/profile-session.ts`):
     1. close the command gate;
     2. open and migrate the target's database next to the current one, and make sure it has a settings row;
@@ -166,6 +174,7 @@
   - Isolation (§22.2 #23), shown in `tests/integration/profile-switch.test.ts`: after a switch, world list/rename and project list/get/rename/archive/trash/create with the other profile's IDs are `not_found`; settings and launch info are the new profile's own, in both directions.
 
 ## Changed components
+- M1-9: `src/renderer/state/session.ts` (new), `src/renderer/onboarding/*` (new: `Onboarding`, `ProfilePicker`, `AvatarChooser`, `PlaceholderAvatar`, `CreateWorldForm`, `avatar.ts`, `form-messages.ts`), `src/renderer/app/{App,MainScreen,SettingsView,DeveloperSpikes}.tsx`, `src/renderer/app/app.css`; `tests/domain/session-store.test.ts` (new), `tests/e2e/onboarding.spec.ts` + `tests/e2e/support/onboarding.ts` (new), `tests/e2e/{atlas,shell,storage,worker,world}.spec.ts`, `tests/e2e-packaged/packaged.spec.ts`; docs: ADR-0022, lesson 020, glossary, changelog
 - M1-8: `src/main/services/profile-session.ts` (new), `src/main/ipc/commands/profile-switch.ts` (new), `src/main/profiles/{active-profile,profile-service}.ts`, `src/main/runtime-bridge/worker-bridge.ts` (`pause`/`resume`), `src/main/ipc/{register,router}.ts`, `src/main/ipc/commands/app-launch-info.ts`, `src/main/index.ts` (`reloadMainWindow`), `src/common/contracts/{profile,ipc-result,channels,atlas-api}.ts`, `src/preload/index.ts`; `tests/integration/profile-switch{,-gate}.test.ts` (new), `tests/integration/{worker-messaging,app-launch-info}.test.ts`, `tests/e2e/profiles.spec.ts` (new), `tests/e2e/shell.spec.ts`; docs: ADR-0021, ARCHITECTURE §16.1, lesson 019, glossary, changelog
 - M1-7: `src/common/contracts/project.ts` (new), `src/common/contracts/{channels,atlas-api}.ts`, `src/main/services/project-service.ts` (new), `src/main/ipc/commands/project.ts` (new), `src/main/ipc/register.ts`, `src/preload/index.ts`, `src/main/storage/repositories/project-repository.ts` (`pageByWorld`, `countByWorld`), `src/main/storage/repositories/repository-support.ts` (`assertTemplateId`), `src/main/storage/migrations/index.ts` (v4); `tests/integration/{project-contract,storage-migration-v4}.test.ts` (new), `tests/integration/storage-project-repository.test.ts`, `tests/e2e/{shell,storage}.spec.ts`, `tests/e2e-packaged/packaged.spec.ts` (schema v4); docs: ADR-0020, ARCHITECTURE §16.1 and DATA_MODEL notes, lesson 018, glossary, changelog
 - M1-6: `src/common/contracts/{profile,world,display-name}.ts` (new), `src/common/contracts/{ipc-result,channels,atlas-api}.ts`, `src/main/ipc/router.ts` (`CommandError`), `src/main/ipc/repository-errors.ts` (new), `src/main/ipc/commands/{profile,world}.ts` (new), `src/main/ipc/register.ts`, `src/main/profiles/{active-profile,profile-service}.ts` (new), `src/main/storage/app-database.ts` (`createProfileDatabase`), `src/main/storage/repositories/repository-support.ts` (more invisible characters refused), `src/main/index.ts`, `src/preload/index.ts`; `tests/integration/{profile-contract,world-contract,ipc-repository-errors}.test.ts` (new), `tests/integration/{ipc-router,storage-project-repository}.test.ts`, `tests/e2e/shell.spec.ts`; docs: ADR-0019, ARCHITECTURE §16.1 note, lesson 017, glossary
@@ -188,6 +197,8 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- M1-9 after merging main @ 7961f8b (M1-8) and enabling Switch, 2026-11-18: typecheck, lint, format:check pass. Unit/integration 680/681 (session-store now 12); the one failure is the known router flake, which passed 27/27 alone. E2E 43/43, including the profile picker switching both ways (onboarding → Second, Settings → back to Robin, with worlds isolated) and the adapted `profiles.spec.ts` from #35.
+- M1-9, 2026-11-18, local Windows 11, worktree on main @ ace8326: typecheck, lint, format:check pass. Unit/integration 654/654 (new: `session-store` 10). An earlier full run had 653/654: the known-flaky router test "huge binary payload", which passed 27/27 alone. E2E 41/41 (new: 3 in `onboarding.spec.ts`). Mutation check: removing the step-heading focus makes the keyboard-only test fail. Packaged E2E was not run locally; only its helper calls changed (it opens Developer spikes before reading the M0 panels). While adapting `world.spec.ts`: Chromium records no resource-timing entry for the first, uncached `app://` image fetch, only for a cached reload, so the sprite test now reloads once on purpose. Reviews: invariant-reviewer found no violations (it re-ran typecheck, lint and the session-store tests). security-auditor not run: the diff touches only the renderer, tests and docs (no main, preload, IPC contracts, files or credentials).
 - M1-8, 2026-11-18, local Windows 11, on main @ ace8326: typecheck, lint, format:check pass. Unit/integration 668/669. New: `profile-switch` 14, `profile-switch-gate` 6, worker pause/resume 5. The one failure is the known router test "rejects a huge binary payload"; it also fails on a clean checkout with the full suite and passes alone. E2E 40/40 (new: `profiles.spec.ts` 2, the switch and the failed switch in the built app). After the review fixes, one full run hit the known flaky world-canvas test ("hover, wheel zoom and middle-drag pan"); world + profiles then passed 11/11. Packaged E2E was not run (no packaging change). Mutation check: disabling the gate makes 2 `profile-switch` tests fail. Reviews: invariant-reviewer found no violations. security-auditor found no Critical/High/Medium issues. Its three Lows are fixed:
   - L1: the reload ignores subframe load failures, forces the old page to unload, and logs a timeout;
   - L2: a quit during a switch also closes the target database (test "hands the target database to shutdown…");
@@ -325,8 +336,12 @@
 - CI: see the PR checks (first CI run with E2E on windows-latest).
 
 ## Known limitations
+- First-launch UI (M1-9):
+  - "Create project" is disabled until the project form (M1-10, #37). There's no project list yet; the home view only says whether the world has projects.
+  - A profile whose worlds are all archived would see onboarding again (no archive UI exists yet, so it can't happen through the app). Decide when world archiving gets a UI (ADR-0022).
+  - The avatar is an engineering placeholder (SVG figure in six palette colours). No guided intro or example world yet (PRD §5.1 "clearly offer"); world themes: Meadow only.
+  - The selected world isn't remembered across restarts (the first world in the list is shown).
 - Profile switching (M1-8):
-  - No switching UI yet (M1-9/M1-10).
   - The worker panel reads its status once when the page loads. Right after a switch it may show "starting" until Refresh is pressed.
   - A target that opens but then fails the index write has one extra launch recorded.
   - Only the first window is reloaded (the app has one window).
@@ -343,7 +358,7 @@
   - The renamed-in-index-but-not-in-settings repair runs only at startup; it is covered by an integration test, not E2E.
   - Duplicate-name detection normalises Unicode (NFC) and ignores case, but doesn't catch lookalikes from other scripts (e.g. Cyrillic "А" vs Latin "A").
 - Profiles (M1-2):
-  - Profiles can be created and the active one renamed through commands (M1-6), but not switched (M1-8) or deleted yet. There is no profile UI yet (M1-9).
+  - Profiles can be created and the active one renamed through commands (M1-6), and switched (M1-8), but not deleted yet. The picker and Settings (M1-9) use these commands.
   - A lost or damaged index stops the app; there is no in-app recovery or "rebuild index" yet (M7 restore work). The dialog tells the user the file was kept.
   - If the very first DB open on a fresh install fails after `app.sqlite` was created, the next launch sees an un-indexed profile folder and stops with "profile list missing" rather than retrying. Only happens if a brand-new DB can't be migrated (a bug or a failing disk).
   - The startup error dialogs are not covered by automated tests.
@@ -402,6 +417,7 @@
 - `userData/profiles-index.json` (M1-2, not in SQLite): `{ schemaVersion: 1, profiles: [{ id, displayName }], lastUsedProfileId }`. Profile folders: `profiles/<default | uuid>/`.
 
 ## Decisions
+- [ADR-0022](../adr/0022-first-launch-flow.md): onboarding shows while the active profile has no active world (derived, no flag); the avatar step offers colour presets on the one placeholder figure; the picker's Switch button, first shown disabled, was enabled once M1-8 merged
 - ADR-0001 … ADR-0006 (stack defaults and approved Nov 6 product decisions)
 - [ADR-0007](../adr/0007-pnpm-via-corepack.md): pnpm via corepack
 - [ADR-0008](../adr/0008-proprietary-license-for-now.md): proprietary license for now
@@ -421,8 +437,8 @@
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- #20 and #29–#34 are merged; #35 (M1-8) is in review; #36 (M1-9, first-launch UI) is in progress in worktree `AtlasRealm-36`. M1-10 (#37, project list UI) needs #36. M1-11 (#38) needs #35 and #37.
-  - Whichever of #35/#36 merges second wires #36's disabled "Switch" button to `window.atlas.profile.switch`. Treat `profile_switching` as "try again shortly" and `profile_unavailable` as a visible error. On success, expect the window to reload. GLOSSARY and LEARNING_LOG will have small merge conflicts.
+- #20 and #29–#35 are merged; #36 (M1-9, PR #51) is in review. Next: M1-10 (#37, project list UI) once #36 is merged; then M1-11 (#38) after #37.
+  - M1-10: replace the disabled "Create project" and the presence check in `WorldHome` (`src/renderer/app/MainScreen.tsx`) with the project list and create form; reuse `NameForm`/`form-messages.ts` and the session store's conflict handling.
   - M1-10: call `window.atlas.project.*` with `worldId` on every call; keep the `nextCursor` from `project.list` and never build one; show `runCheck: 'stub'` honestly ("run handling arrives later"); handle `revision_conflict` by reloading (ADR-0020).
   - Follow-up from the #34 security review (L1): refuse Unicode variation selectors (U+E0100–E01EF, runs of U+FE00–FE0F) and invisible fillers (U+3164, U+115F, U+1160, U+FFA0, U+034F) in names and goals, in both the contracts and `repository-support.ts`, before goals reach prompts (M3).
   - Follow-up: `WorldSummary.name` still uses the strict `DisplayName` on output (the same issue as #34 L2, fixed there for projects).
@@ -430,5 +446,5 @@
   - Follow-up from the #33 security review (L4): enforce the profile/world caps on read, or add paging, before imports and restore.
   - Follow-up (seen in CI on PR #50): `world.list` sorts by `created_at, id`. Two worlds created in the same millisecond come back in random order, because the ID is a random UUID, so `world-contract.test.ts` "lists active worlds in creation order" fails now and then. Fix with a monotonic tie-breaker (for example SQLite `rowid`) or an injected clock in the test.
   - Suggested follow-up: fix the flaky `ipc-router.test.ts` "huge binary payload" test (warm up the schema before spying, or spy only on the router's own serialization). It is probably also the "unidentified flaky test" seen during #20 and the load-related failures seen during #32 and #31.
-  - Possible follow-ups: an app icon; removing `data:` from CSP `img-src` (needs your decision); the empty resource-timing list in the packaged test; an E2E test for the startup error dialogs.
+  - Possible follow-ups: an app icon; removing `data:` from CSP `img-src` (needs your decision); the empty resource-timing list in the packaged test (likely the same cause found in M1-9: the first, uncached `app://` fetch records no entry); an E2E test for the startup error dialogs.
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.
