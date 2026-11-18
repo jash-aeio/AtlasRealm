@@ -428,6 +428,7 @@
   - Follow-up: `WorldSummary.name` still uses the strict `DisplayName` on output (the same issue as #34 L2, fixed there for projects).
   - Open product question: `create` refuses an archived world, but rename/goal/restore still work on projects inside one (M1-3 forward note F5). Decide with M1-10.
   - Follow-up from the #33 security review (L4): enforce the profile/world caps on read, or add paging, before imports and restore.
+  - Follow-up (seen in CI on PR #50): `world.list` sorts by `created_at, id`. Two worlds created in the same millisecond come back in random order, because the ID is a random UUID, so `world-contract.test.ts` "lists active worlds in creation order" fails now and then. Fix with a monotonic tie-breaker (for example SQLite `rowid`) or an injected clock in the test.
   - Suggested follow-up: fix the flaky `ipc-router.test.ts` "huge binary payload" test (warm up the schema before spying, or spy only on the router's own serialization). It is probably also the "unidentified flaky test" seen during #20 and the load-related failures seen during #32 and #31.
   - Possible follow-ups: an app icon; removing `data:` from CSP `img-src` (needs your decision); the empty resource-timing list in the packaged test; an E2E test for the startup error dialogs.
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.
