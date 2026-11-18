@@ -189,7 +189,11 @@ test.describe('world view with graphics available', () => {
         isGround(await pixelAt(app, box.x + box.width / 2, box.y + box.height / 2 + 6)),
       )
       .toBe(true);
-    expect(isBackground(await pixelAt(app, box.x + 8, box.y + 8))).toBe(true);
+    // Poll this too: the centre is ground at 50% as well, so the poll above can pass before
+    // the 26% frame is composited (seen once in CI).
+    await expect
+      .poll(async () => isBackground(await pixelAt(app, box.x + 8, box.y + 8)))
+      .toBe(true);
     await page
       .getByTestId('world')
       .getByRole('button', { name: 'Reset view', exact: true })
