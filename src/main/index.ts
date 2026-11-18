@@ -20,12 +20,12 @@ import { ensureProfileSettings } from './profiles/profile-service';
 import { spawnUtilityWorker } from './runtime-bridge/utility-transport';
 import { WorkerBridge } from './runtime-bridge/worker-bridge';
 import { ProfileDataMissingError } from './storage/app-database';
-import type { Database } from './storage/database';
 import { ProfilesIndexCorruptError } from './storage/profiles/profiles-index';
 import { openStartupProfile, ProfilesIndexMissingError } from './storage/profiles/startup';
 import { loadBundledTemplateCatalog } from './templates/bundled-templates';
 
-let database: Database | undefined;
+// Set once the startup profile is open. A profile switch replaces what it holds (M1-8 #35).
+let activeProfile: ActiveProfile | undefined;
 // Trusted background work runs in a separate utility process (ARCHITECTURE §7.2, ADR-0012).
 const worker = new WorkerBridge(spawnUtilityWorker);
 
@@ -38,20 +38,18 @@ function focusMainWindow(): void {
 
 async function start(): Promise<void> {
   await app.whenReady();
-  let db: Database;
-  let activeProfile: ActiveProfile;
+  let active: ActiveProfile;
   try {
     // Picks the last-used profile from profiles-index.json (adopting the M0 folder or
     // creating "Default" on the first M1 launch), then opens and migrates its database.
     const opened = await openStartupProfile(app.getPath('userData'));
-    db = opened.db;
-    database = db;
-    // Every profile has a settings row before any command runs (ADR-0019).
-    ensureProfileSettings(db, opened.profileId, opened.displayName);
-    activeProfile = new ActiveProfile(app.getPath('userData'), {
+    active = new ActiveProfile(app.getPath('userData'), {
       profileId: opened.profileId,
-      db,
+      db: opened.db,
     });
+    activeProfile = active;
+    // Every profile has a settings row before any command runs (ADR-0019).
+    ensureProfileSettings(opened.db, opened.profileId, opened.displayName);
     console.info(
       `[storage] profile ${opened.profileId} (${opened.source}), ` +
         `schema v${String(opened.migration.toVersion)}, launch #${String(opened.launch.launchCount)}`,
@@ -87,7 +85,7 @@ async function start(): Promise<void> {
   console.info(
     `[templates] ${String(templates.available.length)} available, ${String(templates.unavailable.length)} unavailable`,
   );
-  registerIpcHandlers(entryUrl, db, worker, templates, activeProfile);
+  registerIpcHandlers(entryUrl, worker, templates, active);
   createMainWindow();
 }
 
@@ -177,7 +175,9 @@ if (refuseBlockedSwitches()) {
     // with worker_stopped rather than worker_crashed.
     worker.stop();
     // Closing checkpoints the WAL back into app.sqlite, leaving one tidy file.
-    if (database?.isOpen) database.close();
+    // During a switch this is whichever database is open at that moment.
+    const db = activeProfile?.databaseForShutdown();
+    if (db?.isOpen === true) db.close();
   });
   void start();
 }

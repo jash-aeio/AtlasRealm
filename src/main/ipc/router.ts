@@ -38,6 +38,8 @@ export type CommandErrorCode = Extract<
   | 'revision_conflict'
   | 'invalid_transition'
   | 'limit_reached'
+  | 'profile_switching'
+  | 'profile_unavailable'
 >;
 
 /**

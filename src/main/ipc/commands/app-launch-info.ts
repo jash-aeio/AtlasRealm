@@ -16,11 +16,12 @@ export const appLaunchInfoCommand = {
  * so what the UI shows is what is really stored. Read-only.
  */
 export function createLaunchInfoHandler(
-  db: Database,
+  /** The active profile's database, asked on every call so a profile switch is followed. */
+  database: () => Database,
 ): CommandHandler<typeof LaunchInfoInput, typeof LaunchInfoOutput> {
-  const meta = new AppMetaRepository(db);
   return () => {
-    const launch = meta.readLaunch();
+    const db = database();
+    const launch = new AppMetaRepository(db).readLaunch();
     // Startup records a launch before any window exists, so this only fails on a real bug.
     // The router turns the throw into a logged internal_error.
     if (launch === undefined) throw new Error('No launch has been recorded');
