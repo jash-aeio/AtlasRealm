@@ -24,7 +24,7 @@ An offline first launch that reaches a usable, empty world without any account. 
 A peer session was working on #35 in the main checkout. My `git switch -c feat/36-first-launch-ui` there moved that checkout onto my branch, so the peer's three M1-8 commits landed on `feat/36`. Nothing was lost. With the user's OK (and the peer's), the commits moved to `feat/35-profile-switching`, `feat/36` was reset to `main` (ace8326), and #36 moved to its own worktree. Lesson: check `ListAgents` and `git worktree list` before any `git switch` in a shared checkout.
 
 ## Decision record
-[ADR-0022](../adr/0022-first-launch-flow.md) records the first-launch rule and the two decisions above.
+[ADR-0022](../adr/0022-first-launch-flow.md) records the first-launch rule and the two decisions above. Lesson: [020 Derived state, and the renderer as a cache](../learning/lessons/020-derived-state-and-renderer-cache.md).
 
 ## Done
 Four commits on `feat/36-first-launch-ui`:
