@@ -368,3 +368,77 @@ describe('worker messaging: crash detection', () => {
     expect(bridge.status()).toMatchObject({ state: 'stopped', crashCount: 0 });
   });
 });
+
+describe('worker messaging: pause and resume (profile switch, #35)', () => {
+  it('pause fails pending requests with worker_stopped and never re-sends them', async () => {
+    const { spawn, workers } = fakeSpawner({ connect: false });
+    const bridge = new WorkerBridge(spawn);
+    const pending = bridge.request('spike.echo', { text: 'old profile' });
+    bridge.pause();
+    const result = await pending;
+    expect(result).toMatchObject({ ok: false, error: { code: 'worker_stopped' } });
+    expect(result.ok ? '' : result.error.message).toContain('not retried');
+    expect(worker(workers).killed).toBe(true);
+    expect(bridge.status()).toMatchObject({ state: 'stopped', pid: null, crashCount: 0 });
+
+    bridge.resume();
+    await tick();
+    // The fresh worker got nothing from before the pause.
+    expect(workers).toHaveLength(2);
+    expect(worker(workers, 1).sent).toEqual([]);
+  });
+
+  it('while paused, requests fail at once and start no worker', async () => {
+    const { spawn, workers } = fakeSpawner();
+    const bridge = new WorkerBridge(spawn);
+    bridge.start();
+    bridge.pause();
+    const result = await bridge.request('spike.echo', { text: 'during switch' });
+    expect(result).toMatchObject({ ok: false, error: { code: 'worker_stopped' } });
+    bridge.start();
+    expect(workers).toHaveLength(1);
+  });
+
+  it('resume starts a fresh worker that reports running with its own pid', async () => {
+    const { spawn, workers } = fakeSpawner({ connect: false });
+    const bridge = new WorkerBridge(spawn);
+    bridge.start();
+    worker(workers).emit({ kind: 'ready', pid: 1 });
+    await tick();
+    bridge.pause();
+    bridge.resume();
+    expect(bridge.status().state).toBe('starting');
+    worker(workers, 1).emit({ kind: 'ready', pid: 2 });
+    await tick();
+    expect(bridge.status()).toMatchObject({ state: 'running', pid: 2, crashCount: 0 });
+    const echoed = bridge.request('spike.echo', { text: 'new profile' });
+    expect(worker(workers, 1).sent).toHaveLength(1);
+    worker(workers, 1).emit({
+      kind: 'result',
+      id: worker(workers, 1).sent[0]?.id,
+      data: { text: 'new profile', pid: 2, activeRequests: 0 },
+    });
+    expect(await echoed).toMatchObject({ ok: true });
+  });
+
+  it('a paused worker exiting late is not counted as a crash', async () => {
+    const { spawn } = fakeSpawner();
+    const bridge = new WorkerBridge(spawn);
+    bridge.start();
+    bridge.pause();
+    await tick();
+    await tick();
+    expect(bridge.status().crashCount).toBe(0);
+  });
+
+  it('resume after stop (app quitting) starts nothing', () => {
+    const { spawn, workers } = fakeSpawner();
+    const bridge = new WorkerBridge(spawn);
+    bridge.start();
+    bridge.pause();
+    bridge.stop();
+    bridge.resume();
+    expect(workers).toHaveLength(1);
+    expect(bridge.status().state).toBe('stopped');
+  });
+});
