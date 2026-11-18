@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-13 · **Branch:** feat/34-project-commands (M1-7 PR, on main @ 6544d18)
+**Last updated:** 2026-11-18 · **Branch:** feat/35-profile-switching (M1-8 PR, on main @ ace8326)
 
 ## Current milestone
-**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20), M1-2 (#29), M1-3 (#30), M1-4 (#31), M1-5 (#32) and M1-6 (#33) are merged. M1-7 (#34, project commands) is in review.
+**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20), M1-2 (#29), M1-3 (#30), M1-4 (#31), M1-5 (#32), M1-6 (#33) and M1-7 (#34) are merged. M1-8 (#35, profile switching) is in review. M1-9 (#36) is in progress in a parallel worktree (`D:/MyProjectsJCB/AtlasRealm-36`).
 
 **M0 — Foundation and risk spikes: ✅ closed 2026-11-10, tag `v0.1.0-m0`.** Evidence: unit/integration 193/193, E2E 35/35, packaged E2E 9/9 on main @ 2fbf944; CI green. See `docs/sessions/2026-11-10-m0-close.md`.
 
@@ -150,7 +150,23 @@
   - Fixed lists: themes `meadow`, avatar presets `default`. Caps: 50 profiles, 100 worlds per profile. Profile names are unique ignoring case after NFC normalisation.
   - Name rules (contract and repositories) now also refuse the Arabic letter mark, soft hyphen, word joiner/invisible operators, BOM and tag characters (security review L2).
 
+- **M1-8 profile switching (#35, branch `feat/35-profile-switching`):** the renderer can switch to another listed profile with `window.atlas.profile.switch({ profileId })` (ARCHITECTURE §7.4, ADR-0014, ADR-0021). There is no switching UI yet (M1-9/M1-10).
+  - Order (`ProfileSession`, `src/main/services/profile-session.ts`):
+    1. close the command gate;
+    2. open and migrate the target's database next to the current one, and make sure it has a settings row;
+    3. write last-used to the index;
+    4. pause the worker;
+    5. close the old database and swap `ActiveProfile`;
+    6. resume the worker (a fresh process);
+    7. reply `{ activeProfileId, reloading: true }`, then reload the window.
+  - A target that can't be opened (missing, newer schema, damaged, or the index write fails) gives `profile_unavailable` with a fixed message. The current profile, worker and index stay untouched, and no empty database is created. An unknown ID is `not_found`; the active one is `invalid_transition`.
+  - The command gate: `refuseWhileSwitching` wraps every IPC handler (`register.ts`), and `ActiveProfile.current()` also refuses. Every command gets `profile_switching` from the start of the switch until the reload's `did-navigate` (or a failed load, or 10 s).
+  - Worker: `WorkerBridge.pause()` fails pending requests with `worker_stopped` ("…not retried") and starts nothing while paused. `resume()` starts a fresh worker, and a paused worker's exit isn't counted as a crash.
+  - `ActiveProfile` now owns the profile-change queue shared by create, rename and switch, so index writes never overlap. `app.launchInfo` reads the active profile on every call, and `will-quit` closes whichever database is open.
+  - Isolation (§22.2 #23), shown in `tests/integration/profile-switch.test.ts`: after a switch, world list/rename and project list/get/rename/archive/trash/create with the other profile's IDs are `not_found`; settings and launch info are the new profile's own, in both directions.
+
 ## Changed components
+- M1-8: `src/main/services/profile-session.ts` (new), `src/main/ipc/commands/profile-switch.ts` (new), `src/main/profiles/{active-profile,profile-service}.ts`, `src/main/runtime-bridge/worker-bridge.ts` (`pause`/`resume`), `src/main/ipc/{register,router}.ts`, `src/main/ipc/commands/app-launch-info.ts`, `src/main/index.ts` (`reloadMainWindow`), `src/common/contracts/{profile,ipc-result,channels,atlas-api}.ts`, `src/preload/index.ts`; `tests/integration/profile-switch{,-gate}.test.ts` (new), `tests/integration/{worker-messaging,app-launch-info}.test.ts`, `tests/e2e/profiles.spec.ts` (new), `tests/e2e/shell.spec.ts`; docs: ADR-0021, ARCHITECTURE §16.1, lesson 019, glossary, changelog
 - M1-7: `src/common/contracts/project.ts` (new), `src/common/contracts/{channels,atlas-api}.ts`, `src/main/services/project-service.ts` (new), `src/main/ipc/commands/project.ts` (new), `src/main/ipc/register.ts`, `src/preload/index.ts`, `src/main/storage/repositories/project-repository.ts` (`pageByWorld`, `countByWorld`), `src/main/storage/repositories/repository-support.ts` (`assertTemplateId`), `src/main/storage/migrations/index.ts` (v4); `tests/integration/{project-contract,storage-migration-v4}.test.ts` (new), `tests/integration/storage-project-repository.test.ts`, `tests/e2e/{shell,storage}.spec.ts`, `tests/e2e-packaged/packaged.spec.ts` (schema v4); docs: ADR-0020, ARCHITECTURE §16.1 and DATA_MODEL notes, lesson 018, glossary, changelog
 - M1-6: `src/common/contracts/{profile,world,display-name}.ts` (new), `src/common/contracts/{ipc-result,channels,atlas-api}.ts`, `src/main/ipc/router.ts` (`CommandError`), `src/main/ipc/repository-errors.ts` (new), `src/main/ipc/commands/{profile,world}.ts` (new), `src/main/ipc/register.ts`, `src/main/profiles/{active-profile,profile-service}.ts` (new), `src/main/storage/app-database.ts` (`createProfileDatabase`), `src/main/storage/repositories/repository-support.ts` (more invisible characters refused), `src/main/index.ts`, `src/preload/index.ts`; `tests/integration/{profile-contract,world-contract,ipc-repository-errors}.test.ts` (new), `tests/integration/{ipc-router,storage-project-repository}.test.ts`, `tests/e2e/shell.spec.ts`; docs: ADR-0019, ARCHITECTURE §16.1 note, lesson 017, glossary
 - M1-4: `src/main/storage/migrations/index.ts` (migration 3), `src/main/storage/database.ts` (`withSavepoint`, `TransactionAbortedError`, transaction tracking), `src/main/storage/repositories/graph-entity-repository.ts` (new), `src/main/storage/repositories/{world,project}-repository.ts`; `tests/integration/storage-{graph-entity-repository,migration-v3}.test.ts` (new), `tests/integration/storage-{database,migration-v2}.test.ts`, `tests/e2e/storage.spec.ts`, `tests/e2e-packaged/packaged.spec.ts` (schema v3); docs: ADR-0018, lesson 016, glossary
@@ -172,6 +188,10 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- M1-8, 2026-11-18, local Windows 11, on main @ ace8326: typecheck, lint, format:check pass. Unit/integration 668/669. New: `profile-switch` 14, `profile-switch-gate` 6, worker pause/resume 5. The one failure is the known router test "rejects a huge binary payload"; it also fails on a clean checkout with the full suite and passes alone. E2E 40/40 (new: `profiles.spec.ts` 2, the switch and the failed switch in the built app). After the review fixes, one full run hit the known flaky world-canvas test ("hover, wheel zoom and middle-drag pan"); world + profiles then passed 11/11. Packaged E2E was not run (no packaging change). Mutation check: disabling the gate makes 2 `profile-switch` tests fail. Reviews: invariant-reviewer found no violations. security-auditor found no Critical/High/Medium issues. Its three Lows are fixed:
+  - L1: the reload ignores subframe load failures, forces the old page to unload, and logs a timeout;
+  - L2: a quit during a switch also closes the target database (test "hands the target database to shutdown…");
+  - L3: the switch reloads the window the app created, not "the first window".
 - M1-7, 2026-11-13, local Windows 11, on main @ 6544d18: typecheck, lint, format:check pass. Unit/integration 644/644 (new: `project-contract` 53, `storage-migration-v4` 15, keyset paging +6). E2E 38/38 (new: project round trip from `builtin.generic` in the built app; preload shape includes `project`). Packaged E2E was not run locally (only its schema expectation changed to v4). Mutation check: switching `ProjectSummary.name` back to the strict `DisplayName` makes the "still lists a page when a stored name breaks the input rules" test fail. Reviews: invariant-reviewer found no violations (it noted that the per-world cap relies on the synchronous main process; recorded under Known limitations). security-auditor: no Critical/High/Medium. L2 (a stored name breaking the list output) and L3 (v4 stricter than v2 for old IDs) are fixed with tests. L1 (variation selectors / invisible fillers in goals and names) is a follow-up under Next task.
 - M1-6, 2026-11-13, local Windows 11, on main @ 27a2523: typecheck, lint, format:check pass. Unit/integration 569/570: the one failure is the known-flaky router test "rejects a huge binary payload". It timed out (5.6–6.3 s) in all three full runs this session and passes 27/27 when its file runs alone. New: `profile-contract` 47, `world-contract` 24, `ipc-repository-errors` 7, router +2, repository name rules +6. E2E 37/37 (new: a profile/world round trip through the built app, where a forged world ID returns `not_found`). On the final build, the first E2E run hit one flaky world-canvas test; the world spec then passed 9/9 and the full suite 37/37. Earlier the same day the worker-startup spec failed once the same way. Packaged E2E was not run (no packaging change). Reviews: invariant-reviewer found no violations. security-auditor found no Critical/High/Medium issues and 4 Lows: L1 (cleanup could remove a pre-existing folder), L2 (missing invisible characters) and L3 (names not NFC-normalised before comparing) are fixed with tests; L4 is listed under Known limitations.
 - M1-4, 2026-11-13, local Windows 11, on main @ d26825c: typecheck, lint, format:check pass. Unit/integration 427/427 (28 new across 2 new files and `storage-database.test.ts`). E2E 36/36 (the app shows "schema v3"). Packaged E2E 14/14 (fresh `pnpm package` + `package:test`; the installed app shows "schema v3" across restarts). Mutation checks: removing the transaction makes the 4 rollback tests fail; removing the aborted-transaction guards makes 3 `withSavepoint` tests fail, including a real full-disk case (`PRAGMA max_page_count`). Reviews: invariant-reviewer found no violations; security-auditor found one latent Medium issue (autocommit after SQLite cancels a transaction), which is fixed, and three Lows (two fixed, one noted under Known limitations).
@@ -305,6 +325,12 @@
 - CI: see the PR checks (first CI run with E2E on windows-latest).
 
 ## Known limitations
+- Profile switching (M1-8):
+  - No switching UI yet (M1-9/M1-10).
+  - The worker panel reads its status once when the page loads. Right after a switch it may show "starting" until Refresh is pressed.
+  - A target that opens but then fails the index write has one extra launch recorded.
+  - Only the first window is reloaded (the app has one window).
+  - The worker does no profile work yet. In M4, "pause the worker" becomes "checkpoint and stop the profile's runner" (ADR-0021).
 - Project commands (M1-7):
   - Active-run handling is a stub (`runCheck: 'stub'`) until the run runtime exists (M4). Archive will then request cancellation instead of refusing.
   - The 1000-projects-per-world cap is checked in the service, not by a database rule. It holds because the count and insert run synchronously in the main process. Revisit if project creation ever runs from a worker or import job.
@@ -391,15 +417,16 @@
 - [ADR-0018](../adr/0018-graph-entities-own-ids-written-by-repositories.md): graph entities have their own UUIDs and are written by the world and project repositories in the same transaction (nestable through `withSavepoint`)
 - [ADR-0020](../adr/0020-project-command-contracts.md): project commands name `worldId` on every call; `project.list` uses an opaque keyset cursor (50/page, max 100); archive/trash use a labelled active-runs stub until M4 and refuse if runs are active; migration v4 lets `projects.template_id` hold namespaced IDs (`builtin.generic`)
 - [ADR-0019](../adr/0019-profile-and-world-command-contracts.md): IPC domain error codes (`not_found`, `revision_conflict`, …); `profile.rename` renames only the active profile; the settings row is created at startup; themes and avatar presets are fixed lists
+- [ADR-0021](../adr/0021-profile-switch-ordering-and-command-gate.md): a profile switch opens the target before closing the current profile; every command is refused with `profile_switching` until the reloaded page has replaced the old one; a target that can't be opened is `profile_unavailable` and changes nothing
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- #20 and #29–#33 are merged; #34 (M1-7) is in review. Ready now: M1-8 (#35, profile switching) and M1-9 (#36, first-launch UI). M1-10 (#37, project list UI) needs #34 and #36.
+- #20 and #29–#34 are merged; #35 (M1-8) is in review; #36 (M1-9, first-launch UI) is in progress in worktree `AtlasRealm-36`. M1-10 (#37, project list UI) needs #36. M1-11 (#38) needs #35 and #37.
+  - Whichever of #35/#36 merges second wires #36's disabled "Switch" button to `window.atlas.profile.switch`. Treat `profile_switching` as "try again shortly" and `profile_unavailable` as a visible error. On success, expect the window to reload. GLOSSARY and LEARNING_LOG will have small merge conflicts.
   - M1-10: call `window.atlas.project.*` with `worldId` on every call; keep the `nextCursor` from `project.list` and never build one; show `runCheck: 'stub'` honestly ("run handling arrives later"); handle `revision_conflict` by reloading (ADR-0020).
   - Follow-up from the #34 security review (L1): refuse Unicode variation selectors (U+E0100–E01EF, runs of U+FE00–FE0F) and invisible fillers (U+3164, U+115F, U+1160, U+FFA0, U+034F) in names and goals, in both the contracts and `repository-support.ts`, before goals reach prompts (M3).
   - Follow-up: `WorldSummary.name` still uses the strict `DisplayName` on output (the same issue as #34 L2, fixed there for projects).
   - Open product question: `create` refuses an archived world, but rename/goal/restore still work on projects inside one (M1-3 forward note F5). Decide with M1-10.
-  - M1-8: give `ActiveProfile` a way to replace its state (the field is `readonly` until then), and refuse commands during a switch with `profile_switching` (ADR-0014). Open the target profile with `openAppDatabase`, which records a launch.
   - Follow-up from the #33 security review (L4): enforce the profile/world caps on read, or add paging, before imports and restore.
   - Suggested follow-up: fix the flaky `ipc-router.test.ts` "huge binary payload" test (warm up the schema before spying, or spy only on the router's own serialization). It is probably also the "unidentified flaky test" seen during #20 and the load-related failures seen during #32 and #31.
   - Possible follow-ups: an app icon; removing `data:` from CSP `img-src` (needs your decision); the empty resource-timing list in the packaged test; an E2E test for the startup error dialogs.

@@ -126,4 +126,6 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Keyset paging** | Fetching the next page as "rows after this exact row" (by its sort key) instead of "skip N rows", so added or removed rows can't shift later pages | `project-repository.ts` (`pageByWorld`), lesson 018 |
 | **Cursor (paging)** | An opaque token the UI hands back to get the next page. It wraps the last row's sort key and is re-checked by the main process | `project-service.ts`, ADR-0020 |
 | **Table rebuild** | Changing a SQLite table's constraints by creating a new table, copying the rows, dropping the old one and renaming the new one (SQLite can't edit a CHECK in place) | migration v4, lesson 018 |
+| **Make-before-break** | Replacing something live by preparing the replacement fully before releasing the original, so a failure leaves the original in place | profile switching (`profile-session.ts`), ADR-0021, lesson 019 |
+| **Command gate** | A switch that makes every incoming command fail with one clear code (`profile_switching`) while a risky change runs, instead of running or queueing it | `refuseWhileSwitching` (`active-profile.ts`), lesson 019 |
 | **Stub** | A stand-in that returns a fixed answer until the real code exists; must be labelled (e.g. `runCheck: 'stub'`) so nothing claims it was verified | `noActiveRunsStub` |

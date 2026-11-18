@@ -181,6 +181,7 @@ The suggested folders are logical boundaries. Claude can adapt naming to an exis
 
 | Contract | Essential input | Result |
 |---|---|---|
+| `profile.switch` | Listed profile ID | Active profile ID; the window then reloads |
 | `world.create` | Name, theme | World summary |
 | `project.create` | World, template version, goal | Saved project ID and summary |
 | `building.place` | Project ID, world, grid coordinates, rotation | Valid placement or reason |
@@ -208,6 +209,8 @@ Validate the sender, command schema, target ownership, policy, and expected revi
 Expected failures return stable domain codes (`not_found`, `already_exists`, `revision_conflict` with the current revision, `invalid_transition`, `limit_reached`) next to the router's own codes; an ID from another profile is reported as `not_found`. (Changed by ADR-0019.)
 
 Project commands name the world as well as the project; a project outside that world is `not_found`. `project.list` pages with an opaque keyset cursor (default 50, max 100). (Changed by ADR-0020.)
+
+`profile.switch` opens the target profile before closing the current one; a target that can't be opened is `profile_unavailable` and changes nothing. While a switch runs, every command is refused with `profile_switching` until the reloaded page has replaced the old one. (Changed by ADR-0021.)
 
 ### 16.2 Event envelope
 
