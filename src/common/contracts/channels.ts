@@ -13,6 +13,15 @@ export const Channels = {
   worldCreate: 'world.create',
   worldList: 'world.list',
   worldRename: 'world.rename',
+  projectCreate: 'project.create',
+  projectGet: 'project.get',
+  projectList: 'project.list',
+  projectRename: 'project.rename',
+  projectUpdateGoal: 'project.updateGoal',
+  projectArchive: 'project.archive',
+  projectRestore: 'project.restore',
+  projectTrash: 'project.trash',
+  projectRestoreFromTrash: 'project.restoreFromTrash',
 } as const;
 
 export type Channel = (typeof Channels)[keyof typeof Channels];

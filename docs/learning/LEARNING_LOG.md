@@ -21,6 +21,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 015 | [Atomic file writes and turning untrusted text into paths](lessons/015-atomic-files-and-untrusted-ids.md) | M1 | atomic write, fsync, rename, path traversal, allowlist, branded type, fail closed, TOCTOU |
 | 016 | [Paired writes, savepoints and tombstones](lessons/016-paired-writes-savepoints-and-tombstones.md) | M1 | transaction, savepoint, nested writes, tombstone, graph entity, backfill, composite foreign key, mutation check |
 | 017 | [Domain errors across the IPC boundary](lessons/017-domain-errors-across-the-ipc-boundary.md) | M1 | domain error code, internal error, fixed messages, not-found vs forbidden, active profile |
+| 018 | [Keyset paging and rebuilding a SQLite table](lessons/018-keyset-paging-and-table-rebuilds.md) | M1 | offset vs keyset paging, cursor, tie-breaker, table rebuild, foreign-key-safe ordering, stub |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map

@@ -11,6 +11,17 @@ import type {
   ProfileSettingsOutput,
   ProfileSettingsUpdateInput,
 } from './profile';
+import type {
+  ProjectCreateInput,
+  ProjectGetInput,
+  ProjectLifecycleInput,
+  ProjectLifecycleOutput,
+  ProjectListInput,
+  ProjectListOutput,
+  ProjectOutput,
+  ProjectRenameInput,
+  ProjectUpdateGoalInput,
+} from './project';
 import type { TemplateListOutput } from './project-template';
 import type { WorkerCheckInput, WorkerCheckOutput, WorkerStatusOutput } from './runtime-worker';
 import type {
@@ -51,5 +62,17 @@ export interface AtlasApi {
     readonly create: (input: WorldCreateInput) => Promise<IpcResult<WorldOutput>>;
     readonly list: (input?: WorldListInput) => Promise<IpcResult<WorldListOutput>>;
     readonly rename: (input: WorldRenameInput) => Promise<IpcResult<WorldOutput>>;
+  };
+  /** Projects of one world in the active profile. Every call names the world (ADR-0020). */
+  readonly project: {
+    readonly create: (input: ProjectCreateInput) => Promise<IpcResult<ProjectOutput>>;
+    readonly get: (input: ProjectGetInput) => Promise<IpcResult<ProjectOutput>>;
+    readonly list: (input: ProjectListInput) => Promise<IpcResult<ProjectListOutput>>;
+    readonly rename: (input: ProjectRenameInput) => Promise<IpcResult<ProjectOutput>>;
+    readonly updateGoal: (input: ProjectUpdateGoalInput) => Promise<IpcResult<ProjectOutput>>;
+    readonly archive: (input: ProjectLifecycleInput) => Promise<IpcResult<ProjectLifecycleOutput>>;
+    readonly restore: (input: ProjectLifecycleInput) => Promise<IpcResult<ProjectOutput>>;
+    readonly trash: (input: ProjectLifecycleInput) => Promise<IpcResult<ProjectLifecycleOutput>>;
+    readonly restoreFromTrash: (input: ProjectLifecycleInput) => Promise<IpcResult<ProjectOutput>>;
   };
 }
