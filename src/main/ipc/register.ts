@@ -6,6 +6,7 @@ import type { z } from 'zod';
 import { type ActiveProfile, refuseWhileSwitching } from '../profiles/active-profile';
 import { ProfileService } from '../profiles/profile-service';
 import type { WorkerBridge } from '../runtime-bridge/worker-bridge';
+import { ProfileSession } from '../services/profile-session';
 import { ProjectService } from '../services/project-service';
 import type { TemplateCatalog } from '../templates/catalog';
 import { appLaunchInfoCommand, createLaunchInfoHandler } from './commands/app-launch-info';
@@ -36,6 +37,7 @@ import {
   runtimeWorkerCheckCommand,
   runtimeWorkerStatusCommand,
 } from './commands/runtime-worker';
+import { createProfileSwitchHandler, profileSwitchCommand } from './commands/profile-switch';
 import { createTemplateListHandler, templateListCommand } from './commands/template-list';
 import {
   createProfileCreateHandler,
@@ -69,11 +71,14 @@ export function registerIpcHandlers(
   worker: WorkerBridge,
   templates: TemplateCatalog,
   activeProfile: ActiveProfile,
+  /** Reloads the window after a profile switch; resolves once the old page is gone. */
+  reloadRenderer: () => Promise<void>,
 ): void {
   const isTrustedSender = trustRendererEntry(rendererEntryUrl);
   const profiles = new ProfileService(activeProfile);
   // Uses the stub "active runs" probe until the run runtime exists (M4).
   const projects = new ProjectService(activeProfile, templates);
+  const session = new ProfileSession({ active: activeProfile, worker, reloadRenderer });
 
   // Every command is refused while a profile switch is under way. Handlers that are already
   // running are covered too: ActiveProfile.current() refuses in the middle of a switch.
@@ -102,6 +107,7 @@ export function registerIpcHandlers(
   handle(profileListCommand, createProfileListHandler(profiles));
   handle(profileCreateCommand, createProfileCreateHandler(profiles));
   handle(profileRenameCommand, createProfileRenameHandler(profiles));
+  handle(profileSwitchCommand, createProfileSwitchHandler(session));
   handle(profileSettingsGetCommand, createProfileSettingsGetHandler(profiles));
   handle(profileSettingsUpdateCommand, createProfileSettingsUpdateHandler(profiles));
   handle(worldCreateCommand, createWorldCreateHandler(activeProfile));

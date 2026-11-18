@@ -85,8 +85,37 @@ async function start(): Promise<void> {
   console.info(
     `[templates] ${String(templates.available.length)} available, ${String(templates.unavailable.length)} unavailable`,
   );
-  registerIpcHandlers(entryUrl, worker, templates, active);
+  registerIpcHandlers(entryUrl, worker, templates, active, reloadMainWindow);
   createMainWindow();
+}
+
+/** How long a profile switch keeps commands refused while waiting for the old page to go. */
+const RELOAD_GATE_TIMEOUT_MS = 10_000;
+
+/**
+ * Reloads the window after a profile switch (ADR-0014), so no renderer state from the old
+ * profile survives. Resolves when the new page has committed ('did-navigate' fires before its
+ * scripts run, so its first commands already see the new profile), when the load fails, or
+ * after a timeout, so the command gate can never stay closed for good.
+ */
+function reloadMainWindow(): Promise<void> {
+  const window = BrowserWindow.getAllWindows()[0];
+  if (window === undefined || window.isDestroyed()) return Promise.resolve();
+  const contents = window.webContents;
+  return new Promise((resolve) => {
+    const done = (): void => {
+      clearTimeout(timer);
+      contents.off('did-navigate', done);
+      contents.off('did-fail-load', done);
+      contents.off('destroyed', done);
+      resolve();
+    };
+    const timer = setTimeout(done, RELOAD_GATE_TIMEOUT_MS);
+    contents.on('did-navigate', done);
+    contents.on('did-fail-load', done);
+    contents.on('destroyed', done);
+    contents.reload();
+  });
 }
 
 /** Fixed, path-free wording for each startup failure the user can do something about. */

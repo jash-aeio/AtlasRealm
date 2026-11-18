@@ -10,6 +10,8 @@ import type {
   ProfileRenameInput,
   ProfileSettingsOutput,
   ProfileSettingsUpdateInput,
+  ProfileSwitchInput,
+  ProfileSwitchOutput,
 } from './profile';
 import type {
   ProjectCreateInput,
@@ -45,11 +47,13 @@ export interface AtlasApi {
   readonly template: {
     readonly list: () => Promise<IpcResult<TemplateListOutput>>;
   };
-  /** Every profile command acts on the active profile (switching is M1-8). */
+  /** Every profile command acts on the active profile, except `switch`, which changes it. */
   readonly profile: {
     readonly list: () => Promise<IpcResult<ProfileListOutput>>;
     readonly create: (input: ProfileCreateInput) => Promise<IpcResult<ProfileCreateOutput>>;
     readonly rename: (input: ProfileRenameInput) => Promise<IpcResult<ProfileSettingsOutput>>;
+    /** On success the window reloads right after the reply (ADR-0014). */
+    readonly switch: (input: ProfileSwitchInput) => Promise<IpcResult<ProfileSwitchOutput>>;
     readonly settings: {
       readonly get: () => Promise<IpcResult<ProfileSettingsOutput>>;
       readonly update: (
