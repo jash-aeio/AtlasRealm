@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { z } from 'zod';
 
 import { MAX_WORLDS, type WorldSummary } from '../../src/common/contracts/world';
@@ -67,6 +67,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   for (const db of extraDbs.splice(0)) if (db.isOpen) db.close();
   if (opened.db.isOpen) opened.db.close();
   rmSync(userData, { recursive: true, force: true });
@@ -125,8 +126,14 @@ describe('world.create', () => {
 
 describe('world.list', () => {
   it('lists active worlds in creation order, archived ones only on request', async () => {
+    // Give each world its own creation time. Created back to back, both can land in the same
+    // millisecond, and the tie-break (random UUID) then decides the order (flaky in CI).
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-18T10:00:00.000Z'));
     const home = await createWorld('Home');
+    vi.setSystemTime(new Date('2026-11-18T10:00:01.000Z'));
     const work = await createWorld('Work');
+    vi.useRealTimers();
     new WorldRepository(opened.db).archive(work.id, work.revision);
 
     const activeOnly = await list();
