@@ -111,13 +111,10 @@ test('first launch works offline and by keyboard alone, and the world survives a
     // The usable, empty world.
     await expect(screen(page, 'main')).toBeVisible();
     await expect(page.getByTestId('world-name')).toHaveText('Hearth');
-    await expect(page.getByTestId('world-empty-state')).toHaveText(
-      'No projects in this world yet. Create one to get started.',
+    // The project list itself is covered by projects.spec.ts (M1-10).
+    await expect(page.getByTestId('projects-summary')).toHaveText(
+      'No active projects in this world yet.',
     );
-    await expect(page.getByRole('button', { name: 'Create project' })).toBeDisabled();
-    await expect(
-      page.getByText('The project form arrives with the next update (M1-10).'),
-    ).toBeVisible();
     // The M0 spikes stay collapsed and labelled as mock.
     const spikes = page.locator('details.developer-spikes');
     await expect(spikes).not.toHaveAttribute('open', '');

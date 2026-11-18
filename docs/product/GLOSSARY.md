@@ -133,3 +133,5 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Derived state** | A value computed from data you already have instead of stored separately, so it can't drift (e.g. "first launch" = "no world yet") | `src/renderer/state/session.ts` |
 | **Empty state** | What a screen shows when there's nothing in it yet; it should say so plainly and point to the next action | `src/renderer/app/MainScreen.tsx` |
 | **Focus management** | Moving keyboard focus on purpose (e.g. to a new step's heading) so keyboard and screen-reader users don't get lost | `src/renderer/onboarding/Onboarding.tsx` |
+| **Modal dialog** | A box that sits on top of the page and must be answered or closed before the rest of the page works again. The native `<dialog>` element opened with `showModal()` keeps keyboard focus inside it and closes on Escape | `src/renderer/projects/ConfirmDialog.tsx` |
+| **Live region** | A part of the page (`role="status"` or `role="alert"`) whose changes screen readers announce without moving focus. `status` waits politely; `alert` interrupts | `src/renderer/projects/ProjectsPanel.tsx` |
