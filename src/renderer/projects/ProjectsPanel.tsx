@@ -9,7 +9,7 @@ import type { ProjectStatus } from '../../common/contracts/project';
 import type { WorldSummary } from '../../common/contracts/world';
 import { useStore } from '../state/use-store';
 import { CreateProjectForm } from './CreateProjectForm';
-import { ProjectItem } from './ProjectItem';
+import { ProjectItem, type ActionMessage } from './ProjectItem';
 import {
   createProjectList,
   searchIncomplete,
@@ -28,9 +28,10 @@ export function ProjectsPanel({ world }: ProjectsPanelProps) {
   const searchId = useId();
   const formId = useId();
   const newButton = useRef<HTMLButtonElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const [creating, setCreating] = useState(false);
   /** The result of the last action, announced politely. */
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<ActionMessage | null>(null);
   const [list] = useState(() => createProjectList(window.atlas, world.id));
   const state = useStore(list.store);
 
@@ -49,7 +50,10 @@ export function ProjectsPanel({ world }: ProjectsPanelProps) {
 
   return (
     <section className="projects" aria-labelledby="projects-heading">
-      <h3 id="projects-heading">Projects</h3>
+      {/* tabIndex -1: focus can land here when the row that had it disappears. */}
+      <h3 id="projects-heading" ref={heading} tabIndex={-1}>
+        Projects
+      </h3>
 
       <button
         ref={newButton}
@@ -70,15 +74,19 @@ export function ProjectsPanel({ world }: ProjectsPanelProps) {
           list={list}
           templates={state.templates}
           onCreated={(name) => {
-            setMessage(`Created “${name}”.`);
+            setMessage({ ok: true, text: `Created “${name}”.` });
             closeForm();
           }}
           onCancel={closeForm}
         />
       )}
       {message !== null && (
-        <p role="status" className="ok" data-testid="projects-message">
-          {message}
+        <p
+          role={message.ok ? 'status' : 'alert'}
+          className={message.ok ? 'ok' : 'error'}
+          data-testid="projects-message"
+        >
+          {message.text}
         </p>
       )}
 
@@ -136,7 +144,14 @@ export function ProjectsPanel({ world }: ProjectsPanelProps) {
       {state.status === 'ready' && shown.length > 0 && (
         <ul className="project-list" aria-label={`${FILTER_LABELS[state.filter]} projects`}>
           {shown.map((project) => (
-            <ProjectItem key={project.id} project={project} templates={state.templates} />
+            <ProjectItem
+              key={project.id}
+              project={project}
+              templates={state.templates}
+              list={list}
+              onMessage={setMessage}
+              fallbackFocus={() => heading.current?.focus()}
+            />
           ))}
         </ul>
       )}
