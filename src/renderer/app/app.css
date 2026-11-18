@@ -357,3 +357,116 @@ button.primary {
   cursor: pointer;
   color: #9a978e;
 }
+
+/* Project list (M1-10 #37) */
+.projects h3 {
+  margin-bottom: 0.5rem;
+}
+
+.projects-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+}
+
+.projects-filters {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.projects-filters [aria-pressed='true'],
+.template-choice:has(input:checked) {
+  outline: 2px solid #8fb4f0;
+}
+
+.projects-search {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.project-list {
+  margin: 0.5rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-item {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #2b2e38;
+}
+
+.project-item-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.project-item h4 {
+  margin: 0;
+}
+
+.project-item p {
+  margin: 0.25rem 0;
+}
+
+.project-goal {
+  white-space: pre-wrap;
+}
+
+.project-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.project-edit textarea,
+.create-project textarea {
+  width: 100%;
+  max-width: 40rem;
+  min-height: 4rem;
+}
+
+.create-project {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid #3a3d48;
+  border-radius: 6px;
+}
+
+.create-project fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.create-project label {
+  display: block;
+  margin-top: 0.75rem;
+}
+
+.template-choice {
+  display: block;
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #3a3d48;
+  border-radius: 6px;
+}
+
+.template-choice ul {
+  margin: 0.25rem 0;
+}
+
+.confirm-dialog {
+  max-width: 32rem;
+  border: 1px solid #3a3d48;
+  border-radius: 6px;
+  background: #22252e;
+  color: inherit;
+}
+
+.confirm-dialog::backdrop {
+  background: rgb(0 0 0 / 50%);
+}

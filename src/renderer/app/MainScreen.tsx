@@ -1,10 +1,11 @@
 // The screen after onboarding (M1-9 #36): a header with the world, the profile and Settings,
-// then the world's home. Until the project list arrives (M1-10 #37) the home is an empty state
-// that points to "Create project". The world canvas with real buildings comes in M2.
-import { useEffect, useId, useState } from 'react';
+// then the world's home with its project list (M1-10 #37). The world canvas with real
+// buildings comes in M2.
+import { useId, useState } from 'react';
 
 import type { WorldSummary } from '../../common/contracts/world';
 import { PlaceholderAvatar } from '../onboarding/PlaceholderAvatar';
+import { ProjectsPanel } from '../projects/ProjectsPanel';
 import type { Session, SessionData } from '../state/session';
 import { DeveloperSpikes } from './DeveloperSpikes';
 import { SettingsView } from './SettingsView';
@@ -89,46 +90,14 @@ export function MainScreen({ session, data, notice }: MainScreenProps) {
   );
 }
 
-type ProjectPresence = 'checking' | 'none' | 'some' | 'unknown';
-
 function WorldHome({ world }: { readonly world: WorldSummary }) {
-  const noteId = useId();
-  const [presence, setPresence] = useState<ProjectPresence>('checking');
-
-  // Only claim "no projects" when the main process says so. Projects can already exist
-  // through the commands (M1-7) before their list UI lands.
-  useEffect(() => {
-    let current = true;
-    setPresence('checking');
-    void window.atlas.project.list({ worldId: world.id, limit: 1 }).then((result) => {
-      if (!current) return;
-      setPresence(result.ok ? (result.data.projects.length === 0 ? 'none' : 'some') : 'unknown');
-    });
-    return () => {
-      current = false;
-    };
-  }, [world.id]);
-
   return (
     <section className="panel world-home" aria-labelledby="world-home-heading">
       <h2 id="world-home-heading">{world.name}</h2>
-      <p data-testid="world-empty-state">
-        {presence === 'checking' && 'Checking for projects…'}
-        {presence === 'none' && 'No projects in this world yet. Create one to get started.'}
-        {presence === 'some' &&
-          'This world has projects. The project list arrives with the next update (M1-10).'}
-        {presence === 'unknown' && 'Could not check for projects right now.'}
-      </p>
-      <button type="button" className="primary" disabled aria-describedby={noteId}>
-        Create project
-      </button>
-      <p id={noteId} className="muted">
-        The project form arrives with the next update (M1-10). The world map with buildings comes
-        later (M2).
-      </p>
+      <ProjectsPanel key={world.id} world={world} />
       <p className="muted">
-        Everything here works offline. AI work will need a model connection later; nothing asks for
-        one yet.
+        The world map with buildings comes later (M2). Everything here works offline. AI work will
+        need a model connection later; nothing asks for one yet.
       </p>
     </section>
   );
