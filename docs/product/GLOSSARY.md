@@ -127,3 +127,7 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Cursor (paging)** | An opaque token the UI hands back to get the next page. It wraps the last row's sort key and is re-checked by the main process | `project-service.ts`, ADR-0020 |
 | **Table rebuild** | Changing a SQLite table's constraints by creating a new table, copying the rows, dropping the old one and renaming the new one (SQLite can't edit a CHECK in place) | migration v4, lesson 018 |
 | **Stub** | A stand-in that returns a fixed answer until the real code exists; must be labelled (e.g. `runCheck: 'stub'`) so nothing claims it was verified | `noActiveRunsStub` |
+| **Onboarding** | The first-launch steps that get a new user to a usable state (here: profile → optional avatar → world). Shown while the active profile has no world | `src/renderer/onboarding/`, ADR-0022 |
+| **Derived state** | A value computed from data you already have instead of stored separately, so it can't drift (e.g. "first launch" = "no world yet") | `src/renderer/state/session.ts` |
+| **Empty state** | What a screen shows when there's nothing in it yet; it should say so plainly and point to the next action | `src/renderer/app/MainScreen.tsx` |
+| **Focus management** | Moving keyboard focus on purpose (e.g. to a new step's heading) so keyboard and screen-reader users don't get lost | `src/renderer/onboarding/Onboarding.tsx` |
