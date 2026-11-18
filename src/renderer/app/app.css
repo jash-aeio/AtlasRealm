@@ -194,3 +194,166 @@ body {
 .atlas-list [aria-pressed='true'] {
   outline: 2px solid #6bc6f2;
 }
+
+/* Keyboard focus stays visible everywhere (UI_SPEC §6.6). */
+:focus-visible {
+  outline: 2px solid #6bc6f2;
+  outline-offset: 2px;
+}
+
+button.primary {
+  font-weight: 600;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+/* First launch (M1-9). */
+.onboarding {
+  max-width: 40rem;
+}
+
+.onboarding h2 {
+  margin-top: 0.25rem;
+}
+
+.step-count {
+  margin: 0;
+  color: #9a978e;
+  font-size: 0.9rem;
+}
+
+.profile-list {
+  margin: 0.5rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid #2b2e38;
+}
+
+.profile-name {
+  flex: 1;
+}
+
+.badge {
+  padding: 0.1rem 0.45rem;
+  border: 1px solid #4a6b4a;
+  border-radius: 4px;
+  color: #8fd18f;
+  font-size: 0.8rem;
+}
+
+.name-form {
+  margin-top: 0.75rem;
+}
+
+.name-form label,
+.create-world label {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.name-form-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.name-form p {
+  margin: 0.35rem 0 0;
+}
+
+.create-world input,
+.create-world select {
+  display: block;
+  margin-bottom: 0.75rem;
+}
+
+.avatar-preview {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.placeholder-label {
+  color: #f2d16b;
+  font-size: 0.9rem;
+}
+
+.avatar-chooser fieldset {
+  margin-top: 0.75rem;
+  border: 1px solid #3a3d48;
+  border-radius: 6px;
+}
+
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: 0.4rem;
+}
+
+.swatch {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.swatch-chip {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid #1d1f26;
+  border-radius: 3px;
+}
+
+/* Main screen (M1-9). */
+.main-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #3a3d48;
+}
+
+.world-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.profile-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.notice {
+  margin-top: 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #6b5a2e;
+  border-radius: 6px;
+  color: #f2d16b;
+}
+
+.developer-spikes {
+  margin-top: 3rem;
+  padding: 0.5rem 1rem;
+  border: 1px dashed #3a3d48;
+  border-radius: 6px;
+}
+
+.developer-spikes summary {
+  cursor: pointer;
+  color: #9a978e;
+}

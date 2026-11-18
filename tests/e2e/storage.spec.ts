@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { _electron as electron, expect, test } from '@playwright/test';
 
+import { openDeveloperSpikes } from './support/onboarding';
 import { requireDatabaseFile } from './support/profile-data';
 
 // The real built app, started twice against a throwaway userData folder: the profile index and
@@ -39,6 +40,7 @@ async function launchOnce(): Promise<{ userData: string; launchText: string }> {
   });
   try {
     const page = await app.firstWindow();
+    await openDeveloperSpikes(page);
     const launchInfo = page.getByTestId('launch-info');
     await expect(launchInfo).toContainText('Launch #');
     return {

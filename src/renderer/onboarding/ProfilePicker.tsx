@@ -40,8 +40,7 @@ export function ProfilePicker({ profiles, onRename, onCreate }: ProfilePickerPro
       )}
       {active !== undefined && (
         <NameForm
-          // Re-mount on a new name, so the field shows what was saved.
-          key={active.displayName}
+          key={active.id}
           label="Active profile name"
           initial={active.displayName}
           submitLabel="Rename profile"

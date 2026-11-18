@@ -9,6 +9,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { openDeveloperSpikes } from './support/onboarding';
+
 // M0-4: the placeholder Pixi world inside the built app, under the production CSP.
 
 interface Launched {
@@ -48,6 +50,8 @@ async function launch(initScript?: () => void): Promise<Launched> {
   // Reload so the init scripts run on a fresh page load.
   await page.reload();
   await page.waitForLoadState('domcontentloaded');
+  // The M0 world grid now sits under "Developer spikes" on the main screen (M1-9).
+  await openDeveloperSpikes(page);
   return {
     app,
     page,
@@ -143,6 +147,11 @@ test.describe('world view with graphics available', () => {
 
   test('loads the selection placeholder sprite as a real PNG from app://atlas (M0-8)', async () => {
     const { page } = launched;
+    // Chromium records no resource-timing entry for the first, uncached app:// fetch of the
+    // sprite (see also packaged.spec.ts). Since M1-9 the world mounts only when "Developer
+    // spikes" opens, after the launch reload, so reload once more and read the cached load.
+    await page.reload();
+    await openDeveloperSpikes(page);
     await expect(page.getByTestId('world')).toHaveAttribute('data-state', 'ready');
     // The scene loads its art before it reports ready, so the request has already happened.
     const images = await page.evaluate(() =>

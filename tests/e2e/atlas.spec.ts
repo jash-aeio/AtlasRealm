@@ -16,6 +16,8 @@ import {
   type GridPoint,
 } from '../../src/renderer/world/projection';
 
+import { openDeveloperSpikes } from './support/onboarding';
+
 // M0-5: the Realm Atlas graph (React Flow) and the world view (Pixi) share one selection,
 // in the built app under the production CSP. All entities are M0 mock data.
 
@@ -46,6 +48,7 @@ test.beforeAll(async () => {
   });
   await page.reload();
   await page.waitForLoadState('domcontentloaded');
+  await openDeveloperSpikes(page);
   await expect(page.getByTestId('world')).toHaveAttribute('data-state', 'ready');
 });
 
