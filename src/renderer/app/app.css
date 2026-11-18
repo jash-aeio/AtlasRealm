@@ -470,3 +470,8 @@ button.primary {
 .confirm-dialog::backdrop {
   background: rgb(0 0 0 / 50%);
 }
+
+.template-details .block {
+  display: block;
+  margin-top: 0.2rem;
+}

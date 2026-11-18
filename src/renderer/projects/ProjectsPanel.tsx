@@ -3,11 +3,12 @@
 // whether or not anything in the world represents it (PRODUCT_RULES §3.1).
 //
 // The parent gives this component `key={world.id}`, so another world gets a fresh list.
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 import type { ProjectStatus } from '../../common/contracts/project';
 import type { WorldSummary } from '../../common/contracts/world';
 import { useStore } from '../state/use-store';
+import { CreateProjectForm } from './CreateProjectForm';
 import { ProjectItem } from './ProjectItem';
 import {
   createProjectList,
@@ -25,6 +26,11 @@ const FILTERS: readonly ProjectStatus[] = ['active', 'archived', 'trashed'];
 
 export function ProjectsPanel({ world }: ProjectsPanelProps) {
   const searchId = useId();
+  const formId = useId();
+  const newButton = useRef<HTMLButtonElement>(null);
+  const [creating, setCreating] = useState(false);
+  /** The result of the last action, announced politely. */
+  const [message, setMessage] = useState<string | null>(null);
   const [list] = useState(() => createProjectList(window.atlas, world.id));
   const state = useStore(list.store);
 
@@ -32,12 +38,49 @@ export function ProjectsPanel({ world }: ProjectsPanelProps) {
     void list.start();
   }, [list]);
 
+  function closeForm() {
+    setCreating(false);
+    // Put keyboard focus back where the user started (UI_SPEC §6.6).
+    newButton.current?.focus();
+  }
+
   const shown = visibleProjects(state);
   const searching = state.query.trim() !== '';
 
   return (
     <section className="projects" aria-labelledby="projects-heading">
       <h3 id="projects-heading">Projects</h3>
+
+      <button
+        ref={newButton}
+        type="button"
+        className="primary"
+        aria-expanded={creating}
+        aria-controls={creating ? formId : undefined}
+        onClick={() => {
+          setMessage(null);
+          setCreating((open) => !open);
+        }}
+      >
+        New project
+      </button>
+      {creating && (
+        <CreateProjectForm
+          id={formId}
+          list={list}
+          templates={state.templates}
+          onCreated={(name) => {
+            setMessage(`Created “${name}”.`);
+            closeForm();
+          }}
+          onCancel={closeForm}
+        />
+      )}
+      {message !== null && (
+        <p role="status" className="ok" data-testid="projects-message">
+          {message}
+        </p>
+      )}
 
       <div className="projects-toolbar">
         <div role="group" aria-label="Show projects" className="projects-filters">
