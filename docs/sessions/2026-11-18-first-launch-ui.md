@@ -35,6 +35,13 @@ Four commits on `feat/36-first-launch-ui`:
 
 **Something learned while fixing tests:** Chromium records no resource-timing entry for the first, uncached `app://` fetch of an image, only for a cached reload. The old sprite test passed only because the world mounted before the launch reload. It now reloads once more on purpose, and a comment explains why.
 
+## After #35 merged
+#35 (PR #50) merged while PR #51 was open, which left #51 conflicting. I merged `main` into the branch; only docs conflicted, and both sides were kept. You chose (AskUserQuestion) to wire up Switch in this PR:
+- The session store gained `switchProfile`: on success it doesn't re-read, because the main process reloads the window; a `not_found` re-reads the list.
+- The picker's Switch buttons are enabled ("Switch to <name>" for screen readers) and show the main process's error text.
+- `profiles.spec.ts` (from #35) waits for the app's screens instead of the M0 launch panel, and checks the worker panel after switching back to the profile that already has a world.
+- New E2E steps switch from onboarding and from Settings, with worlds staying separate.
+
 ## Verification (2026-11-18, local Windows 11, worktree on ace8326)
 - typecheck, lint, format:check pass.
 - Unit/integration 653/654. The one failure is the known-flaky router test "rejects a huge binary payload"; its file passes 27/27 alone.
@@ -43,4 +50,4 @@ Four commits on `feat/36-first-launch-ui`:
 - Packaged E2E not run locally; only its helper calls changed (it now opens Developer spikes before reading the M0 panels).
 
 ## Open questions
-- Once M1-8 merges, the disabled Switch button needs wiring to `window.atlas.profile.switch` (whichever branch merges second).
+- _(Resolved.)_ The Switch button is wired up: see "After #35 merged" above.

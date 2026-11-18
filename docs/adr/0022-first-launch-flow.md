@@ -30,7 +30,7 @@ PRD §5.1 asks for an offline first launch: `local profile → starter world →
 
 ## Consequences
 - No schema or IPC contract change in M1-9. The renderer keeps a small session cache (`src/renderer/state/session.ts`) that re-reads profiles, settings and worlds after each command.
-- Follow-up: whichever of #35 and #36 merges second wires the Switch button to `window.atlas.profile.switch`.
+- Follow-up: whichever of #35 and #36 merges second wires the Switch button to `window.atlas.profile.switch`. **Done in PR #51** (#35 merged first, on 2026-11-18), so the button shipped enabled.
 - Follow-up: when world archiving gets a UI, decide what a profile whose worlds are all archived should see (onboarding again, or a "restore a world" screen).
 - Revisit if: onboarding gets more optional steps (e.g. a guided intro or example world, PRD §5.1) that need their own "seen" state; or several avatar figures ship (then extend `AvatarPreset`).
 

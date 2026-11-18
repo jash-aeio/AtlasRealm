@@ -134,7 +134,7 @@
   - `withSavepoint` (`database.ts`): opens a transaction, or nests in one that `withTransaction` opened through a SQLite SAVEPOINT. If SQLite cancels the whole transaction by itself (disk full, I/O error), the transaction is marked aborted: further writes throw `TransactionAbortedError` and it won't commit, so writes never autocommit half a unit. It refuses to join a transaction it didn't open.
 
 - **M1-9 first-launch UI (#36, branch `feat/36-first-launch-ui`):** the app now opens on a real first-launch flow instead of the M0 spike page (PRD §5.1, ADR-0022). Everything runs offline through the existing `window.atlas` commands; no account, network or file access is involved.
-  - **Onboarding** (`src/renderer/onboarding/`) shows while the active profile has no active world. The rule is derived from `world.list`, with no stored flag. Steps: (1) profile picker: list, rename the active profile, create a profile; other profiles get a **disabled** "Switch" button labelled "arrives with M1-8"; (2) avatar: one **placeholder** SVG figure in six art-bible colours (`avatarPreset: 'default'` + colour), with Skip and Back; (3) create world: name + theme (only Meadow). Each step's heading takes keyboard focus.
+  - **Onboarding** (`src/renderer/onboarding/`) shows while the active profile has no active world. The rule is derived from `world.list`, with no stored flag. Steps: (1) profile picker: list, rename the active profile, create a profile, and **switch** to another profile (`profile.switch`; the main process reloads the window into that profile, which shows its own first launch or world; errors such as `profile_unavailable` are shown); (2) avatar: one **placeholder** SVG figure in six art-bible colours (`avatarPreset: 'default'` + colour), with Skip and Back; (3) create world: name + theme (only Meadow). Each step's heading takes keyboard focus.
   - **Main screen** (`src/renderer/app/MainScreen.tsx`): world name (a selector with several worlds), profile chip with the avatar, Settings toggle, and a conflict notice when a reload followed a `revision_conflict`. The home view asks `project.list` (limit 1) before saying "No projects in this world yet". "Create project" is **disabled** with "the project form arrives with the next update (M1-10)".
   - **Settings** (`SettingsView.tsx`): the same profile picker, change or remove the avatar, rename the world (keeps its ID).
   - **Developer spikes**: the M0 panels (world grid, Realm Atlas mock, launch info, IPC ping, worker) sit in a collapsed `<details>` labelled "Developer spikes (M0 mock data, not your projects)". They mount only while it is open.
@@ -158,7 +158,7 @@
   - Fixed lists: themes `meadow`, avatar presets `default`. Caps: 50 profiles, 100 worlds per profile. Profile names are unique ignoring case after NFC normalisation.
   - Name rules (contract and repositories) now also refuse the Arabic letter mark, soft hyphen, word joiner/invisible operators, BOM and tag characters (security review L2).
 
-- **M1-8 profile switching (#35, branch `feat/35-profile-switching`):** the renderer can switch to another listed profile with `window.atlas.profile.switch({ profileId })` (ARCHITECTURE §7.4, ADR-0014, ADR-0021). There is no switching UI yet (M1-9/M1-10).
+- **M1-8 profile switching (#35, merged as PR #50):** the renderer can switch to another listed profile with `window.atlas.profile.switch({ profileId })` (ARCHITECTURE §7.4, ADR-0014, ADR-0021). The profile picker (M1-9) is its UI.
   - Order (`ProfileSession`, `src/main/services/profile-session.ts`):
     1. close the command gate;
     2. open and migrate the target's database next to the current one, and make sure it has a settings row;
@@ -197,6 +197,7 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- M1-9 after merging main @ 7961f8b (M1-8) and enabling Switch, 2026-11-18: typecheck, lint, format:check pass. Unit/integration 680/681 (session-store now 12); the one failure is the known router flake, which passed 27/27 alone. E2E 43/43, including the profile picker switching both ways (onboarding → Second, Settings → back to Robin, with worlds isolated) and the adapted `profiles.spec.ts` from #35.
 - M1-9, 2026-11-18, local Windows 11, worktree on main @ ace8326: typecheck, lint, format:check pass. Unit/integration 654/654 (new: `session-store` 10). An earlier full run had 653/654: the known-flaky router test "huge binary payload", which passed 27/27 alone. E2E 41/41 (new: 3 in `onboarding.spec.ts`). Mutation check: removing the step-heading focus makes the keyboard-only test fail. Packaged E2E was not run locally; only its helper calls changed (it opens Developer spikes before reading the M0 panels). While adapting `world.spec.ts`: Chromium records no resource-timing entry for the first, uncached `app://` image fetch, only for a cached reload, so the sprite test now reloads once on purpose. Reviews: invariant-reviewer found no violations (it re-ran typecheck, lint and the session-store tests). security-auditor not run: the diff touches only the renderer, tests and docs (no main, preload, IPC contracts, files or credentials).
 - M1-8, 2026-11-18, local Windows 11, on main @ ace8326: typecheck, lint, format:check pass. Unit/integration 668/669. New: `profile-switch` 14, `profile-switch-gate` 6, worker pause/resume 5. The one failure is the known router test "rejects a huge binary payload"; it also fails on a clean checkout with the full suite and passes alone. E2E 40/40 (new: `profiles.spec.ts` 2, the switch and the failed switch in the built app). After the review fixes, one full run hit the known flaky world-canvas test ("hover, wheel zoom and middle-drag pan"); world + profiles then passed 11/11. Packaged E2E was not run (no packaging change). Mutation check: disabling the gate makes 2 `profile-switch` tests fail. Reviews: invariant-reviewer found no violations. security-auditor found no Critical/High/Medium issues. Its three Lows are fixed:
   - L1: the reload ignores subframe load failures, forces the old page to unload, and logs a timeout;
@@ -357,7 +358,7 @@
   - The renamed-in-index-but-not-in-settings repair runs only at startup; it is covered by an integration test, not E2E.
   - Duplicate-name detection normalises Unicode (NFC) and ignores case, but doesn't catch lookalikes from other scripts (e.g. Cyrillic "А" vs Latin "A").
 - Profiles (M1-2):
-  - Profiles can be created and the active one renamed through commands (M1-6), but not switched (M1-8) or deleted yet. The picker and Settings (M1-9) use these commands.
+  - Profiles can be created and the active one renamed through commands (M1-6), and switched (M1-8), but not deleted yet. The picker and Settings (M1-9) use these commands.
   - A lost or damaged index stops the app; there is no in-app recovery or "rebuild index" yet (M7 restore work). The dialog tells the user the file was kept.
   - If the very first DB open on a fresh install fails after `app.sqlite` was created, the next launch sees an un-indexed profile folder and stops with "profile list missing" rather than retrying. Only happens if a brand-new DB can't be migrated (a bug or a failing disk).
   - The startup error dialogs are not covered by automated tests.
@@ -416,7 +417,7 @@
 - `userData/profiles-index.json` (M1-2, not in SQLite): `{ schemaVersion: 1, profiles: [{ id, displayName }], lastUsedProfileId }`. Profile folders: `profiles/<default | uuid>/`.
 
 ## Decisions
-- [ADR-0022](../adr/0022-first-launch-flow.md): onboarding shows while the active profile has no active world (derived, no flag); the avatar step offers colour presets on the one placeholder figure; profile switching is shown disabled until M1-8
+- [ADR-0022](../adr/0022-first-launch-flow.md): onboarding shows while the active profile has no active world (derived, no flag); the avatar step offers colour presets on the one placeholder figure; the picker's Switch button, first shown disabled, was enabled once M1-8 merged
 - ADR-0001 … ADR-0006 (stack defaults and approved Nov 6 product decisions)
 - [ADR-0007](../adr/0007-pnpm-via-corepack.md): pnpm via corepack
 - [ADR-0008](../adr/0008-proprietary-license-for-now.md): proprietary license for now
