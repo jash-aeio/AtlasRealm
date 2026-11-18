@@ -23,6 +23,7 @@ export function SettingsView({ session, data, world }: SettingsViewProps) {
           profiles={data.profiles}
           onRename={session.renameProfile}
           onCreate={session.createProfile}
+          onSwitch={session.switchProfile}
         />
       </section>
 

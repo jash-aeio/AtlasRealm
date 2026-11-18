@@ -203,7 +203,7 @@ test('an avatar chosen during onboarding can be changed and removed in Settings'
   }
 });
 
-test('the profile picker lists, creates and renames profiles; switching waits for M1-8', async () => {
+test('the profile picker lists, creates, renames and switches profiles', async () => {
   const { app, page } = await launch(userDataDir);
   try {
     await expect(screen(page, 'onboarding')).toBeVisible();
@@ -212,15 +212,11 @@ test('the profile picker lists, creates and renames profiles; switching waits fo
     await expect(list.getByRole('listitem').first()).toContainText('Default');
     await expect(list.getByRole('listitem').first()).toContainText('Active');
 
-    // Create a second profile. It's listed, but can't be switched to yet.
+    // Create a second profile. It's listed with a Switch button, but not opened yet.
     await page.getByLabel('New profile name').fill('Second');
     await page.getByRole('button', { name: 'Create profile' }).click();
-    await expect(page.getByRole('status')).toHaveText(
-      'Created “Second”. You can switch to it once profile switching arrives (M1-8).',
-    );
-    const second = list.getByRole('listitem').filter({ hasText: 'Second' });
-    await expect(second.getByRole('button', { name: 'Switch' })).toBeDisabled();
-    await expect(page.getByText('Switching profiles arrives with M1-8.')).toBeVisible();
+    await expect(page.getByRole('status')).toHaveText('Created “Second”. Use Switch to open it.');
+    await expect(page.getByRole('button', { name: 'Switch to Second' })).toBeEnabled();
 
     // Rename the active profile; the continue button follows the saved name.
     await page.getByLabel('Active profile name').fill('Robin');
@@ -243,6 +239,31 @@ test('the profile picker lists, creates and renames profiles; switching waits fo
       ['Robin', true],
       ['Second', false],
     ]);
+
+    // Switch from onboarding: the window reloads into Second, which has its own first launch.
+    await Promise.all([
+      page.waitForEvent('load'),
+      page.getByRole('button', { name: 'Switch to Second' }).click(),
+    ]);
+    await expect(screen(page, 'onboarding')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Continue as Second' })).toBeVisible();
+    await expect(list.getByRole('listitem').filter({ hasText: 'Second' })).toContainText('Active');
+
+    // Give Second a world, then switch back from Settings. Robin still has no world.
+    await page.getByRole('button', { name: 'Continue as Second' }).click();
+    await page.getByRole('button', { name: 'Skip' }).click();
+    await page.getByLabel('World name').fill('Second Realm');
+    await page.getByRole('button', { name: 'Create world' }).click();
+    await expect(page.getByTestId('world-name')).toHaveText('Second Realm');
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await Promise.all([
+      page.waitForEvent('load'),
+      page.getByRole('button', { name: 'Switch to Robin' }).click(),
+    ]);
+    await expect(screen(page, 'onboarding')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Continue as Robin' })).toBeVisible();
+    const worlds = await page.evaluate(() => window.atlas.world.list());
+    expect(worlds.ok && worlds.data.worlds).toEqual([]);
   } finally {
     await app.close();
   }

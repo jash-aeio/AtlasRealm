@@ -47,6 +47,7 @@ export function Onboarding({ session, data }: OnboardingProps) {
             profiles={data.profiles}
             onRename={session.renameProfile}
             onCreate={session.createProfile}
+            onSwitch={session.switchProfile}
           />
           <div className="form-actions">
             <button

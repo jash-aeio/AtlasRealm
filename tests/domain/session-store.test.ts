@@ -61,6 +61,9 @@ function fakeApi() {
         }),
       ),
       rename: vi.fn(() => ok({ settings: current })),
+      switch: vi.fn((input: { profileId: string }) =>
+        ok({ activeProfileId: input.profileId, reloading: true as const }),
+      ),
       settings: {
         get: vi.fn(() => ok({ settings: current })),
         update: vi.fn((input: { expectedRevision: number; avatarColour?: string | null }) => {
@@ -222,6 +225,36 @@ describe('session store', () => {
     const state = session.store.get();
     expect(state.status === 'ready' && state.data.worlds[0]?.name).toBe('Hearth');
     await expect(session.renameWorld('nope', 'X')).rejects.toThrow('unknown world');
+  });
+
+  it('switches without re-reading: the main process reloads the window', async () => {
+    const { api } = fakeApi();
+    const session = createSession(api);
+    await session.reload();
+    const reads = api.profile.list.mock.calls.length;
+    const target = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+    expect(await session.switchProfile(target)).toEqual({ ok: true });
+    expect(api.profile.switch).toHaveBeenCalledWith({ profileId: target });
+    expect(api.profile.list.mock.calls.length).toBe(reads);
+  });
+
+  it('reports a failed switch, re-reading only when the profile is gone', async () => {
+    const { api } = fakeApi();
+    const session = createSession(api);
+    await session.reload();
+    const reads = api.profile.list.mock.calls.length;
+    const unavailable = { code: 'profile_unavailable' as const, message: 'could not open' };
+    api.profile.switch.mockImplementationOnce(() =>
+      Promise.resolve({ ok: false, error: unavailable }),
+    );
+    expect(await session.switchProfile('default')).toEqual({ ok: false, error: unavailable });
+    expect(api.profile.list.mock.calls.length).toBe(reads);
+
+    api.profile.switch.mockImplementationOnce(() =>
+      Promise.resolve({ ok: false, error: { code: 'not_found', message: 'gone' } }),
+    );
+    await session.switchProfile('default');
+    expect(api.profile.list.mock.calls.length).toBe(reads + 1);
   });
 
   it('refuses revision-based commands before the first load', async () => {

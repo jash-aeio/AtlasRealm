@@ -14,7 +14,7 @@ import { createStore, type Store } from './store';
 
 /** The slice of `window.atlas` the session needs. */
 export interface SessionApi {
-  readonly profile: Pick<AtlasApi['profile'], 'list' | 'create' | 'rename' | 'settings'>;
+  readonly profile: Pick<AtlasApi['profile'], 'list' | 'create' | 'rename' | 'settings' | 'switch'>;
   readonly world: Pick<AtlasApi['world'], 'list' | 'create' | 'rename'>;
 }
 
@@ -58,6 +58,11 @@ export interface Session {
   readonly reload: () => Promise<void>;
   readonly createProfile: (displayName: string) => Promise<CommandOutcome>;
   readonly renameProfile: (displayName: string) => Promise<CommandOutcome>;
+  /**
+   * Makes another profile active (M1-8). On success the main process reloads the window, so
+   * nothing is re-read here: the new page starts a new session for the new profile.
+   */
+  readonly switchProfile: (profileId: string) => Promise<CommandOutcome>;
   /** A colour picks the placeholder avatar in that colour; `null` clears the avatar. */
   readonly setAvatar: (colour: string | null) => Promise<CommandOutcome>;
   readonly createWorld: (name: string, themeId: WorldTheme) => Promise<CommandOutcome>;
@@ -124,6 +129,13 @@ export function createSession(api: SessionApi): Session {
     store,
     reload: () => load(null),
     createProfile: (displayName) => command(() => api.profile.create({ displayName })),
+    async switchProfile(profileId) {
+      const result = await api.profile.switch({ profileId });
+      if (result.ok) return { ok: true };
+      // The list may be out of date (the profile was removed elsewhere): show the latest.
+      if (result.error.code === 'not_found') await load(null);
+      return { ok: false, error: result.error };
+    },
     renameProfile: (displayName) =>
       command(() => api.profile.rename({ displayName, expectedRevision: currentRevision() })),
     setAvatar: (colour) =>

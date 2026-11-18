@@ -1,5 +1,5 @@
-// Lists local profiles, renames the active one and creates new ones. Used by onboarding and
-// Settings. Switching is shown but disabled until profile switching lands (M1-8 #35).
+// Lists local profiles, switches between them, renames the active one and creates new ones.
+// Used by onboarding and Settings. A successful switch reloads the window (M1-8, ADR-0021).
 import { useId, useState } from 'react';
 
 import type { ProfileListOutput } from '../../common/contracts/profile';
@@ -10,12 +10,26 @@ interface ProfilePickerProps {
   readonly profiles: ProfileListOutput;
   readonly onRename: (displayName: string) => Promise<CommandOutcome>;
   readonly onCreate: (displayName: string) => Promise<CommandOutcome>;
+  readonly onSwitch: (profileId: string) => Promise<CommandOutcome>;
 }
 
-export function ProfilePicker({ profiles, onRename, onCreate }: ProfilePickerProps) {
+export function ProfilePicker({ profiles, onRename, onCreate, onSwitch }: ProfilePickerProps) {
   const switchNoteId = useId();
   const active = profiles.profiles.find((profile) => profile.isActive);
   const hasOthers = profiles.profiles.length > 1;
+  // The profile being switched to. It stays set on success: the window is about to reload.
+  const [switchingTo, setSwitchingTo] = useState<string | null>(null);
+  const [switchProblem, setSwitchProblem] = useState<string | null>(null);
+
+  async function switchTo(profileId: string) {
+    setSwitchingTo(profileId);
+    setSwitchProblem(null);
+    const outcome = await onSwitch(profileId);
+    if (!outcome.ok) {
+      setSwitchingTo(null);
+      setSwitchProblem(commandProblem(outcome.error, 'profile'));
+    }
+  }
 
   return (
     <div className="profile-picker">
@@ -26,8 +40,14 @@ export function ProfilePicker({ profiles, onRename, onCreate }: ProfilePickerPro
             {profile.isActive ? (
               <span className="badge">Active</span>
             ) : (
-              <button type="button" disabled aria-describedby={switchNoteId}>
-                Switch
+              <button
+                type="button"
+                disabled={switchingTo !== null}
+                aria-label={`Switch to ${profile.displayName}`}
+                aria-describedby={switchNoteId}
+                onClick={() => void switchTo(profile.id)}
+              >
+                {switchingTo === profile.id ? 'Switching…' : 'Switch'}
               </button>
             )}
           </li>
@@ -35,7 +55,13 @@ export function ProfilePicker({ profiles, onRename, onCreate }: ProfilePickerPro
       </ul>
       {hasOthers && (
         <p id={switchNoteId} className="muted">
-          Switching profiles arrives with M1-8. Until then the active profile stays in use.
+          Switching opens that profile's own worlds and settings. The window reloads; nothing is
+          deleted.
+        </p>
+      )}
+      {switchProblem !== null && (
+        <p role="alert" className="error">
+          {switchProblem}
         </p>
       )}
       {active !== undefined && (
@@ -56,9 +82,7 @@ export function ProfilePicker({ profiles, onRename, onCreate }: ProfilePickerPro
         thing="profile"
         onSubmit={onCreate}
         clearOnSuccess
-        successText={(name) =>
-          `Created “${name}”. You can switch to it once profile switching arrives (M1-8).`
-        }
+        successText={(name) => `Created “${name}”. Use Switch to open it.`}
       />
     </div>
   );
