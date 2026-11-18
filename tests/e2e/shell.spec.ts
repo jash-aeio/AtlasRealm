@@ -83,7 +83,7 @@ test('preload exposes only the explicit API', async () => {
     app: ['ping', 'launchInfo'],
     runtime: ['workerStatus', 'workerCheck'],
     template: ['list'],
-    profile: ['list', 'create', 'rename', 'settings'],
+    profile: ['list', 'create', 'rename', 'switch', 'settings'],
     profileSettings: ['get', 'update'],
     world: ['create', 'list', 'rename'],
     project: [

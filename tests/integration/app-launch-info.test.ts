@@ -36,12 +36,16 @@ describe('app.launchInfo input', () => {
 describe('app.launchInfo handler', () => {
   it('returns what is stored, and reflects a restart', async () => {
     const first = await openAppDatabase(userData, PROFILE);
-    const firstInfo = LaunchInfoOutput.parse(await createLaunchInfoHandler(first.db)(undefined));
+    const firstInfo = LaunchInfoOutput.parse(
+      await createLaunchInfoHandler(() => first.db)(undefined),
+    );
     first.db.close();
 
     const second = await openAppDatabase(userData, PROFILE);
     try {
-      const info = LaunchInfoOutput.parse(await createLaunchInfoHandler(second.db)(undefined));
+      const info = LaunchInfoOutput.parse(
+        await createLaunchInfoHandler(() => second.db)(undefined),
+      );
       expect(firstInfo.launchCount).toBe(1);
       expect(info).toMatchObject({
         launchCount: 2,
@@ -56,7 +60,7 @@ describe('app.launchInfo handler', () => {
   it('does not write: calling it twice changes nothing', async () => {
     const opened = await openAppDatabase(userData, PROFILE);
     try {
-      const handler = createLaunchInfoHandler(opened.db);
+      const handler = createLaunchInfoHandler(() => opened.db);
       expect(await handler(undefined)).toEqual(await handler(undefined));
     } finally {
       opened.db.close();
@@ -67,7 +71,9 @@ describe('app.launchInfo handler', () => {
     const db = openDatabase(join(userData, 'empty.sqlite'));
     try {
       await migrate(db, MIGRATIONS, { backupDir: join(userData, 'backups') });
-      expect(() => createLaunchInfoHandler(db)(undefined)).toThrow('No launch has been recorded');
+      expect(() => createLaunchInfoHandler(() => db)(undefined)).toThrow(
+        'No launch has been recorded',
+      );
     } finally {
       db.close();
     }

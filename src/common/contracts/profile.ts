@@ -2,7 +2,8 @@
 //
 // Every command works on the **active** profile only. The renderer never names a profile
 // folder; profile IDs it receives are for display and later switching (M1-8), and the main
-// process validates any ID it is sent. Avatar setup is optional: a profile is fully usable
+// process validates any ID it is sent. `profile.switch` (M1-8 #35) changes which profile is
+// active and then reloads the window. Avatar setup is optional: a profile is fully usable
 // with the defaults (no avatar, the system timezone).
 import { z } from 'zod';
 
@@ -68,7 +69,7 @@ export type ProfileListOutput = z.infer<typeof ProfileListOutput>;
 
 // ---- profile.create --------------------------------------------------------------------
 
-/** Creates a profile with default settings. It does not switch to it (switching is M1-8). */
+/** Creates a profile with default settings. It does not switch to it (`profile.switch` does). */
 export const ProfileCreateInput = z.strictObject({ displayName: DisplayName });
 export type ProfileCreateInput = z.infer<typeof ProfileCreateInput>;
 
@@ -111,3 +112,21 @@ export const ProfileSettingsUpdateInput = z
     'nothing to update',
   );
 export type ProfileSettingsUpdateInput = z.infer<typeof ProfileSettingsUpdateInput>;
+
+// ---- profile.switch --------------------------------------------------------------------
+
+/**
+ * Makes another listed profile the active one (ADR-0014, ADR-0021). On success the main process
+ * replies, then reloads the window, so no renderer state from the old profile survives. If the
+ * target can't be opened, the reply is `profile_unavailable` and the current profile stays
+ * active. Commands sent while the switch runs are refused with `profile_switching`.
+ */
+export const ProfileSwitchInput = z.strictObject({ profileId: ProfileIdText });
+export type ProfileSwitchInput = z.infer<typeof ProfileSwitchInput>;
+
+export const ProfileSwitchOutput = z.strictObject({
+  activeProfileId: ProfileIdText,
+  /** Always true: the window reloads right after this reply. */
+  reloading: z.literal(true),
+});
+export type ProfileSwitchOutput = z.infer<typeof ProfileSwitchOutput>;

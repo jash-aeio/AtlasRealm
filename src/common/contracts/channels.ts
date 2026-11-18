@@ -8,6 +8,7 @@ export const Channels = {
   profileList: 'profile.list',
   profileCreate: 'profile.create',
   profileRename: 'profile.rename',
+  profileSwitch: 'profile.switch',
   profileSettingsGet: 'profile.settings.get',
   profileSettingsUpdate: 'profile.settings.update',
   worldCreate: 'world.create',

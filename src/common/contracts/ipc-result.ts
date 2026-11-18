@@ -11,7 +11,10 @@ export type IpcErrorCode =
   | 'already_exists' // e.g. a profile with that name
   | 'revision_conflict' // the record changed since the caller read it; see currentRevision
   | 'invalid_transition' // the record's state doesn't allow this change
-  | 'limit_reached'; // a bounded list (profiles, worlds) is full
+  | 'limit_reached' // a bounded list (profiles, worlds) is full
+  // Profile switching (M1-8 #35, ADR-0014).
+  | 'profile_switching' // a switch is under way; commands are refused, not queued
+  | 'profile_unavailable'; // the target profile could not be opened; the current one stays active
 
 export interface IpcError {
   readonly code: IpcErrorCode;

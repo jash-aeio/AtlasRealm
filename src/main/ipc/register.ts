@@ -1,12 +1,13 @@
 // Wires command handlers to Electron's ipcMain. Each channel is registered exactly once;
 // a second registration throws, which catches copy-paste mistakes at startup.
 import { ipcMain } from 'electron';
+import type { z } from 'zod';
 
-import type { ActiveProfile } from '../profiles/active-profile';
+import { type ActiveProfile, refuseWhileSwitching } from '../profiles/active-profile';
 import { ProfileService } from '../profiles/profile-service';
 import type { WorkerBridge } from '../runtime-bridge/worker-bridge';
+import { ProfileSession } from '../services/profile-session';
 import { ProjectService } from '../services/project-service';
-import type { Database } from '../storage/database';
 import type { TemplateCatalog } from '../templates/catalog';
 import { appLaunchInfoCommand, createLaunchInfoHandler } from './commands/app-launch-info';
 import { appPingCommand, handleAppPing } from './commands/app-ping';
@@ -36,6 +37,7 @@ import {
   runtimeWorkerCheckCommand,
   runtimeWorkerStatusCommand,
 } from './commands/runtime-worker';
+import { createProfileSwitchHandler, profileSwitchCommand } from './commands/profile-switch';
 import { createTemplateListHandler, templateListCommand } from './commands/template-list';
 import {
   createProfileCreateHandler,
@@ -57,165 +59,67 @@ import {
   worldListCommand,
   worldRenameCommand,
 } from './commands/world';
-import { createCommandHandler, trustRendererEntry } from './router';
+import {
+  type CommandDefinition,
+  type CommandHandler,
+  createCommandHandler,
+  trustRendererEntry,
+} from './router';
 
 export function registerIpcHandlers(
   rendererEntryUrl: string,
-  db: Database,
   worker: WorkerBridge,
   templates: TemplateCatalog,
   activeProfile: ActiveProfile,
+  /** Reloads the window after a profile switch; resolves once the old page is gone. */
+  reloadRenderer: () => Promise<void>,
 ): void {
   const isTrustedSender = trustRendererEntry(rendererEntryUrl);
   const profiles = new ProfileService(activeProfile);
   // Uses the stub "active runs" probe until the run runtime exists (M4).
   const projects = new ProjectService(activeProfile, templates);
-  ipcMain.handle(
-    appPingCommand.channel,
-    createCommandHandler(appPingCommand, handleAppPing, isTrustedSender),
+  const session = new ProfileSession({ active: activeProfile, worker, reloadRenderer });
+
+  // Every command is refused while a profile switch is under way. Handlers that are already
+  // running are covered too: ActiveProfile.current() refuses in the middle of a switch.
+  function handle<I extends z.ZodType, O extends z.ZodType>(
+    definition: CommandDefinition<I, O>,
+    handler: CommandHandler<I, O>,
+  ): void {
+    ipcMain.handle(
+      definition.channel,
+      createCommandHandler(
+        definition,
+        refuseWhileSwitching(activeProfile, handler),
+        isTrustedSender,
+      ),
+    );
+  }
+
+  handle(appPingCommand, handleAppPing);
+  handle(
+    appLaunchInfoCommand,
+    createLaunchInfoHandler(() => activeProfile.current().db),
   );
-  ipcMain.handle(
-    appLaunchInfoCommand.channel,
-    createCommandHandler(appLaunchInfoCommand, createLaunchInfoHandler(db), isTrustedSender),
-  );
-  ipcMain.handle(
-    runtimeWorkerStatusCommand.channel,
-    createCommandHandler(
-      runtimeWorkerStatusCommand,
-      createWorkerStatusHandler(worker),
-      isTrustedSender,
-    ),
-  );
-  ipcMain.handle(
-    runtimeWorkerCheckCommand.channel,
-    createCommandHandler(
-      runtimeWorkerCheckCommand,
-      createWorkerCheckHandler(worker),
-      isTrustedSender,
-    ),
-  );
-  ipcMain.handle(
-    templateListCommand.channel,
-    createCommandHandler(
-      templateListCommand,
-      createTemplateListHandler(templates),
-      isTrustedSender,
-    ),
-  );
-  ipcMain.handle(
-    profileListCommand.channel,
-    createCommandHandler(profileListCommand, createProfileListHandler(profiles), isTrustedSender),
-  );
-  ipcMain.handle(
-    profileCreateCommand.channel,
-    createCommandHandler(
-      profileCreateCommand,
-      createProfileCreateHandler(profiles),
-      isTrustedSender,
-    ),
-  );
-  ipcMain.handle(
-    profileRenameCommand.channel,
-    createCommandHandler(
-      profileRenameCommand,
-      createProfileRenameHandler(profiles),
-      isTrustedSender,
-    ),
-  );
-  ipcMain.handle(
-    profileSettingsGetCommand.channel,
-    createCommandHandler(
-      profileSettingsGetCommand,
-      createProfileSettingsGetHandler(profiles),
-      isTrustedSender,
-    ),
-  );
-  ipcMain.handle(
-    profileSettingsUpdateCommand.channel,
-    createCommandHandler(
-      profileSettingsUpdateCommand,
-      createProfileSettingsUpdateHandler(profiles),
-      isTrustedSender,
-    ),
-  );
-  ipcMain.handle(
-    worldCreateCommand.channel,
-    createCommandHandler(
-      worldCreateCommand,
-      createWorldCreateHandler(activeProfile),
-      isTrustedSender,
-    ),
-  );
-  ipcMain.handle(
-    worldListCommand.channel,
-    createCommandHandler(worldListCommand, createWorldListHandler(activeProfile), isTrustedSender),
-  );
-  ipcMain.handle(
-    worldRenameCommand.channel,
-    createCommandHandler(
-      worldRenameCommand,
-      createWorldRenameHandler(activeProfile),
-      isTrustedSender,
-    ),
-  );
-  ipcMain.handle(
-    projectCreateCommand.channel,
-    createCommandHandler(
-      projectCreateCommand,
-      createProjectCreateHandler(projects),
-      isTrustedSender,
-    ),
-  );
-  ipcMain.handle(
-    projectGetCommand.channel,
-    createCommandHandler(projectGetCommand, createProjectGetHandler(projects), isTrustedSender),
-  );
-  ipcMain.handle(
-    projectListCommand.channel,
-    createCommandHandler(projectListCommand, createProjectListHandler(projects), isTrustedSender),
-  );
-  ipcMain.handle(
-    projectRenameCommand.channel,
-    createCommandHandler(
-      projectRenameCommand,
-      createProjectRenameHandler(projects),
-      isTrustedSender,
-    ),
-  );
-  ipcMain.handle(
-    projectUpdateGoalCommand.channel,
-    createCommandHandler(
-      projectUpdateGoalCommand,
-      createProjectUpdateGoalHandler(projects),
-      isTrustedSender,
-    ),
-  );
-  ipcMain.handle(
-    projectArchiveCommand.channel,
-    createCommandHandler(
-      projectArchiveCommand,
-      createProjectArchiveHandler(projects),
-      isTrustedSender,
-    ),
-  );
-  ipcMain.handle(
-    projectRestoreCommand.channel,
-    createCommandHandler(
-      projectRestoreCommand,
-      createProjectRestoreHandler(projects),
-      isTrustedSender,
-    ),
-  );
-  ipcMain.handle(
-    projectTrashCommand.channel,
-    createCommandHandler(projectTrashCommand, createProjectTrashHandler(projects), isTrustedSender),
-  );
-  ipcMain.handle(
-    projectRestoreFromTrashCommand.channel,
-    createCommandHandler(
-      projectRestoreFromTrashCommand,
-      createProjectRestoreFromTrashHandler(projects),
-      isTrustedSender,
-    ),
-  );
+  handle(runtimeWorkerStatusCommand, createWorkerStatusHandler(worker));
+  handle(runtimeWorkerCheckCommand, createWorkerCheckHandler(worker));
+  handle(templateListCommand, createTemplateListHandler(templates));
+  handle(profileListCommand, createProfileListHandler(profiles));
+  handle(profileCreateCommand, createProfileCreateHandler(profiles));
+  handle(profileRenameCommand, createProfileRenameHandler(profiles));
+  handle(profileSwitchCommand, createProfileSwitchHandler(session));
+  handle(profileSettingsGetCommand, createProfileSettingsGetHandler(profiles));
+  handle(profileSettingsUpdateCommand, createProfileSettingsUpdateHandler(profiles));
+  handle(worldCreateCommand, createWorldCreateHandler(activeProfile));
+  handle(worldListCommand, createWorldListHandler(activeProfile));
+  handle(worldRenameCommand, createWorldRenameHandler(activeProfile));
+  handle(projectCreateCommand, createProjectCreateHandler(projects));
+  handle(projectGetCommand, createProjectGetHandler(projects));
+  handle(projectListCommand, createProjectListHandler(projects));
+  handle(projectRenameCommand, createProjectRenameHandler(projects));
+  handle(projectUpdateGoalCommand, createProjectUpdateGoalHandler(projects));
+  handle(projectArchiveCommand, createProjectArchiveHandler(projects));
+  handle(projectRestoreCommand, createProjectRestoreHandler(projects));
+  handle(projectTrashCommand, createProjectTrashHandler(projects));
+  handle(projectRestoreFromTrashCommand, createProjectRestoreFromTrashHandler(projects));
 }
