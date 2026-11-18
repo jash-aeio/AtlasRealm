@@ -72,7 +72,7 @@ export interface LifecycleCopy {
  * runtime exists yet (M4), so nothing was checked or stopped, and the text must not claim it was.
  */
 export const RUN_CHECK_STUB_NOTE =
-  'No AI runs exist yet, so there was nothing to stop. Run handling arrives in a later update.';
+  'No AI runs exist yet, so there is nothing to stop. Run handling arrives in a later update.';
 
 export const LIFECYCLE_COPY: Record<LifecycleAction, LifecycleCopy> = {
   archive: {
