@@ -119,11 +119,14 @@ export class ProfileSession {
       );
       throw unavailable();
     }
+    this.#active.trackOpening(opened.db);
     try {
       ensureProfileSettings(opened.db, target, entry.displayName);
       await writeProfilesIndex(userDataDir, { ...read.index, lastUsedProfileId: target });
     } catch (error) {
-      opened.db.close();
+      this.#active.trackOpening(undefined);
+      // A quit during the index write may have closed it already.
+      if (opened.db.isOpen) opened.db.close();
       console.error('[profiles] could not finish opening the target profile', error);
       throw unavailable();
     }
@@ -137,6 +140,7 @@ export class ProfileSession {
       console.error('[profiles] closing the previous profile database failed', error);
     }
     this.#active.replace({ profileId: target, db: opened.db });
+    this.#active.trackOpening(undefined);
     try {
       this.#worker.resume();
     } catch (error) {

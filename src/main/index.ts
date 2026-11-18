@@ -26,6 +26,8 @@ import { loadBundledTemplateCatalog } from './templates/bundled-templates';
 
 // Set once the startup profile is open. A profile switch replaces what it holds (M1-8 #35).
 let activeProfile: ActiveProfile | undefined;
+// The app's one window. A profile switch reloads exactly this one (#35 security L3).
+let mainWindow: BrowserWindow | undefined;
 // Trusted background work runs in a separate utility process (ARCHITECTURE §7.2, ADR-0012).
 const worker = new WorkerBridge(spawnUtilityWorker);
 
@@ -86,7 +88,7 @@ async function start(): Promise<void> {
     `[templates] ${String(templates.available.length)} available, ${String(templates.unavailable.length)} unavailable`,
   );
   registerIpcHandlers(entryUrl, worker, templates, active, reloadMainWindow);
-  createMainWindow();
+  mainWindow = createMainWindow();
 }
 
 /** How long a profile switch keeps commands refused while waiting for the old page to go. */
@@ -95,25 +97,45 @@ const RELOAD_GATE_TIMEOUT_MS = 10_000;
 /**
  * Reloads the window after a profile switch (ADR-0014), so no renderer state from the old
  * profile survives. Resolves when the new page has committed ('did-navigate' fires before its
- * scripts run, so its first commands already see the new profile), when the load fails, or
- * after a timeout, so the command gate can never stay closed for good.
+ * scripts run, so its first commands already see the new profile), when the main page fails to
+ * load, or after a timeout, so the command gate can never stay closed for good.
  */
 function reloadMainWindow(): Promise<void> {
-  const window = BrowserWindow.getAllWindows()[0];
+  const window = mainWindow;
   if (window === undefined || window.isDestroyed()) return Promise.resolve();
   const contents = window.webContents;
   return new Promise((resolve) => {
+    // A page can't keep itself alive with a beforeunload handler: the old profile's page
+    // must go (#35 security L1).
+    const forceUnload = (event: Electron.Event): void => {
+      event.preventDefault();
+    };
+    // Only the main page counts; a failing subframe must not open the gate early.
+    const failed = (
+      _event: Electron.Event,
+      _code: number,
+      _description: string,
+      _url: string,
+      isMainFrame: boolean,
+    ): void => {
+      if (isMainFrame) done();
+    };
     const done = (): void => {
       clearTimeout(timer);
       contents.off('did-navigate', done);
-      contents.off('did-fail-load', done);
+      contents.off('did-fail-load', failed);
       contents.off('destroyed', done);
+      contents.off('will-prevent-unload', forceUnload);
       resolve();
     };
-    const timer = setTimeout(done, RELOAD_GATE_TIMEOUT_MS);
+    const timer = setTimeout(() => {
+      console.error('[profiles] the window did not reload in time after a profile switch');
+      done();
+    }, RELOAD_GATE_TIMEOUT_MS);
     contents.on('did-navigate', done);
-    contents.on('did-fail-load', done);
+    contents.on('did-fail-load', failed);
     contents.on('destroyed', done);
+    contents.on('will-prevent-unload', forceUnload);
     contents.reload();
   });
 }
@@ -204,9 +226,10 @@ if (refuseBlockedSwitches()) {
     // with worker_stopped rather than worker_crashed.
     worker.stop();
     // Closing checkpoints the WAL back into app.sqlite, leaving one tidy file.
-    // During a switch this is whichever database is open at that moment.
-    const db = activeProfile?.databaseForShutdown();
-    if (db?.isOpen === true) db.close();
+    // During a switch this includes the target database being opened (#35 security L2).
+    for (const db of activeProfile?.databasesForShutdown() ?? []) {
+      if (db.isOpen) db.close();
+    }
   });
   void start();
 }

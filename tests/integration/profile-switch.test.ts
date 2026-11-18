@@ -217,8 +217,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  const db = active.databaseForShutdown();
-  if (db.isOpen) db.close();
+  for (const db of active.databasesForShutdown()) if (db.isOpen) db.close();
   rmSync(userData, { recursive: true, force: true });
 });
 
@@ -411,6 +410,33 @@ describe('profile.switch: a target that cannot be opened', () => {
     expect(active.current().profileId).toBe(profileA);
     expect(lastUsed()).toBe(profileA);
     expect(events).toEqual([]);
+  });
+});
+
+describe('profile.switch: quitting in the middle (security L2)', () => {
+  it('hands the target database to shutdown while the index is written, and backs out cleanly', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    let targetDb: AppDatabase | undefined;
+    openProfile = async (dir, id) => {
+      targetDb = await openAppDatabase(dir, id, { requireExisting: true });
+      return targetDb;
+    };
+    const writing = deferred<undefined>();
+    vi.spyOn(profilesIndex, 'writeProfilesIndex').mockImplementationOnce(() => writing.promise);
+    const switching = api.switchTo(profileB);
+    await vi.waitFor(() => {
+      expect(targetDb).toBeDefined();
+    });
+
+    // What will-quit does: close every database it is handed.
+    const handed = active.databasesForShutdown();
+    expect(handed).toContain(targetDb?.db);
+    targetDb?.db.close();
+
+    writing.reject(new Error('quitting'));
+    expect(await switching).toMatchObject({ ok: false, error: { code: 'profile_unavailable' } });
+    expect(active.databasesForShutdown()).toEqual([active.current().db]);
+    expect(active.current().profileId).toBe(profileA);
   });
 });
 

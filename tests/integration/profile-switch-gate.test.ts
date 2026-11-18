@@ -48,11 +48,18 @@ describe('ActiveProfile switch gate', () => {
     expect(active.current()).toBe(next);
   });
 
-  it('databaseForShutdown() answers even during a switch', () => {
+  it('databasesForShutdown() answers during a switch and includes a target still opening', () => {
     const state = memoryState();
     const active = new ActiveProfile('unused', state);
     active.beginSwitch();
-    expect(active.databaseForShutdown()).toBe(state.db);
+    expect(active.databasesForShutdown()).toEqual([state.db]);
+    const target = memoryState();
+    active.trackOpening(target.db);
+    expect(active.databasesForShutdown()).toEqual([state.db, target.db]);
+    active.replace(target);
+    active.trackOpening(undefined);
+    active.endSwitch();
+    expect(active.databasesForShutdown()).toEqual([target.db]);
   });
 
   it('exclusive() runs profile changes one at a time, and a failure does not block the next', async () => {

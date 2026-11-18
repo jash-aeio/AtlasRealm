@@ -41,6 +41,8 @@ export function refuseWhileSwitching<I extends z.ZodType, O extends z.ZodType>(
 export class ActiveProfile {
   #state: ActiveProfileState;
   #switching = false;
+  /** The target database while a switch opens it, so a quit in the middle can close it too. */
+  #opening: Database | undefined;
   // Index writes are async (temp file, flush, rename). This chain runs one profile change at a
   // time (create, rename, switch), so two changes can't both read the old index and the second
   // silently undo the first.
@@ -86,13 +88,21 @@ export class ActiveProfile {
     this.#state = state;
   }
 
-  endSwitch(): void {
-    this.#switching = false;
+  /** Records (or clears) the target database a switch has opened but not yet put in place. */
+  trackOpening(db: Database | undefined): void {
+    this.#opening = db;
   }
 
-  /** The open database at quit time, whether or not a switch is under way. */
-  databaseForShutdown(): Database {
-    return this.#state.db;
+  endSwitch(): void {
+    this.#switching = false;
+    this.#opening = undefined;
+  }
+
+  /** Every database to close at quit time, including one a switch is still opening. */
+  databasesForShutdown(): Database[] {
+    return this.#opening === undefined || this.#opening === this.#state.db
+      ? [this.#state.db]
+      : [this.#state.db, this.#opening];
   }
 
   /** Runs one profile change at a time (see #queue). A failed change doesn't block the next. */
