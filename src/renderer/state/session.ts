@@ -15,7 +15,7 @@ import { createStore, type Store } from './store';
 /** The slice of `window.atlas` the session needs. */
 export interface SessionApi {
   readonly profile: Pick<AtlasApi['profile'], 'list' | 'create' | 'rename' | 'settings'>;
-  readonly world: Pick<AtlasApi['world'], 'list' | 'create'>;
+  readonly world: Pick<AtlasApi['world'], 'list' | 'create' | 'rename'>;
 }
 
 export interface SessionData {
@@ -61,6 +61,8 @@ export interface Session {
   /** A colour picks the placeholder avatar in that colour; `null` clears the avatar. */
   readonly setAvatar: (colour: string | null) => Promise<CommandOutcome>;
   readonly createWorld: (name: string, themeId: WorldTheme) => Promise<CommandOutcome>;
+  /** Renames a world, using the revision the user last saw. */
+  readonly renameWorld: (worldId: string, name: string) => Promise<CommandOutcome>;
   readonly dismissNotice: () => void;
 }
 
@@ -133,6 +135,14 @@ export function createSession(api: SessionApi): Session {
         }),
       ),
     createWorld: (name, themeId) => command(() => api.world.create({ name, themeId })),
+    renameWorld: (worldId, name) =>
+      command(() => {
+        const state = store.get();
+        const world =
+          state.status === 'ready' ? state.data.worlds.find((w) => w.id === worldId) : undefined;
+        if (world === undefined) throw new Error('unknown world');
+        return api.world.rename({ worldId, name, expectedRevision: world.revision });
+      }),
     dismissNotice() {
       const state = store.get();
       if (state.status === 'ready' && state.notice !== null) store.set({ ...state, notice: null });

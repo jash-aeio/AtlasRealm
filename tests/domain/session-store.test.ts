@@ -85,6 +85,11 @@ function fakeApi() {
         worlds.push(WORLD);
         return ok({ world: WORLD });
       }),
+      rename: vi.fn((input: { worldId: string; name: string; expectedRevision: number }) => {
+        const renamed = { ...WORLD, name: input.name, revision: input.expectedRevision + 1 };
+        worlds.splice(0, 1, renamed);
+        return ok({ world: renamed });
+      }),
     },
   } satisfies SessionApi;
   return {
@@ -201,6 +206,22 @@ describe('session store', () => {
     releaseSlow();
     await slow;
     expect(screenFor(session.store.get())).toBe('main');
+  });
+
+  it('renames a world with the revision it last saw', async () => {
+    const { api } = fakeApi();
+    const session = createSession(api);
+    await session.reload();
+    await session.createWorld('Home', 'meadow');
+    await session.renameWorld(WORLD.id, 'Hearth');
+    expect(api.world.rename).toHaveBeenCalledWith({
+      worldId: WORLD.id,
+      name: 'Hearth',
+      expectedRevision: 1,
+    });
+    const state = session.store.get();
+    expect(state.status === 'ready' && state.data.worlds[0]?.name).toBe('Hearth');
+    await expect(session.renameWorld('nope', 'X')).rejects.toThrow('unknown world');
   });
 
   it('refuses revision-based commands before the first load', async () => {
