@@ -77,9 +77,10 @@ test('preload exposes only the explicit API', async () => {
     profileSettings: Object.keys(window.atlas.profile.settings),
     world: Object.keys(window.atlas.world),
     project: Object.keys(window.atlas.project),
+    placement: Object.keys(window.atlas.placement),
   }));
   expect(shape).toEqual({
-    top: ['app', 'runtime', 'template', 'profile', 'world', 'project'],
+    top: ['app', 'runtime', 'template', 'profile', 'world', 'project', 'placement'],
     app: ['ping', 'launchInfo'],
     runtime: ['workerStatus', 'workerCheck'],
     template: ['list'],
@@ -97,6 +98,7 @@ test('preload exposes only the explicit API', async () => {
       'trash',
       'restoreFromTrash',
     ],
+    placement: ['list', 'create', 'move', 'remove'],
   });
 });
 

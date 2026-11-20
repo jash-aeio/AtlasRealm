@@ -4,6 +4,14 @@ import type { LaunchInfoOutput } from './app-launch-info';
 import type { PingInput, PingOutput } from './app-ping';
 import type { IpcResult } from './ipc-result';
 import type {
+  PlacementCreateInput,
+  PlacementListInput,
+  PlacementListOutput,
+  PlacementMoveInput,
+  PlacementOutput,
+  PlacementRemoveInput,
+} from './placement';
+import type {
   ProfileCreateInput,
   ProfileCreateOutput,
   ProfileListOutput,
@@ -78,5 +86,15 @@ export interface AtlasApi {
     readonly restore: (input: ProjectLifecycleInput) => Promise<IpcResult<ProjectOutput>>;
     readonly trash: (input: ProjectLifecycleInput) => Promise<IpcResult<ProjectLifecycleOutput>>;
     readonly restoreFromTrash: (input: ProjectLifecycleInput) => Promise<IpcResult<ProjectOutput>>;
+  };
+  /**
+   * Buildings in one world (ADR-0025). The handler re-runs the placement rules; a refusal is
+   * `placement_blocked` with the reason. Removing a building never touches its project.
+   */
+  readonly placement: {
+    readonly list: (input: PlacementListInput) => Promise<IpcResult<PlacementListOutput>>;
+    readonly create: (input: PlacementCreateInput) => Promise<IpcResult<PlacementOutput>>;
+    readonly move: (input: PlacementMoveInput) => Promise<IpcResult<PlacementOutput>>;
+    readonly remove: (input: PlacementRemoveInput) => Promise<IpcResult<PlacementOutput>>;
   };
 }

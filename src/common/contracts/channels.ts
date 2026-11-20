@@ -23,6 +23,10 @@ export const Channels = {
   projectRestore: 'project.restore',
   projectTrash: 'project.trash',
   projectRestoreFromTrash: 'project.restoreFromTrash',
+  placementList: 'placement.list',
+  placementCreate: 'placement.create',
+  placementMove: 'placement.move',
+  placementRemove: 'placement.remove',
 } as const;
 
 export type Channel = (typeof Channels)[keyof typeof Channels];
