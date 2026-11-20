@@ -18,6 +18,8 @@ import {
 } from '../../src/common/world/placement-rules';
 
 const world64: PlacementWorld = { gridWidth: 64, gridHeight: 64, reserved: [] };
+/** The smallest world the world contract allows. */
+const world16: PlacementWorld = { gridWidth: 16, gridHeight: 16, reserved: [] };
 const two = squareFootprint(2);
 const three = squareFootprint(3);
 const tall: Footprint = { columns: 2, rows: 3 };
@@ -241,7 +243,7 @@ describe('checkPlacement', () => {
   });
 
   it('accepts an exact-fit gap and refuses it for anything bigger', () => {
-    const world: PlacementWorld = { gridWidth: 4, gridHeight: 4, reserved: [] };
+    const world = world16;
     const occupied = fillWorld(world, [
       [1, 1],
       [2, 1],
@@ -287,7 +289,7 @@ describe('findNearbyPlot (auto-place)', () => {
   it('visits a ring in a fixed order', () => {
     // Leave exactly one ring-1 anchor free at a time and check each is found; then check the
     // order by leaving two free and expecting the earlier one.
-    const world: PlacementWorld = { gridWidth: 3, gridHeight: 3, reserved: [] };
+    const world = world16;
     const one: Footprint = { columns: 1, rows: 1 };
     const ringOrder: [number, number][] = [
       [0, 0],
@@ -335,13 +337,14 @@ describe('findNearbyPlot (auto-place)', () => {
     expect(findNearbyPlot(world, fillWorld(world), request(8, 8))).toBeNull();
   });
 
-  it('returns null when the footprint is bigger than the world', () => {
-    const tiny: PlacementWorld = { gridWidth: 3, gridHeight: 3, reserved: [] };
-    expect(findNearbyPlot(tiny, [], request(0, 0, squareFootprint(4)))).toBeNull();
-    // 2×3 fits a 2-wide, 3-deep world at 0 but not turned.
-    const narrow: PlacementWorld = { gridWidth: 2, gridHeight: 3, reserved: [] };
-    expect(findNearbyPlot(narrow, [], request(0, 0, tall, 0))).not.toBeNull();
-    expect(findNearbyPlot(narrow, [], request(0, 0, tall, 90))).toBeNull();
+  it('fits a footprint as large as the whole world only when the world is empty', () => {
+    const whole: Footprint = { columns: 16, rows: 16 };
+    expect(findNearbyPlot(world16, [], request(9, 9, whole))).toEqual({
+      tileX: 0,
+      tileY: 0,
+      rotation: 0,
+    });
+    expect(findNearbyPlot(world16, [building('a', 15, 15)], request(9, 9, whole))).toBeNull();
   });
 
   it('starts from the nearest valid anchor when the start is off the map or not a number', () => {
@@ -441,5 +444,23 @@ describe('findNearbyPlot (auto-place)', () => {
         rotation: 45 as PlacementRotation,
       }),
     ).toThrow(RangeError);
+  });
+});
+
+describe('world size guard (a bug, not user input)', () => {
+  it('throws for a world size the world contract does not allow', () => {
+    const candidate = { tileX: 0, tileY: 0, rotation: 0, footprint: two };
+    const plot = { start: { tileX: 0, tileY: 0 }, footprint: two, rotation: 0 } as const;
+    for (const [gridWidth, gridHeight] of [
+      [15, 64],
+      [64, 257],
+      [16.5, 64],
+      [Number.NaN, 64],
+      [1e9, 1e9],
+    ] as const) {
+      const world = { gridWidth, gridHeight, reserved: [] };
+      expect(() => checkPlacement(world, [], candidate)).toThrow(RangeError);
+      expect(() => findNearbyPlot(world, [], plot)).toThrow(RangeError);
+    }
   });
 });

@@ -117,6 +117,23 @@ function assertFootprint(footprint: Footprint): void {
   }
 }
 
+/** World sides allowed by the world contract (src/common/contracts/world.ts). */
+const MIN_GRID_SIDE = 16;
+const MAX_GRID_SIDE = 256;
+
+// The world's size comes from the database, already checked by the world contract. Checked
+// again here because findNearbyPlot allocates grids of that size: a bad value must fail loudly,
+// not allocate something huge or quietly give wrong answers.
+function assertWorld(world: PlacementWorld): void {
+  for (const side of [world.gridWidth, world.gridHeight]) {
+    if (!Number.isInteger(side) || side < MIN_GRID_SIDE || side > MAX_GRID_SIDE) {
+      throw new RangeError(
+        `World sides must be whole numbers from ${String(MIN_GRID_SIDE)} to ${String(MAX_GRID_SIDE)}.`,
+      );
+    }
+  }
+}
+
 /** The footprint after turning: columns and rows swap at 90 and 270. */
 export function rotatedFootprint(footprint: Footprint, rotation: PlacementRotation): Footprint {
   assertFootprint(footprint);
@@ -171,6 +188,7 @@ export function checkPlacement(
   occupied: readonly OccupiedPlacement[],
   candidate: PlacementCandidate,
 ): PlacementCheck {
+  assertWorld(world);
   const { rotation } = candidate;
   if (!isPlacementRotation(rotation)) return { kind: 'invalid_rotation' };
 
@@ -204,6 +222,7 @@ export function findNearbyPlot(
   occupied: readonly OccupiedPlacement[],
   request: PlotRequest,
 ): PlacementSpot | null {
+  assertWorld(world);
   if (!isPlacementRotation(request.rotation)) {
     throw new RangeError('Rotation must be 0, 90, 180 or 270.');
   }
