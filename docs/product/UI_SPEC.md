@@ -76,6 +76,8 @@ Use stage-based progress such as "Draft complete; checking requirements" or "2 o
 
 Recommended starting map: 64 × 64 logical tiles, adjustable later. Store grid position and rotation, not screen pixels. Use one logical elevation initially and integer building footprints.
 
+A building's stored grid position is the north corner tile of its footprint (lowest gx and gy); the footprint grows toward +gx (columns) and +gy (rows). Rotation turns the building in place: columns and rows swap at 90° and 270°, and the anchor never moves. The art's south-corner pivot (ADR-0013) lands on grid point (gx + columns, gy + rows). The rules live in `src/common/world/placement-rules.ts`. Changed by ADR-0024.
+
 For tile width `W`, height `H`, and grid coordinates `(gx, gy)`:
 
 ```text

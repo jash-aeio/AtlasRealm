@@ -456,6 +456,7 @@
 - `userData/profiles-index.json` (M1-2, not in SQLite): `{ schemaVersion: 1, profiles: [{ id, displayName }], lastUsedProfileId }`. Profile folders: `profiles/<default | uuid>/`.
 
 ## Decisions
+- [ADR-0024](../adr/0024-placement-anchor-and-rotation.md): a placement's `(tileX, tileY)` is the footprint's north corner tile (lowest x and y); rotation turns the building in place (columns and rows swap at 90/270); the art pivot is `(tileX + columns, tileY + rows)`
 - [ADR-0023](../adr/0023-placement-and-hotbar-target-storage.md): schema v5 stores a placement's or hotbar slot's target as typed columns (`project_id` with a composite FK to the same world's project, or `service_kind`); each target is pinned at most once per world; `service_kind` is slug-shaped in the DB with the exact list in `src/common/world/service-kinds.ts`
 - M1-10: project search runs in the renderer over loaded pages, with all pages loaded while a search is active (user choice via AskUserQuestion, recorded in `docs/sessions/2026-11-18-project-list-ui.md`; no ADR because the IPC contract is unchanged). Confirmations use the native `<dialog>` with `showModal()` (routine).
 - [ADR-0022](../adr/0022-first-launch-flow.md): onboarding shows while the active profile has no active world (derived, no flag); the avatar step offers colour presets on the one placeholder figure; the picker's Switch button, first shown disabled, was enabled once M1-8 merged
