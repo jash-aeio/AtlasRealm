@@ -62,15 +62,57 @@ describe('createCommandHandler', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it('rejects a huge binary payload by shape, without serializing it', async () => {
+  // #56: Zod alone took ~3.5 s (idle machine) to refuse this, by listing all 10,485,760 indices
+  // as unknown keys. The plain-data gate refuses it before Zod runs. The time bound is loose on
+  // purpose: the regression is seconds, and a busy CI machine must not fail a ~1 ms check.
+  it('rejects a huge binary payload quickly, without serializing or schema-parsing it', async () => {
+    const parse = vi.spyOn(echo.input, 'safeParse');
     const handle = createCommandHandler(echo, () => ({ echoed: '' }), isTrusted);
     const stringify = vi.spyOn(JSON, 'stringify');
+    const payload = new Uint8Array(10 * 1024 * 1024);
 
-    const result = await handle(trustedSender, new Uint8Array(10 * 1024 * 1024));
+    const started = performance.now();
+    const result = await handle(trustedSender, payload);
+    const elapsedMs = performance.now() - started;
+    // Read the counts first: in Vitest 5, mockRestore also clears a spy's call history.
+    const calls = { stringify: stringify.mock.calls.length, parse: parse.mock.calls.length };
+    stringify.mockRestore();
+    parse.mockRestore();
 
     expect(result).toMatchObject({ ok: false, error: { code: 'invalid_payload' } });
-    expect(stringify).not.toHaveBeenCalled();
-    stringify.mockRestore();
+    expect(calls).toEqual({ stringify: 0, parse: 0 });
+    expect(elapsedMs).toBeLessThan(500);
+  });
+
+  it.each([
+    ['a typed array inside an object', { text: new Uint8Array(4) }],
+    ['an ArrayBuffer', new ArrayBuffer(8)],
+    ['a Map', new Map([['text', 'hi']])],
+    ['a Date', new Date(0)],
+    [
+      'a class instance',
+      new (class Text {
+        text = 'hi';
+      })(),
+    ],
+  ])('rejects %s as not plain data, before the schema', async (_label, payload) => {
+    const parse = vi.spyOn(echo.input, 'safeParse');
+    const handle = createCommandHandler(echo, () => ({ echoed: '' }), isTrusted);
+
+    const result = await handle(trustedSender, payload);
+    const parseCalls = parse.mock.calls.length; // before mockRestore, which clears it
+    parse.mockRestore();
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'invalid_payload' } });
+    expect(parseCalls).toBe(0);
+  });
+
+  it('rejects a huge sparse array as too large without visiting every slot', async () => {
+    const handle = createCommandHandler(echo, () => ({ echoed: '' }), isTrusted);
+    const started = performance.now();
+    const result = await handle(trustedSender, new Array<unknown>(2 ** 31));
+    expect(result).toMatchObject({ ok: false, error: { code: 'payload_too_large' } });
+    expect(performance.now() - started).toBeLessThan(500);
   });
 
   it('rejects data that is not JSON-serializable', async () => {
