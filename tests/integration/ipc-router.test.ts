@@ -196,6 +196,28 @@ describe('createCommandHandler', () => {
       error: { code: 'revision_conflict', message: 'Changed elsewhere.', currentRevision: 7 },
     });
   });
+
+  it('passes the placement refusal along with placement_blocked, and nothing else', async () => {
+    const handle = createCommandHandler(
+      echo,
+      () => {
+        const placement = { reason: 'overlaps', blockingIds: ['b1', 'b2'], secret: 'x' } as const;
+        throw new CommandError('placement_blocked', 'Another building is in the way.', undefined, {
+          placement,
+        });
+      },
+      isTrusted,
+    );
+
+    await expect(handle(trustedSender, { text: 'hi' })).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'placement_blocked',
+        message: 'Another building is in the way.',
+        placement: { reason: 'overlaps', blockingIds: ['b1', 'b2'] },
+      },
+    });
+  });
 });
 
 describe('trustRendererEntry', () => {

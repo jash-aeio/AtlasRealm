@@ -13,7 +13,12 @@
 import type { z } from 'zod';
 
 import type { Channel } from '../../common/contracts/channels';
-import type { IpcError, IpcErrorCode, IpcResult } from '../../common/contracts/ipc-result';
+import type {
+  IpcError,
+  IpcErrorCode,
+  IpcResult,
+  PlacementRefusal,
+} from '../../common/contracts/ipc-result';
 import { checkPlainJson, jsonByteLength } from '../../common/contracts/json-size';
 import { isAppOrigin } from '../bootstrap/app-origin';
 
@@ -42,9 +47,16 @@ export type CommandErrorCode = Extract<
   | 'revision_conflict'
   | 'invalid_transition'
   | 'limit_reached'
+  | 'placement_blocked'
   | 'profile_switching'
   | 'profile_unavailable'
 >;
+
+/** Extra, code-specific detail a CommandError may carry to the renderer. */
+export interface CommandErrorDetails {
+  /** Only for `placement_blocked`. */
+  readonly placement?: PlacementRefusal;
+}
 
 /**
  * Thrown by a handler (or the service it calls) to report an expected failure with a stable
@@ -58,6 +70,7 @@ export class CommandError extends Error {
     message: string,
     /** Only for `revision_conflict`. */
     readonly currentRevision?: number,
+    readonly details: CommandErrorDetails = {},
   ) {
     super(message);
   }
@@ -131,16 +144,23 @@ export function createCommandHandler<I extends z.ZodType, O extends z.ZodType>(
       return { ok: true, data };
     } catch (error) {
       if (error instanceof CommandError) {
-        return error.currentRevision === undefined
-          ? fail(error.code, error.message)
-          : {
-              ok: false,
-              error: {
-                code: error.code,
-                message: error.message,
-                currentRevision: error.currentRevision,
-              },
-            };
+        const { placement } = error.details;
+        return {
+          ok: false,
+          error: {
+            code: error.code,
+            message: error.message,
+            ...(error.currentRevision === undefined
+              ? {}
+              : { currentRevision: error.currentRevision }),
+            // Copied field by field, so nothing else a service attached can leak across.
+            ...(placement === undefined
+              ? {}
+              : {
+                  placement: { reason: placement.reason, blockingIds: [...placement.blockingIds] },
+                }),
+          },
+        };
       }
       // Details stay in the main process. Never log the payload: later commands may carry
       // user content or secrets.
