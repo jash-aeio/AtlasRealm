@@ -190,6 +190,7 @@
   - Isolation (§22.2 #23), shown in `tests/integration/profile-switch.test.ts`: after a switch, world list/rename and project list/get/rename/archive/trash/create with the other profile's IDs are `not_found`; settings and launch info are the new profile's own, in both directions.
 
 ## Changed components
+- #59 (F5): `src/main/services/project-service.ts` (`mutable()` guard, `ARCHIVED_WORLD_REFUSAL`); `tests/integration/project-contract.test.ts` (+5 in "projects inside an archived world"); docs: lesson 024, glossary, changelog. No contract, schema or renderer changes.
 - M1-11: `tests/e2e/m1-acceptance.spec.ts` (new, 4), `tests/e2e/support/m1-ui.ts` (new), `tests/e2e-packaged/packaged.spec.ts` (first-launch UI + 1 new test); docs: session log with the evidence table, lesson 022. No app code changes.
 - M1-10: `src/renderer/projects/*` (new: `project-list.ts`, `project-messages.ts`, `ProjectsPanel`, `CreateProjectForm`, `ProjectItem`, `ConfirmDialog`), `src/renderer/app/{MainScreen.tsx,app.css}`; tests `tests/domain/project-list-store.test.ts` (new, 12), `tests/e2e/projects.spec.ts` (new, 5), `tests/e2e/onboarding.spec.ts` (empty-list text). No main-process, preload or contract changes.
 - M1-9: `src/renderer/state/session.ts` (new), `src/renderer/onboarding/*` (new: `Onboarding`, `ProfilePicker`, `AvatarChooser`, `PlaceholderAvatar`, `CreateWorldForm`, `avatar.ts`, `form-messages.ts`), `src/renderer/app/{App,MainScreen,SettingsView,DeveloperSpikes}.tsx`, `src/renderer/app/app.css`; `tests/domain/session-store.test.ts` (new), `tests/e2e/onboarding.spec.ts` + `tests/e2e/support/onboarding.ts` (new), `tests/e2e/{atlas,shell,storage,worker,world}.spec.ts`, `tests/e2e-packaged/packaged.spec.ts`; docs: ADR-0022, lesson 020, glossary, changelog
@@ -215,6 +216,7 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- #59 (F5 archived-world guard), 2026-11-20, local Windows 11, on main @ 3cdb5aa: typecheck, lint, format:check pass. Unit/integration 741/741 (new: 5 in `project-contract`). Mutation check: with the guard switched off, the two refusal tests fail. Reviews: invariant-reviewer found no violations and re-ran 741/741. security-auditor approved; L1 (the guard let a change through if the world row was missing, which the foreign key prevents today) is fixed by failing closed; L2 (the rule lives in the service, not the repository) is documented in the service header: other main-process code must change projects through `ProjectService`.
 - #56 (flaky timing tests + IPC plain-data gate), 2026-11-20, local Windows 11, worktree on main @ 684dbc8: typecheck, lint, format:check pass. Unit/integration 736/736 (new: `plain-json` 37, router +7). E2E 52/52. Packaged E2E 15/15 (fresh `pnpm package` + `package:test`).
   - Cause measured: Zod 4.6.7 takes 3.5 s (idle) to refuse a 10 MB `Uint8Array` for a strict object, because `util.isObject` accepts typed arrays and the strict check lists all 10,485,760 indices as unknown keys. Vitest's 5 s timeout made the test fail under load.
   - Load test: 20 consecutive runs of the three changed test files (`plain-json`, `ipc-router`, `worker-messaging`) with all 8 cores busy: 20/20 pass. Control, same load, old code: `ipc-router` + `worker-messaging` failed 10/10 runs (the 10 MB test timed out at 5.7–7.3 s). The old worker test didn't fail in those runs; its fix is preventive.
@@ -365,7 +367,7 @@
 ## Known limitations
 - M1-11: packaged offline checks cover the renderer only (fuses block access to main); main-process traffic is recorded in the dev test. Profile isolation and switching are proven in dev only (same code in packaged). "Runner state" is the M0 worker; archive/trash report `runCheck: 'stub'` until M4.
 - M1-10 search loads every remaining page of the current filter (at most 10 `project.list` calls at today's 1000-project cap). Fine at M1 scale. If worlds grow, move search into `project.list`.
-- M1-10 shows only active worlds, so projects inside an archived world aren't reachable from the UI yet (open question F5 is still undecided).
+- M1-10 shows only active worlds, so projects inside an archived world aren't reachable from the UI yet. F5 is decided (#59): every project change in an archived world is refused in `ProjectService`; reads still work. There's no `world.archive`/`world.restore` command yet, so the UI that archives a world should explain the rule and offer "restore the world".
 - First-launch UI (M1-9):
   - "Create project" is disabled until the project form (M1-10, #37). There's no project list yet; the home view only says whether the world has projects.
   - A profile whose worlds are all archived would see onboarding again (no archive UI exists yet, so it can't happen through the app). Decide when world archiving gets a UI (ADR-0022).
@@ -469,7 +471,7 @@
 
 ## Next task
 - M2 is planned (2026-11-20): 15 new issues #66–#80 plus the follow-ups #56–#60 and #62. See `docs/pm/milestones/M2.md` and `docs/pm/DEPENDENCIES.md` (Task level: M2).
-- Start with up to three lanes: **A** M2-2 #67 (schema v5), with #59 (F5 archived-world guard) before M2-3 · **B** M2-5 #70 (layout + shortcut layer) · **C** M2-1 #66 (placement rules, `good-first-code`). #56 (flaky timing tests + IPC plain-data gate) is in review as PR #83; its worker-boundary follow-up is #82 (M4).
+- Start with up to three lanes: **A** M2-2 #67 (schema v5) · #59 (F5 archived-world guard, needed before M2-3) is in review on branch `fix/59-archived-world-guard` · **B** M2-5 #70 (layout + shortcut layer) · **C** M2-1 #66 (placement rules, `good-first-code`). #56 (flaky timing tests + IPC plain-data gate) is in review as PR #83; its worker-boundary follow-up is #82 (M4).
 - M1 follow-ups, triaged during planning:
   - F5 → #59 (M2). Security L1 + `WorldSummary.name` → #60 (moved to M2, must land before M3). Profile security notice → #62 (moved to M2, after #70). L4 read caps → #61 (M3, before imports and restore). Flaky tests → #56 (M2); the world-canvas E2E flake is part of M2-6 #71. Packaged resource-timing → #57, CSP `img-src data:` → #58 (both M2). App icon → #64, startup-dialog E2E → #65 (M7).
   - Dropped on purpose: a monotonic tie-breaker for worlds created in the same millisecond (only possible from a script).

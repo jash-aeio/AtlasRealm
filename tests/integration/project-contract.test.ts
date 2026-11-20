@@ -42,6 +42,7 @@ import { ActiveProfile } from '../../src/main/profiles/active-profile';
 import { ProfileService } from '../../src/main/profiles/profile-service';
 import {
   type ActiveRunsProbe,
+  ARCHIVED_WORLD_REFUSAL,
   noActiveRunsStub,
   ProjectService,
 } from '../../src/main/services/project-service';
@@ -547,6 +548,90 @@ describe('archive, restore, trash and restoreFromTrash', () => {
   it('uses the stub probe by default, which reports no runs', () => {
     expect(noActiveRunsStub.kind).toBe('stub');
     expect(noActiveRunsStub.activeRunCount(UNKNOWN_ID)).toBe(0);
+  });
+});
+
+describe('projects inside an archived world (F5, #59)', () => {
+  // Projects in each state a mutation could start from, then the world is archived underneath.
+  async function archiveWorldWithProjects() {
+    const active = await createProject('Active one');
+    const toArchive = await archive(change(await createProject('Archived one')));
+    const toTrash = await trash(change(await createProject('Trashed one')));
+    if (!toArchive.ok || !toTrash.ok) throw new Error('setup failed');
+    new WorldRepository(opened.db).archive(world.id, world.revision);
+    return { active, archived: toArchive.data.project, trashed: toTrash.data.project };
+  }
+
+  function snapshot(): unknown[] {
+    return opened.db.prepare('SELECT * FROM projects ORDER BY id').all();
+  }
+
+  it('refuses every project mutation with the same reason and changes nothing', async () => {
+    const { active, archived, trashed } = await archiveWorldWithProjects();
+    const before = snapshot();
+    const entities = count('graph_entities');
+
+    // Each command is aimed at a project in a state where it would otherwise succeed.
+    const attempts = {
+      rename: await rename({ ...change(active), name: 'Renamed' }),
+      updateGoal: await updateGoal({ ...change(active), goal: 'New goal' }),
+      archive: await archive(change(active)),
+      trash: await trash(change(active)),
+      restore: await restore(change(archived)),
+      restoreFromTrash: await restoreFromTrash(change(trashed)),
+    };
+    for (const [command, result] of Object.entries(attempts)) {
+      expect(result, command).toEqual({
+        ok: false,
+        error: { code: 'invalid_transition', message: ARCHIVED_WORLD_REFUSAL },
+      });
+    }
+
+    expect(snapshot()).toEqual(before);
+    expect(count('graph_entities')).toBe(entities);
+  });
+
+  it('checks the world before the revision, so a stale revision gets the same reason', async () => {
+    const { active } = await archiveWorldWithProjects();
+    await expect(
+      rename({ ...change(active), expectedRevision: active.revision + 7, name: 'Stale' }),
+    ).resolves.toMatchObject({ ok: false, error: { message: ARCHIVED_WORLD_REFUSAL } });
+  });
+
+  it('still answers not_found for a project of another world, without hinting at its state', async () => {
+    const { active } = await archiveWorldWithProjects();
+    const other = new WorldRepository(opened.db).create({ name: 'Other', themeId: 'meadow' });
+    await expect(
+      rename({ ...change(active), worldId: other.id, name: 'Hijacked' }),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'not_found' } });
+  });
+
+  it('keeps project.get and project.list working', async () => {
+    const { active, archived, trashed } = await archiveWorldWithProjects();
+    await expect(get({ worldId: world.id, projectId: active.id })).resolves.toMatchObject({
+      ok: true,
+      data: { project: { id: active.id, status: 'active' } },
+    });
+    for (const [status, project] of [
+      ['active', active],
+      ['archived', archived],
+      ['trashed', trashed],
+    ] as const) {
+      const result = await list({ worldId: world.id, status, limit: 10 });
+      expect(result, status).toMatchObject({ ok: true, data: { projects: [{ id: project.id }] } });
+    }
+  });
+
+  it('allows changes again once the world is restored', async () => {
+    const { active } = await archiveWorldWithProjects();
+    const repo = new WorldRepository(opened.db);
+    const archivedWorld = repo.get(world.id);
+    if (archivedWorld === undefined) throw new Error('world missing');
+    repo.restore(archivedWorld.id, archivedWorld.revision);
+    await expect(rename({ ...change(active), name: 'Back in business' })).resolves.toMatchObject({
+      ok: true,
+      data: { project: { name: 'Back in business' } },
+    });
   });
 });
 

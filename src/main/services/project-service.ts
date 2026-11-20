@@ -5,6 +5,10 @@
 // Ownership (ADR-0020): every call names a world and a project. A project that doesn't exist,
 // lives in another world, or belongs to another profile's database is `not_found` all the
 // same, so the answer never reveals which of those it was.
+//
+// Archived worlds (F5, #59): no project in an archived world can be changed; reads still work.
+// The rule lives here, not in the repository, so other main-process code (placement, hotbar)
+// must change projects through this service rather than a ProjectRepository of its own.
 import { z } from 'zod';
 
 import {
@@ -42,6 +46,13 @@ export const noActiveRunsStub: ActiveRunsProbe = {
   kind: 'stub',
   activeRunCount: () => 0,
 };
+
+/**
+ * The one reason every project change gives while its world is archived (F5, #59). Exported so
+ * tests and, later, the UI can rely on the exact wording. Reads keep working.
+ */
+export const ARCHIVED_WORLD_REFUSAL =
+  'This world is archived. Restore it before changing its projects.';
 
 export interface ProjectPageResult {
   readonly projects: readonly Project[];
@@ -171,41 +182,41 @@ export class ProjectService {
   /** The ID stays the same; only the display name changes (PRODUCT_RULES §3.1). */
   rename(change: Change, name: string): Project {
     const projects = this.projects();
-    const project = this.owned(projects, change.worldId, change.projectId);
+    const project = this.mutable(projects, change.worldId, change.projectId);
     return projects.rename(project.id, change.expectedRevision, name);
   }
 
   updateGoal(change: Change, goal: string): Project {
     const projects = this.projects();
-    const project = this.owned(projects, change.worldId, change.projectId);
+    const project = this.mutable(projects, change.worldId, change.projectId);
     return projects.setGoal(project.id, change.expectedRevision, goal);
   }
 
   /** Hides the project from active views. Its data and files stay where they are. */
   archive(change: Change): LifecycleResult {
     const projects = this.projects();
-    const project = this.owned(projects, change.worldId, change.projectId);
+    const project = this.mutable(projects, change.worldId, change.projectId);
     this.refuseWhileRunsActive(project.id, 'archived');
     return this.lifecycle(projects.archive(project.id, change.expectedRevision));
   }
 
   restore(change: Change): Project {
     const projects = this.projects();
-    const project = this.owned(projects, change.worldId, change.projectId);
+    const project = this.mutable(projects, change.worldId, change.projectId);
     return projects.restoreFromArchive(project.id, change.expectedRevision);
   }
 
   /** Moves the project to the recoverable trash. Nothing is deleted. */
   trash(change: Change): LifecycleResult {
     const projects = this.projects();
-    const project = this.owned(projects, change.worldId, change.projectId);
+    const project = this.mutable(projects, change.worldId, change.projectId);
     this.refuseWhileRunsActive(project.id, 'moved to the trash');
     return this.lifecycle(projects.trash(project.id, change.expectedRevision));
   }
 
   restoreFromTrash(change: Change): Project {
     const projects = this.projects();
-    const project = this.owned(projects, change.worldId, change.projectId);
+    const project = this.mutable(projects, change.worldId, change.projectId);
     return projects.restoreFromTrash(project.id, change.expectedRevision);
   }
 
@@ -222,6 +233,25 @@ export class ProjectService {
     const project = projects.get(projectId);
     if (project?.worldId !== worldId) {
       throw new RepositoryError('not_found', 'No project with that ID in that world.');
+    }
+    return project;
+  }
+
+  /**
+   * `owned`, plus the world must not be archived (F5, #59). Ownership is checked first, so a
+   * project from another world is still `not_found`. The check and the change that follows run
+   * in the same synchronous call, so nothing can archive the world in between.
+   */
+  private mutable(projects: ProjectRepository, worldId: string, projectId: string): Project {
+    const project = this.owned(projects, worldId, projectId);
+    const world = new WorldRepository(this.db()).get(worldId);
+    // The foreign key makes a missing world impossible today; refuse anyway (fail closed), with
+    // the same answer `owned` gives, so a damaged or restored database can't skip the rule.
+    if (world === undefined) {
+      throw new RepositoryError('not_found', 'No project with that ID in that world.');
+    }
+    if (world.archivedAt !== null) {
+      throw new CommandError('invalid_transition', ARCHIVED_WORLD_REFUSAL);
     }
     return project;
   }
