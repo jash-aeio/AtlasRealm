@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ## [Unreleased]
 
+### Added
+- Storage for buildings and the hotbar (M2-2, #67): the database (schema v5) can now remember where each project's building stands on the map and what each of the ten hotbar slots points to. The database itself makes sure a project has at most one building, a slot holds one thing, the same project isn't pinned twice, and a building or pin can only point at a project in the same world. Removing a building or clearing a slot never changes or deletes the project (ADR-0023). Existing databases are backed up and upgraded automatically, and all existing projects start without a building. Nothing on screen uses this yet; placing buildings and pinning shortcuts come later in M2.
+
 ### Fixed
 - Projects in an archived world can no longer be changed (#59): renaming, editing the goal, archiving, restoring, trashing and restoring from the trash are all refused with "This world is archived. Restore it before changing its projects.", and nothing is changed. You can still open and list those projects. There is no button to archive a world yet, so this is a safety rule for later screens rather than something you will see today.
 

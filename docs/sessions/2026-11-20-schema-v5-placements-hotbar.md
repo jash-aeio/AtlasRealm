@@ -46,6 +46,23 @@ Recorded as [ADR-0023](../adr/0023-placement-and-hotbar-target-storage.md).
 - One real ordering bug found by the tests and fixed before commit: replacing an *empty* slot
   reported "already pinned elsewhere" instead of "slot is empty".
 
+## Verification and reviews
+- typecheck, lint, format:check pass. Unit/integration 814/814. E2E 52/52. Packaged E2E 15/15
+  (fresh `pnpm package` + `package:test`).
+- invariant-reviewer: no violations. It noted that `removeByProject` has no callers yet, so M2-3
+  must call it inside the same transaction that checks the project's revision.
+- security-auditor: nothing blocking, and no SQL injection (values are bound; table and column names
+  are constants). Fixed in this branch:
+  - **M1**: `move` and `remove` took only a placement ID, so a service could check the rules
+    against world A and move a building in world B. They now take the world and treat another
+    world's building as `not_found` (new test).
+  - **L1**: `guardedDelete` only accepts `building_placements`, so product records can't be deleted
+    through it by mistake.
+  - **L3**: `findByTarget` refuses an unknown target type instead of guessing (new test).
+- Handed to M2-3/M2-4 (status doc, Next task): archived-world and project-status checks in the
+  services for every command; `removeByProject` never from an IPC handler; unexpected errors mapped
+  to a safe IPC code. L5 (`guardedUpdate`'s SQL fragments are constants by convention) is older.
+
 ## Decisions (routine; spec defaults, not asked)
 - Removing a placement or clearing a slot deletes the row; "unplaced" = no row.
 - Rotation in degrees (0/90/180/270), matching M2-1. Tiles 0–255 in the DB as a sanity range; real

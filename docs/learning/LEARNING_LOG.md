@@ -28,6 +28,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 022 | [Positive controls: proving a test can see what it says didn't happen](lessons/022-positive-controls.md) | M1 | positive control, vacuous pass, CSP refusal vs network request, testing for absence |
 | 023 | [Cheap checks first, and what a flaky test is telling you](lessons/023-cheap-checks-first-and-flaky-tests.md) | M2 | flaky test, bounded check, algorithmic-complexity DoS, lower bound, waiting for conditions, mockRestore clears calls |
 | 024 | [Guard clauses in a trusted service: check order and failing closed](lessons/024-guard-clauses-and-check-order.md) | M2 | guard clause, check order, fail closed, information leak, synchronous check-then-act |
+| 025 | [Database uniqueness constraints as invariants](lessons/025-database-constraints-as-invariants.md) | M2 | invariant in the schema, UNIQUE / partial unique index, CHECK, composite foreign key, code check + constraint backstop, NULLs in UNIQUE |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map
