@@ -43,3 +43,11 @@ Added after each milestone close. The table above stays as the spec wrote it; th
 - **Open, scheduled: Chromium debug switches** (`--remote-debugging-port`, `--no-sandbox`, …) still work on the packaged app. Low impact today. Moved to M1 as #20; it must land before M3's file, secret and provider commands.
 - **New: security hardening makes scope grow.** Two M0 issues (M0-9 `app://`, M0-10 switches) came from per-PR security reviews, not the plan. *Response:* leave room in each milestone plan for review findings, and track every accepted finding as an issue with a deadline gate.
 - **New: unsigned installer.** SmartScreen warns on install. Fine for development; code signing is decided in M7 (packaging hardening).
+
+### M1 close (2026-11-20)
+- **Retired: Chromium debug switches.** The packaged app now quits on `--remote-debugging-port`, `--no-sandbox` and 27 other switches before it opens the database or a window (#20, packaged E2E).
+- **Retired: "profile data can leak between profiles."** Every command works only on the open profile. A switch stops the worker, swaps the database and reloads the window (M1-6/M1-8 unit tests, `m1-acceptance.spec.ts`).
+- **Mitigated: "app update breaks stored work."** Schema v1→v4 upgrades run with a backup first and fixture tests for each step. The packaged app keeps data across restarts.
+- **Open: "local profiles imply false security."** Profiles separate data, but they are not encrypted, and the UI doesn't say so yet. *Response:* add a plain-language note before profiles hold secrets (M3).
+- **New: flaky tests erode trust in CI.** Two timing-sensitive tests failed now and then all through M1. *Response:* fix them early in M2.
+- **New: follow-ups from security reviews pile up.** Low findings (Unicode fillers in names and goals, read caps) are noted in docs rather than tracked. *Response:* make each one an issue with a gate; the Unicode one must land before goals reach prompts (M3).
