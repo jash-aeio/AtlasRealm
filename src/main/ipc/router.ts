@@ -1,16 +1,20 @@
 // Command router core: every IPC command passes these checks, in this order, before
 // any handler code runs (ARCHITECTURE.md §7.2, §16.1):
 //   1. sender check: the request comes from our own UI's main frame
-//   2. schema check: the payload matches the command's Zod input schema. This runs before
-//      measuring size because it fails fast on wrong shapes (e.g. a 50 MB typed array)
-//      without serializing them
-//   3. size check: the validated payload is bounded
+//   2. plain-data gate: a bounded walk refuses binary and non-plain values and anything
+//      clearly over the size limit. It runs before Zod because Zod's object check treats a
+//      typed array as an object and lists every index as an unknown key: seconds of main-process
+//      time for a 10 MB Uint8Array (#56). The walk stops after about MAX_PAYLOAD_BYTES steps.
+//      It measures the payload as sent, so padding that a schema would .trim() away still
+//      counts towards the limit
+//   3. schema check: the payload matches the command's Zod input schema
+//   4. size check: the exact UTF-8 JSON size of the validated payload is bounded
 // Nothing here imports Electron at runtime, so it is unit-tested with fake senders.
 import type { z } from 'zod';
 
 import type { Channel } from '../../common/contracts/channels';
 import type { IpcError, IpcErrorCode, IpcResult } from '../../common/contracts/ipc-result';
-import { jsonByteLength } from '../../common/contracts/json-size';
+import { checkPlainJson, jsonByteLength } from '../../common/contracts/json-size';
 import { isAppOrigin } from '../bootstrap/app-origin';
 
 /** Largest accepted payload, measured as UTF-8 JSON. Generous for commands, tiny for abuse. */
@@ -98,6 +102,14 @@ export function createCommandHandler<I extends z.ZodType, O extends z.ZodType>(
   return async (event, raw) => {
     if (!isTrustedSender(event)) {
       return fail('forbidden_sender', 'Request rejected: unknown sender.');
+    }
+
+    const gate = checkPlainJson(raw, MAX_PAYLOAD_BYTES);
+    if (gate === 'not_plain') {
+      return fail('invalid_payload', 'Request rejected: payload is not plain data.');
+    }
+    if (gate === 'too_large') {
+      return fail('payload_too_large', 'Request rejected: payload is too large.');
     }
 
     const parsed = definition.input.safeParse(raw);
