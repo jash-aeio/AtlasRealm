@@ -22,7 +22,13 @@ Build one pure, well-tested module that decides whether a building may stand on 
 
 ## What was done
 - Slice 1 (`6d9a739`): rules module, 34 unit tests, and the repository using the shared rotation list.
-- Verification: typecheck, lint and format:check pass; `pnpm test` 848/848.
+- Slice 2: ADR-0024, spec notes (UI_SPEC §17.1, DATA_MODEL).
+- Reviews:
+  - invariant-reviewer: no violations. Its one risk, that the M2-3 handler must re-run the rules on data it reads itself, is handed to M2-3.
+  - security-auditor: approved, four Low findings. L4 is fixed: the world size is now checked (16–256, whole numbers) before the auto-place grids are allocated, and the tests moved from tiny 3×3/4×4 worlds to the smallest allowed 16×16. L1 (validate rotation before auto-place), L2 (the footprint never comes from the payload) and L3 (a stored building whose appearance no longer resolves) are written into the M2-3 handoff in IMPLEMENTATION_STATUS.
+- Slice 3: lesson 026 (shared validation), glossary (placement anchor, auto-place, shared validation, summed-area table), changelog, status, roadmap.
+- Verification: typecheck, lint and format:check pass; `pnpm test` 849/849.
+- The user wrote no code this session (project rule: Claude writes all code). The user made the anchor decision.
 
 ## Open questions
 - What should a reserved area be: a spawn plaza, a path, the avatar's start tile? Nothing in the spec says yet. The rule is ready for whichever feature defines one.

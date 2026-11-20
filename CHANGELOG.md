@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 ## [Unreleased]
 
 ### Added
+- Placement rules (M2-1, #66): the rules that decide where a building may stand now exist and are tested. A building must sit fully inside the map, must not cover a reserved area or another building, and may only be turned in quarter turns. "Find a spot" (auto-place) picks the nearest free plot, always the same one for the same map, and says so when the map is full. A building's saved position is the north corner of its footprint, and turning a building keeps it in place (ADR-0024). Nothing on screen uses this yet; the placement tool and commands come later in M2, and both will use these same rules so the preview and the real result can't disagree.
 - Storage for buildings and the hotbar (M2-2, #67): the database (schema v5) can now remember where each project's building stands on the map and what each of the ten hotbar slots points to. The database itself makes sure a project has at most one building, a slot holds one thing, the same project isn't pinned twice, and a building or pin can only point at a project in the same world. Removing a building or clearing a slot never changes or deletes the project (ADR-0023). Existing databases are backed up and upgraded automatically, and all existing projects start without a building. Nothing on screen uses this yet; placing buildings and pinning shortcuts come later in M2.
 
 ### Fixed
