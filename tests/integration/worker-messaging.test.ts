@@ -234,20 +234,26 @@ describe('worker messaging: cancellation', () => {
       { to: 1000, stepMs: 5 },
       { signal: controller.signal },
     );
-    await new Promise((r) => setTimeout(r, 30));
+    // Wait for conditions, not fixed sleeps: on a busy machine the fake worker's timers can run
+    // late, and a fixed 30 ms wait then saw no steps yet (#56).
+    await vi.waitUntil(() => steps > 0, { timeout: 2000, interval: 5 }); // it really is running
     const stepsAtCancel = steps;
-    expect(stepsAtCancel).toBeGreaterThan(0); // it really was running
     controller.abort();
     expect(await pending).toMatchObject({ ok: false, error: { code: 'cancelled' } });
     expect(bridge.status().pendingRequests).toBe(0);
 
-    await new Promise((r) => setTimeout(r, 40));
-    expect(steps).toBeLessThanOrEqual(stepsAtCancel + 1); // at most the step already under way
+    // The worker's own "cancelled" reply arrives after we'd settled, so it is dropped.
+    await vi.waitUntil(() => bridge.status().staleRepliesDropped === 1, {
+      timeout: 2000,
+      interval: 5,
+    });
     expect(worker(workers).dispatcher.activeRequests()).toBe(0);
     expect(worker(workers).sent.map((m) => m.kind)).toEqual(['request', 'cancel']);
 
-    // The worker's own "cancelled" reply arrived after we'd settled, so it was dropped.
-    expect(bridge.status().staleRepliesDropped).toBe(1);
+    // A few more step intervals: a worker that kept counting would add steps here. A slow
+    // machine can only make this window weaker, never make the test fail on its own.
+    await new Promise((r) => setTimeout(r, 40));
+    expect(steps).toBeLessThanOrEqual(stepsAtCancel + 1); // at most the step already under way
     // And the worker is still usable.
     const echo = await bridge.request('spike.echo', { text: 'after' });
     expect(echo).toMatchObject({ ok: true, data: { activeRequests: 0 } });
