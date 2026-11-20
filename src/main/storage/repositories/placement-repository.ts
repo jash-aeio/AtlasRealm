@@ -177,9 +177,14 @@ export class PlacementRepository {
       .map(toPlacement);
   }
 
-  /** Moves or turns a building. The target and appearance stay the same. */
-  move(id: string, expectedRevision: number, spot: PlacementSpot): Placement {
+  /**
+   * Moves or turns a building in `worldId`. The target and appearance stay the same. A
+   * placement from another world is `not_found`, so a caller can't check the rules against one
+   * world and move a building in another.
+   */
+  move(worldId: string, id: string, expectedRevision: number, spot: PlacementSpot): Placement {
     const checked = assertSpot(spot);
+    this.requireInWorld(worldId, id);
     return toPlacement(
       guardedUpdate(this.db, {
         table: 'building_placements',
@@ -196,8 +201,10 @@ export class PlacementRepository {
   /**
    * Removes a building. Its project becomes unplaced and is otherwise untouched: same row,
    * same revision, same files, runs keep going. Returns what was removed (for undo, M2-8).
+   * Like `move`, a placement from another world is `not_found`.
    */
-  remove(id: string, expectedRevision: number): Placement {
+  remove(worldId: string, id: string, expectedRevision: number): Placement {
+    this.requireInWorld(worldId, id);
     return toPlacement(
       guardedDelete(this.db, {
         table: 'building_placements',
@@ -213,11 +220,20 @@ export class PlacementRepository {
    * inside the transaction that archives or trashes the project (M2-3, user decision
    * 2026-11-20): that change already checked the project's revision, and the building must go
    * whatever state it is in. Returns the removed placement, or undefined if it was unplaced.
+   * Never call it from an IPC handler: it has no world scope and no revision check.
    */
   removeByProject(projectId: string): Placement | undefined {
     const row = this.db
       .prepare('DELETE FROM building_placements WHERE project_id = ? RETURNING *')
       .get(projectId);
     return row === undefined ? undefined : toPlacement(row);
+  }
+
+  // Synchronous check-then-act on the single writer connection: nothing can run in between
+  // (lesson 024). The guarded write that follows still checks the revision.
+  private requireInWorld(worldId: string, id: string): void {
+    if (this.get(id)?.worldId !== worldId) {
+      throw new RepositoryError('not_found', 'No building with that ID in this world.');
+    }
   }
 }

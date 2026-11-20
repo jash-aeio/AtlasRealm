@@ -198,7 +198,7 @@ describe('moving a placement', () => {
     const placed = placeFor(launch);
     const before = projectRows();
 
-    const moved = placements.move(placed.id, 1, { tileX: 3, tileY: 4, rotation: 180 });
+    const moved = placements.move(home.id, placed.id, 1, { tileX: 3, tileY: 4, rotation: 180 });
 
     expect(moved).toMatchObject({
       id: placed.id,
@@ -216,10 +216,10 @@ describe('moving a placement', () => {
 
   it('refuses a stale revision with revision_conflict and the current revision', () => {
     const placed = placeFor(launch);
-    placements.move(placed.id, 1, { tileX: 3, tileY: 4, rotation: 0 });
+    placements.move(home.id, placed.id, 1, { tileX: 3, tileY: 4, rotation: 0 });
 
     const error = expectRefusal(
-      () => placements.move(placed.id, 1, { tileX: 9, tileY: 9, rotation: 0 }),
+      () => placements.move(home.id, placed.id, 1, { tileX: 9, tileY: 9, rotation: 0 }),
       'revision_conflict',
     );
     expect(error.currentRevision).toBe(2);
@@ -229,14 +229,28 @@ describe('moving a placement', () => {
   it('refuses an unknown placement and a bad spot', () => {
     const placed = placeFor(launch);
     expectRefusal(
-      () => placements.move(uuid(999), 1, { tileX: 1, tileY: 1, rotation: 0 }),
+      () => placements.move(home.id, uuid(999), 1, { tileX: 1, tileY: 1, rotation: 0 }),
       'not_found',
     );
     expectRefusal(
-      () => placements.move(placed.id, 1, { tileX: 1, tileY: 300, rotation: 0 }),
+      () => placements.move(home.id, placed.id, 1, { tileX: 1, tileY: 300, rotation: 0 }),
       'invalid_input',
     );
     expect(placements.get(placed.id)).toEqual(placed);
+  });
+});
+
+describe('world scope of move and remove', () => {
+  it('treats another world’s building as not found and leaves it where it is', () => {
+    const other = worlds.create({ name: 'Elsewhere', themeId: 'meadow' });
+    const elsewhere = placeFor(newProject(other, 'Garden notes'));
+
+    expectRefusal(
+      () => placements.move(home.id, elsewhere.id, 1, { tileX: 1, tileY: 1, rotation: 0 }),
+      'not_found',
+    );
+    expectRefusal(() => placements.remove(home.id, elsewhere.id, 1), 'not_found');
+    expect(placements.get(elsewhere.id)).toEqual(elsewhere);
   });
 });
 
@@ -245,7 +259,7 @@ describe('removing a placement', () => {
     const placed = placeFor(launch);
     const before = projectRows();
 
-    expect(placements.remove(placed.id, 1)).toEqual(placed);
+    expect(placements.remove(home.id, placed.id, 1)).toEqual(placed);
 
     expect(placements.findByProject(launch.id)).toBeUndefined();
     expect(placements.get(placed.id)).toBeUndefined();
@@ -255,29 +269,32 @@ describe('removing a placement', () => {
 
   it('refuses a stale revision and keeps the building', () => {
     const placed = placeFor(launch);
-    placements.move(placed.id, 1, { tileX: 3, tileY: 4, rotation: 0 });
+    placements.move(home.id, placed.id, 1, { tileX: 3, tileY: 4, rotation: 0 });
 
-    const error = expectRefusal(() => placements.remove(placed.id, 1), 'revision_conflict');
+    const error = expectRefusal(
+      () => placements.remove(home.id, placed.id, 1),
+      'revision_conflict',
+    );
     expect(error.currentRevision).toBe(2);
     expect(placementCount()).toBe(1);
   });
 
   it('refuses an unknown placement and a nonsense revision', () => {
     const placed = placeFor(launch);
-    expectRefusal(() => placements.remove(uuid(999), 1), 'not_found');
-    expectRefusal(() => placements.remove(placed.id, 0), 'invalid_input');
+    expectRefusal(() => placements.remove(home.id, uuid(999), 1), 'not_found');
+    expectRefusal(() => placements.remove(home.id, placed.id, 0), 'invalid_input');
     expect(placementCount()).toBe(1);
   });
 
   it('lets the project be placed again afterwards', () => {
     const placed = placeFor(launch);
-    placements.remove(placed.id, 1);
+    placements.remove(home.id, placed.id, 1);
     expect(placeFor(launch, { tileX: 50 }).tileX).toBe(50);
   });
 
   it('removeByProject removes the project’s building without a revision', () => {
     const placed = placeFor(launch);
-    placements.move(placed.id, 1, { tileX: 3, tileY: 4, rotation: 0 });
+    placements.move(home.id, placed.id, 1, { tileX: 3, tileY: 4, rotation: 0 });
     const before = projectRows();
 
     expect(placements.removeByProject(launch.id)).toMatchObject({ id: placed.id, revision: 2 });

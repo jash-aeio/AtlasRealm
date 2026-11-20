@@ -152,6 +152,18 @@ describe('assigning a slot', () => {
     expect(slotRows()).toEqual([]);
   });
 
+  it('findByTarget refuses an unknown target type instead of guessing', () => {
+    hotbar.assign(home.id, 0, { type: 'service', id: 'settings' });
+    expectRefusal(
+      () =>
+        hotbar.findByTarget(home.id, {
+          type: 'bogus',
+          id: 'settings',
+        } as unknown as RepresentationTarget),
+      'invalid_input',
+    );
+  });
+
   it('fills all ten slots and an eleventh project leaves every slot and project in place', () => {
     // §22.2 #2 at repository level; the command and UI versions are M2-4 and M2-10.
     const pinned = Array.from({ length: 9 }, (_, i) => newProject(home, `Project ${String(i)}`));

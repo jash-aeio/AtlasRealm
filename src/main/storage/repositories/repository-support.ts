@@ -259,7 +259,8 @@ export function guardedUpdate(db: Database, update: GuardedUpdate): Row {
 }
 
 export interface GuardedDelete {
-  readonly table: GuardedTable;
+  /** Representation tables only: product records are never deleted (PRODUCT_RULES §3.1). */
+  readonly table: 'building_placements';
   readonly keyColumn: 'profile_id' | 'id';
   readonly key: string;
   readonly expectedRevision: number;

@@ -81,7 +81,12 @@ export class HotbarRepository {
 
   /** The slot a target is pinned to in this world, if any. */
   findByTarget(worldId: string, target: RepresentationTarget): HotbarSlot | undefined {
-    const column = target.type === 'project' ? 'project_id' : 'service_kind';
+    // `target` may come from outside TypeScript; an unknown tag is an error, not a guess.
+    const type: string = target.type;
+    if (type !== 'project' && type !== 'service') {
+      throw new RepositoryError('invalid_input', 'Unknown target type.');
+    }
+    const column = type === 'project' ? 'project_id' : 'service_kind';
     const row = this.db
       .prepare(`SELECT * FROM hotbar_slots WHERE world_id = ? AND ${column} = ?`)
       .get(worldId, target.id);
