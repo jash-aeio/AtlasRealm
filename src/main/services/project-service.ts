@@ -9,6 +9,10 @@
 // Archived worlds (F5, #59): no project in an archived world can be changed; reads still work.
 // The rule lives here, not in the repository, so other main-process code (placement, hotbar)
 // must change projects through this service rather than a ProjectRepository of its own.
+//
+// Buildings (M2-3 #68, user decision 2026-11-20): archiving or trashing a project removes its
+// building in the same transaction, so the project is never left half-changed. Restoring leaves
+// it unplaced; the user places it again if they want to.
 import { z } from 'zod';
 
 import {
@@ -19,6 +23,8 @@ import {
 import { WorldId } from '../../common/contracts/world';
 import { CommandError } from '../ipc/router';
 import type { ActiveProfile } from '../profiles/active-profile';
+import { withTransaction } from '../storage/database';
+import { PlacementRepository } from '../storage/repositories/placement-repository';
 import {
   type Project,
   type ProjectPageKey,
@@ -192,12 +198,14 @@ export class ProjectService {
     return projects.setGoal(project.id, change.expectedRevision, goal);
   }
 
-  /** Hides the project from active views. Its data and files stay where they are. */
+  /**
+   * Hides the project from active views and removes its building. Its data and files stay where
+   * they are.
+   */
   archive(change: Change): LifecycleResult {
-    const projects = this.projects();
-    const project = this.mutable(projects, change.worldId, change.projectId);
-    this.refuseWhileRunsActive(project.id, 'archived');
-    return this.lifecycle(projects.archive(project.id, change.expectedRevision));
+    return this.withoutBuilding(change, 'archived', (projects, id) =>
+      projects.archive(id, change.expectedRevision),
+    );
   }
 
   restore(change: Change): Project {
@@ -206,12 +214,11 @@ export class ProjectService {
     return projects.restoreFromArchive(project.id, change.expectedRevision);
   }
 
-  /** Moves the project to the recoverable trash. Nothing is deleted. */
+  /** Moves the project to the recoverable trash and removes its building. Nothing is deleted. */
   trash(change: Change): LifecycleResult {
-    const projects = this.projects();
-    const project = this.mutable(projects, change.worldId, change.projectId);
-    this.refuseWhileRunsActive(project.id, 'moved to the trash');
-    return this.lifecycle(projects.trash(project.id, change.expectedRevision));
+    return this.withoutBuilding(change, 'moved to the trash', (projects, id) =>
+      projects.trash(id, change.expectedRevision),
+    );
   }
 
   restoreFromTrash(change: Change): Project {
@@ -267,6 +274,28 @@ export class ProjectService {
         `This project has active runs, so it can't be ${action} yet. Stop its runs first.`,
       );
     }
+  }
+
+  /**
+   * Runs a status change and removes the project's building in one transaction: both happen,
+   * or (if anything throws, a stale revision included) neither does. removeByProject has no
+   * revision check of its own on purpose: the project change already checked one, and the
+   * building must go whatever state it is in (PlacementRepository).
+   */
+  private withoutBuilding(
+    change: Change,
+    action: string,
+    apply: (projects: ProjectRepository, projectId: string) => Project,
+  ): LifecycleResult {
+    const db = this.db();
+    return withTransaction(db, () => {
+      const projects = this.projects();
+      const project = this.mutable(projects, change.worldId, change.projectId);
+      this.refuseWhileRunsActive(project.id, action);
+      const changed = apply(projects, project.id);
+      new PlacementRepository(db, this.now).removeByProject(project.id);
+      return this.lifecycle(changed);
+    });
   }
 
   private lifecycle(project: Project): LifecycleResult {

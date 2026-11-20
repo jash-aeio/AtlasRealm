@@ -425,3 +425,65 @@ describe('placements inside an archived world (F5, #59)', () => {
     });
   });
 });
+
+describe('archive and trash remove the building in the same transaction (user decision 2026-11-20)', () => {
+  const lifecycle = (project: Project) => ({
+    worldId: project.worldId,
+    projectId: project.id,
+    expectedRevision: project.revision,
+  });
+  const buildings = () => new PlacementRepository(opened.db).listByWorld(world.id);
+
+  it('archive removes the building; restore leaves the project unplaced', async () => {
+    const project = newProject();
+    await placed(project);
+    const { project: archived } = projects.archive(lifecycle(project));
+    expect(archived.status).toBe('archived');
+    expect(buildings()).toEqual([]);
+
+    projects.restore(lifecycle(archived));
+    expect(buildings()).toEqual([]);
+  });
+
+  it("trash removes the building, also an archived project's re-placed one", async () => {
+    const active = newProject('Active');
+    await placed(active, 0, 0);
+    projects.trash(lifecycle(active));
+
+    const archived = projects.archive(lifecycle(newProject('Archived'))).project;
+    await placed(archived, 4, 0);
+    const { project: trashed } = projects.trash(lifecycle(archived));
+    expect(buildings()).toEqual([]);
+
+    projects.restoreFromTrash(lifecycle(trashed));
+    expect(buildings()).toEqual([]);
+  });
+
+  it("leaves other projects' buildings alone", async () => {
+    const keep = await placed(newProject('Keep'), 0, 0);
+    const project = newProject('Go');
+    await placed(project, 4, 0);
+    projects.archive(lifecycle(project));
+    expect(buildings().map((b) => b.id)).toEqual([keep.id]);
+  });
+
+  it('a refused archive (stale revision) keeps the building', async () => {
+    const project = newProject();
+    await placed(project);
+    const before = snapshot();
+    expect(() => projects.archive({ ...lifecycle(project), expectedRevision: 9 })).toThrow();
+    expect(snapshot()).toEqual(before);
+  });
+
+  it('if removing the building fails, the status change is rolled back too', async () => {
+    const project = newProject();
+    await placed(project);
+    // A temporary trigger makes the building delete fail after the project row has changed.
+    opened.db.exec(`CREATE TEMP TRIGGER fail_delete BEFORE DELETE ON building_placements
+                    BEGIN SELECT RAISE(ABORT, 'refused by test'); END;`);
+    const before = snapshot();
+    expect(() => projects.archive(lifecycle(project))).toThrow(/refused by test/);
+    expect(() => projects.trash(lifecycle(project))).toThrow(/refused by test/);
+    expect(snapshot()).toEqual(before);
+  });
+});
