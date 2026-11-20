@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-20 · **Branch:** chore/release-v0.2.0-m1 (M1 release PR, on main @ 8233666)
+**Last updated:** 2026-11-20 · **Branch:** docs/plan-m2 (M2 planning, on main @ 684dbc8)
 
 ## Current milestone
-**M2 — Isometric world, placement, hotbar, library and Atlas shell** (📋 not planned yet; run `/plan-milestone M2`). `IMP-1 inspect` can run alongside it.
+**M2 — Isometric world, placement, hotbar, library and Atlas shell** (⏳ planned 2026-11-20: 21 issues, see `docs/pm/milestones/M2.md`). IMP-1 moved into M3.
 
 **M1 — Profiles, worlds, and project persistence: ✅ closed 2026-11-20, tag `v0.2.0-m1`.** All 11 issues (#20, #29–#38) merged. Evidence on main @ 8233666: typecheck, lint, format:check pass; unit/integration 693/693, E2E 52/52, packaged E2E 15/15. See `docs/sessions/2026-11-20-m1-close.md`.
 
@@ -468,11 +468,9 @@
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- M1 is closed (`v0.2.0-m1`). Next: run `/plan-milestone M2`. These M1 follow-ups are still open; decide during planning which ones become M2 issues:
-  - Open product question F5: projects inside an archived world can still be renamed, re-goaled and restored through the commands. The UI can't reach them yet (only active worlds are listed). Decide when world archiving gets a UI.
-  - Follow-up from the #34 security review (L1): refuse Unicode variation selectors (U+E0100–E01EF, runs of U+FE00–FE0F) and invisible fillers (U+3164, U+115F, U+1160, U+FFA0, U+034F) in names and goals, in both the contracts and `repository-support.ts`, before goals reach prompts (M3).
-  - Follow-up: `WorldSummary.name` still uses the strict `DisplayName` on output (the same issue as #34 L2, fixed there for projects).
-  - Follow-up from the #33 security review (L4): enforce the profile/world caps on read, or add paging, before imports and restore.
-  - Fixed in #37 (PR #52, after it failed CI there too): `world-contract.test.ts` "lists active worlds in creation order" now pins the clock, so the two worlds get distinct `created_at` values. The product query is unchanged: two worlds created in the same millisecond (only possible from a script) still tie-break by random UUID rather than by insertion order. Add a monotonic tie-breaker if that ever matters.
-  - Possible follow-ups: an app icon; removing `data:` from CSP `img-src` (needs your decision); the empty resource-timing list in the packaged test (likely the same cause found in M1-9: the first, uncached `app://` fetch records no entry); an E2E test for the startup error dialogs.
+- M2 is planned (2026-11-20): 15 new issues #66–#80 plus the follow-ups #56–#60 and #62. See `docs/pm/milestones/M2.md` and `docs/pm/DEPENDENCIES.md` (Task level: M2).
+- Start with up to three lanes: **A** M2-2 #67 (schema v5), with #59 (F5 archived-world guard) before M2-3 · **B** M2-5 #70 (layout + shortcut layer) · **C** M2-1 #66 (placement rules, `good-first-code`). #56 (flaky timing tests + IPC plain-data gate) is in review as PR #83; its worker-boundary follow-up is #82 (M4).
+- M1 follow-ups, triaged during planning:
+  - F5 → #59 (M2). Security L1 + `WorldSummary.name` → #60 (moved to M2, must land before M3). Profile security notice → #62 (moved to M2, after #70). L4 read caps → #61 (M3, before imports and restore). Flaky tests → #56 (M2); the world-canvas E2E flake is part of M2-6 #71. Packaged resource-timing → #57, CSP `img-src data:` → #58 (both M2). App icon → #64, startup-dialog E2E → #65 (M7).
+  - Dropped on purpose: a monotonic tie-breaker for worlds created in the same millisecond (only possible from a script).
 - Follow the session loop in CLAUDE.md. Verify status claims against the code before relying on them.
