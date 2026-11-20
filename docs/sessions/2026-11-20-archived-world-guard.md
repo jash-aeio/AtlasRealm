@@ -39,6 +39,18 @@ M2 planning) to enforce the rule in the trusted service now instead of waiting f
 ## Verification
 `pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm format:check` ✅ · `pnpm test` 741/741 ✅ (40 files).
 
+## Reviews (during /ship)
+- **invariant-reviewer:** no violations. It re-ran the suite (741/741) and noted the same missing-world edge case as the security review.
+- **security-auditor:** approved, no Critical/High/Medium.
+  - L1 (fixed): the guard let a change through if the world row couldn't be read ("fail open"). The foreign key makes that impossible today, but the guard now refuses with the same `not_found` answer `owned` gives.
+  - L2 (documented, not changed): the rule lives in `ProjectService`, not in `ProjectRepository`. Today the repository is only constructed inside the service, so there's no bypass. The service header now says that other main-process code (placement, hotbar in M2) must change projects through the service.
+
+## Lesson
+[Lesson 024: guard clauses, check order and failing closed](../learning/lessons/024-guard-clauses-and-check-order.md). New glossary terms: guard clause, information leak.
+
+## Also fixed in the docs
+`docs/pm/ROADMAP.md` and `docs/pm/milestones/M2.md` still showed #56 as open; it was merged as PR #83, so M2 is now 1/21 closed.
+
 ## Open questions
 - There is no `world.archive` / `world.restore` IPC command yet, so a world can only become archived
   through the repository (for example a future restore from backup). When a world-archive UI arrives,
