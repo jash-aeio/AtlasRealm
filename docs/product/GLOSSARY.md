@@ -57,6 +57,7 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Path traversal** | An attack that uses `..` (often URL-encoded) to read files outside an allowed folder | `resolveAppRequestPath` |
 | **Peer dependency** | A library a package expects *you* to install alongside it (Vitest 5 needs Vite) | `package.json` |
 | **Positive control** | A test case that must succeed, proving the test can tell success from failure (not passing vacuously) | `tests/e2e/shell.spec.ts` |
+| **Vacuous pass** | A test that passes only because its check could never fail (it can't see what it is looking for). A positive control catches this | lesson 022 |
 | **Repository** | The only code allowed to read/write a table; callers get typed methods instead of SQL | `src/main/storage/repositories/` |
 | **Rollback** | Undoing every write in a transaction that failed | `withTransaction` |
 | **Sandbox (Electron)** | Runs the renderer inside Chromium's OS-level sandbox with no Node.js access | `src/main/bootstrap/window.ts` |

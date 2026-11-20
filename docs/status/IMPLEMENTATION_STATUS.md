@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-18 · **Branch:** feat/37-project-list-ui (M1-10 PR, on main @ 20c668e)
+**Last updated:** 2026-11-20 · **Branch:** chore/38-m1-acceptance-e2e (M1-11 PR, on main @ d90a819)
 
 ## Current milestone
-**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20), M1-2 (#29), M1-3 (#30), M1-4 (#31), M1-5 (#32), M1-6 (#33), M1-7 (#34) and M1-8 (#35, PR #50) and M1-9 (#36, PR #51) are merged. M1-10 (#37, project list UI) is in review.
+**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20), M1-2 (#29), M1-3 (#30), M1-4 (#31), M1-5 (#32), M1-6 (#33), M1-7 (#34) and M1-8 (#35, PR #50), M1-9 (#36, PR #51) and M1-10 (#37, PR #52) are merged. M1-11 (#38, acceptance E2E + packaged smoke) is in review; it is the last M1 issue.
 
 **M0 — Foundation and risk spikes: ✅ closed 2026-11-10, tag `v0.1.0-m0`.** Evidence: unit/integration 193/193, E2E 35/35, packaged E2E 9/9 on main @ 2fbf944; CI green. See `docs/sessions/2026-11-10-m0-close.md`.
 
@@ -133,7 +133,13 @@
   - `WorldRepository.create` and `ProjectRepository.create` insert the record and its entity in one transaction. `ProjectRepository.trash` sets the tombstone and `restoreFromTrash` clears it, in the same transaction as the status change. Archiving doesn't tombstone. `GraphEntityRepository` has no delete method.
   - `withSavepoint` (`database.ts`): opens a transaction, or nests in one that `withTransaction` opened through a SQLite SAVEPOINT. If SQLite cancels the whole transaction by itself (disk full, I/O error), the transaction is marked aborted: further writes throw `TransactionAbortedError` and it won't commit, so writes never autocommit half a unit. It refuses to join a transaction it didn't open.
 
-- **M1-10 project list UI (#37, branch `feat/37-project-list-ui`):** the world home now lists the world's projects and offers every M1 project action, with no canvas needed (UI_SPEC §6.3/§6.6, PRD §5.6).
+- **M1-11 M1 acceptance E2E (#38, branch `chore/38-m1-acceptance-e2e`):** every M1 Check is now proven end to end through the real UI, on the dev build and (except profile isolation and switching) on the packaged build. Test-only: no app code changed. Evidence table: `docs/sessions/2026-11-20-m1-acceptance.md`.
+  - `tests/e2e/m1-acceptance.spec.ts` (4 tests): offline create → quit → relaunch offline → edit; rename keeps ID, `createdAt` and template (revision +1) across a restart; profile isolation through Settings (B sees nothing of A; `get`/`list`/`rename`/`trash`/`create` with A's IDs → `not_found`) with the worker pid in the Developer spikes panel replaced and the old process gone; external fixture files (next to the profile folder, in folders named like the project, one binary with a non-ASCII path) byte-identical after every archive/trash change.
+  - Offline recording counts requests that reach the session **and** requests the page CSP refuses (they never become requests; Chromium reports them as console errors). Each offline check ends with a positive control, because a recorder that saw nothing proved nothing until it was added.
+  - Packaged: the first smoke test now goes through the real first-launch UI. New test "M1 Checks packaged": offline create, rename, restart, identity, edit, every lifecycle change, external fixtures untouched. Offline there is renderer-only (fuses keep the test out of main).
+  - Shared helpers: `tests/e2e/support/m1-ui.ts`.
+
+- **M1-10 project list UI (#37, merged as PR #52):** the world home now lists the world's projects and offers every M1 project action, with no canvas needed (UI_SPEC §6.3/§6.6, PRD §5.6).
   - **Store** (`src/renderer/projects/project-list.ts`): pure TypeScript, unit-tested with a fake API. Shows one filter (Active / Archived / Trash) at a time, loaded 50 at a time. It passes back `nextCursor` unchanged and never builds one. Every call carries `worldId`. It re-reads the list after every command, and a `revision_conflict` or `not_found` reloads with a notice. Only the newest load may write the store. A stale cursor (`invalid_payload`) starts the list over.
   - **Search runs in the renderer** (user decision): a non-empty search loads the filter's remaining pages (≤10 calls, since a world holds ≤1000 projects) and matches name or goal. `project.list` is unchanged.
   - **Panel** (`ProjectsPanel.tsx`): filter buttons (`aria-pressed`), a labelled search box, one polite status line ("Showing N active projects. More are available below."), Load more, and status shown as text. A note says every project is listed whether or not it has a building.
@@ -182,6 +188,7 @@
   - Isolation (§22.2 #23), shown in `tests/integration/profile-switch.test.ts`: after a switch, world list/rename and project list/get/rename/archive/trash/create with the other profile's IDs are `not_found`; settings and launch info are the new profile's own, in both directions.
 
 ## Changed components
+- M1-11: `tests/e2e/m1-acceptance.spec.ts` (new, 4), `tests/e2e/support/m1-ui.ts` (new), `tests/e2e-packaged/packaged.spec.ts` (first-launch UI + 1 new test); docs: session log with the evidence table, lesson 022. No app code changes.
 - M1-10: `src/renderer/projects/*` (new: `project-list.ts`, `project-messages.ts`, `ProjectsPanel`, `CreateProjectForm`, `ProjectItem`, `ConfirmDialog`), `src/renderer/app/{MainScreen.tsx,app.css}`; tests `tests/domain/project-list-store.test.ts` (new, 12), `tests/e2e/projects.spec.ts` (new, 5), `tests/e2e/onboarding.spec.ts` (empty-list text). No main-process, preload or contract changes.
 - M1-9: `src/renderer/state/session.ts` (new), `src/renderer/onboarding/*` (new: `Onboarding`, `ProfilePicker`, `AvatarChooser`, `PlaceholderAvatar`, `CreateWorldForm`, `avatar.ts`, `form-messages.ts`), `src/renderer/app/{App,MainScreen,SettingsView,DeveloperSpikes}.tsx`, `src/renderer/app/app.css`; `tests/domain/session-store.test.ts` (new), `tests/e2e/onboarding.spec.ts` + `tests/e2e/support/onboarding.ts` (new), `tests/e2e/{atlas,shell,storage,worker,world}.spec.ts`, `tests/e2e-packaged/packaged.spec.ts`; docs: ADR-0022, lesson 020, glossary, changelog
 - M1-8: `src/main/services/profile-session.ts` (new), `src/main/ipc/commands/profile-switch.ts` (new), `src/main/profiles/{active-profile,profile-service}.ts`, `src/main/runtime-bridge/worker-bridge.ts` (`pause`/`resume`), `src/main/ipc/{register,router}.ts`, `src/main/ipc/commands/app-launch-info.ts`, `src/main/index.ts` (`reloadMainWindow`), `src/common/contracts/{profile,ipc-result,channels,atlas-api}.ts`, `src/preload/index.ts`; `tests/integration/profile-switch{,-gate}.test.ts` (new), `tests/integration/{worker-messaging,app-launch-info}.test.ts`, `tests/e2e/profiles.spec.ts` (new), `tests/e2e/shell.spec.ts`; docs: ADR-0021, ARCHITECTURE §16.1, lesson 019, glossary, changelog
@@ -206,6 +213,7 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- M1-11, 2026-11-20, local Windows 11, on main @ d90a819: typecheck, lint, format:check pass. Unit/integration 693/693. E2E 52/52 (new: 4 in `m1-acceptance.spec.ts`). Packaged E2E 15/15 after `pnpm package` + `pnpm package:test` on this branch (new: "M1 Checks packaged"; first smoke test now drives first launch). Positive controls for the offline recorders pass in both suites. Reviews: invariant-reviewer found no violations or overclaiming (every evidence-table row checked against a real assertion); security-auditor not run (test-only, no src changes).
 - M1-10, 2026-11-18, local Windows 11, on main @ 20c668e: typecheck, lint, format:check pass. Unit/integration 692/693: the one failure was the known `ipc-router` "huge binary payload" flake, which passed 27/27 on its own (this branch changes no main-process code). E2E 48/48 (new: 5 in `projects.spec.ts`). Screenshots of the list, the create form and the trash dialog were checked by eye. Packaged E2E not run (no packaging or main-process change). Reviews: invariant-reviewer approved with no violations; its independent re-run gave unit 693/693 and E2E 48/48. security-auditor not run (no src/main, preload, contract, file, credential or provider changes).
 - M1-9 after merging main @ 7961f8b (M1-8) and enabling Switch, 2026-11-18: typecheck, lint, format:check pass. Unit/integration 680/681 (session-store now 12); the one failure is the known router flake, which passed 27/27 alone. E2E 43/43, including the profile picker switching both ways (onboarding → Second, Settings → back to Robin, with worlds isolated) and the adapted `profiles.spec.ts` from #35.
 - M1-9, 2026-11-18, local Windows 11, worktree on main @ ace8326: typecheck, lint, format:check pass. Unit/integration 654/654 (new: `session-store` 10). An earlier full run had 653/654: the known-flaky router test "huge binary payload", which passed 27/27 alone. E2E 41/41 (new: 3 in `onboarding.spec.ts`). Mutation check: removing the step-heading focus makes the keyboard-only test fail. Packaged E2E was not run locally; only its helper calls changed (it opens Developer spikes before reading the M0 panels). While adapting `world.spec.ts`: Chromium records no resource-timing entry for the first, uncached `app://` image fetch, only for a cached reload, so the sprite test now reloads once on purpose. Reviews: invariant-reviewer found no violations (it re-ran typecheck, lint and the session-store tests). security-auditor not run: the diff touches only the renderer, tests and docs (no main, preload, IPC contracts, files or credentials).
@@ -346,6 +354,7 @@
 - CI: see the PR checks (first CI run with E2E on windows-latest).
 
 ## Known limitations
+- M1-11: packaged offline checks cover the renderer only (fuses block access to main); main-process traffic is recorded in the dev test. Profile isolation and switching are proven in dev only (same code in packaged). "Runner state" is the M0 worker; archive/trash report `runCheck: 'stub'` until M4.
 - M1-10 search loads every remaining page of the current filter (at most 10 `project.list` calls at today's 1000-project cap). Fine at M1 scale. If worlds grow, move search into `project.list`.
 - M1-10 shows only active worlds, so projects inside an archived world aren't reachable from the UI yet (open question F5 is still undecided).
 - First-launch UI (M1-9):
@@ -450,8 +459,7 @@
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- #20 and #29–#36 are merged; #37 (M1-10, project list UI) is in review. Next: M1-11 (#38, acceptance E2E + packaged smoke) once #37 is merged.
-  - M1-11: prove every M1 Check on dev and packaged builds; `tests/e2e/projects.spec.ts` and `onboarding.spec.ts` already cover the project and first-launch flows in dev.
+- #20 and #29–#37 are merged; #38 (M1-11, acceptance E2E) is in review. Next: `/close-milestone M1` once #38 is merged (tag `v0.2.0-m1`), then `/plan-milestone M2`.
   - Open product question F5: projects inside an archived world can still be renamed, re-goaled and restored through the commands. The UI can't reach them yet (only active worlds are listed). Decide when world archiving gets a UI.
   - Follow-up from the #34 security review (L1): refuse Unicode variation selectors (U+E0100–E01EF, runs of U+FE00–FE0F) and invisible fillers (U+3164, U+115F, U+1160, U+FFA0, U+034F) in names and goals, in both the contracts and `repository-support.ts`, before goals reach prompts (M3).
   - Follow-up: `WorldSummary.name` still uses the strict `DisplayName` on output (the same issue as #34 L2, fixed there for projects).
