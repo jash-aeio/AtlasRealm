@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ## [Unreleased]
 
+### Security
+- Faster refusal of bad requests (#56): the app now refuses binary data, unusual objects and oversized requests from its own window before checking them in detail. Before, one 10 MB binary message could keep the trusted main process busy for several seconds. The 64 KiB limit is unchanged, but it now applies to the request as sent: padding that would be trimmed away still counts.
+
 ## [0.2.0-m1] - 2026-11-20 — M1: Profiles, worlds, and project persistence
 
 ### Added
