@@ -25,6 +25,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 019 | [Swapping a live resource safely](lessons/019-swapping-a-live-resource-safely.md) | M1 | make-before-break, command gate, refuse vs queue, window reload, worker pause, mutation check |
 | 020 | [Derived state, and the renderer as a cache](lessons/020-derived-state-and-renderer-cache.md) | M1 | derived state, cache, re-read after write, newest reload wins, focus management, empty state |
 | 021 | [Accessible confirmations: modal dialogs, focus return and live regions](lessons/021-accessible-confirmations.md) | M1 | modal dialog, showModal, focus return, live region, role=status/alert |
+| 022 | [Positive controls: proving a test can see what it says didn't happen](lessons/022-positive-controls.md) | M1 | positive control, vacuous pass, CSP refusal vs network request, testing for absence |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map

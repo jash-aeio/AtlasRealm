@@ -58,3 +58,8 @@ All runs are on this branch (3 commits on d90a819), Windows 11, 2026-11-20.
 ## Open questions
 - None new. The follow-ups from IMPLEMENTATION_STATUS still stand: F5 (projects in archived worlds), L1 invisible-character refusal, the `WorldSummary.name` output type, and the L4 caps on read.
 - Next: `/close-milestone M1` once this PR is merged.
+
+## Review and hand-off (/ship)
+- invariant-reviewer: no violations. It cross-checked every evidence-table row against a real assertion, and checked that the main window uses the default session, so the dev offline recorder covers the renderer too. security-auditor was not run: the change is test-only, with no `src/` changes.
+- Lesson 022 (positive controls) written. "Vacuous pass" was added to the glossary.
+- CHANGELOG not changed: there's no user-visible change.
