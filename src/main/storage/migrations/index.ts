@@ -280,9 +280,89 @@ const m0004TemplateIdNamespaces: Migration = {
   `,
 };
 
+// Building placements and hotbar slots (M2-2 #67, ADR-0023). Both are *representations* of a
+// project, never the project itself (PRODUCT_RULES §3.1): rows here can be deleted freely, and
+// nothing in them can delete, rename or move a project (the project references are RESTRICT).
+// "Unplaced" simply means a project has no placement row, so existing projects start unplaced
+// and no data is copied. The database enforces identity and uniqueness only; footprints,
+// bounds and collisions are application rules (M2-1), because they depend on the world's size
+// and on each appearance's footprint.
+const m0005PlacementsAndHotbar: Migration = {
+  version: 5,
+  name: 'create_building_placements_hotbar_slots',
+  up: `
+    CREATE TABLE building_placements (
+      id            TEXT    PRIMARY KEY CHECK (
+                      id GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
+      world_id      TEXT    NOT NULL REFERENCES worlds (id) ON DELETE RESTRICT,
+      -- The target: a project's building, or a service structure (Guild, Tool Shops, ...).
+      project_id    TEXT,
+      -- Slug shape only; the exact list lives in code (src/common/world/service-kinds.ts).
+      service_kind  TEXT    CHECK (
+                      service_kind IS NULL OR
+                      (length(service_kind) BETWEEN 1 AND 64 AND
+                       service_kind NOT GLOB '*[^a-z0-9-]*')),
+      -- A versioned asset ID such as placeholder.building.2x2 (asset manifest, ADR-0013).
+      appearance_id TEXT    NOT NULL CHECK (
+                      length(appearance_id) BETWEEN 1 AND 100 AND
+                      appearance_id NOT GLOB '*[^a-z0-9.-]*'),
+      -- Grid tile of the footprint's anchor corner, never screen pixels (UI_SPEC §17.1). 0-255
+      -- is only a sanity range (the largest grid is 256); the world's real size is checked in
+      -- application code.
+      tile_x        INTEGER NOT NULL CHECK (tile_x BETWEEN 0 AND 255),
+      tile_y        INTEGER NOT NULL CHECK (tile_y BETWEEN 0 AND 255),
+      rotation      INTEGER NOT NULL DEFAULT 0 CHECK (rotation IN (0, 90, 180, 270)),
+      created_at    TEXT    NOT NULL,
+      updated_at    TEXT    NOT NULL,
+      revision      INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+      -- A project's building stands in the project's own world.
+      FOREIGN KEY (project_id, world_id) REFERENCES projects (id, world_id) ON DELETE RESTRICT,
+      -- Exactly one target.
+      CHECK ((project_id IS NULL) <> (service_kind IS NULL))
+    ) STRICT;
+
+    -- At most one building per project (PRODUCT_RULES §3.1). NULLs never collide in a UNIQUE
+    -- index, so service structures are not limited by it.
+    CREATE UNIQUE INDEX building_placements_one_per_project ON building_placements (project_id);
+    -- The main query path: every building in a world (drawing the map, collision checks).
+    CREATE INDEX building_placements_by_world ON building_placements (world_id);
+
+    -- Ten shortcut slots per world, keys 1-9 and 0 (slot 0 is key 1, slot 9 is key 0).
+    CREATE TABLE hotbar_slots (
+      world_id     TEXT    NOT NULL REFERENCES worlds (id) ON DELETE RESTRICT,
+      slot         INTEGER NOT NULL CHECK (slot BETWEEN 0 AND 9),
+      target_type  TEXT    NOT NULL CHECK (target_type IN ('project', 'service')),
+      project_id   TEXT,
+      service_kind TEXT    CHECK (
+                     service_kind IS NULL OR
+                     (length(service_kind) BETWEEN 1 AND 64 AND
+                      service_kind NOT GLOB '*[^a-z0-9-]*')),
+      created_at   TEXT    NOT NULL,
+      updated_at   TEXT    NOT NULL,
+      revision     INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+      PRIMARY KEY (world_id, slot),
+      -- A pinned project belongs to this world.
+      FOREIGN KEY (project_id, world_id) REFERENCES projects (id, world_id) ON DELETE RESTRICT,
+      -- The filled column matches the target type, and only that one is filled.
+      CHECK (
+        (target_type = 'project' AND project_id IS NOT NULL AND service_kind IS NULL) OR
+        (target_type = 'service' AND service_kind IS NOT NULL AND project_id IS NULL)
+      )
+    ) STRICT;
+
+    -- Each target is pinned at most once per world (ADR-0023). Partial indexes: each covers
+    -- only the rows of its own target type.
+    CREATE UNIQUE INDEX hotbar_slots_one_per_project
+      ON hotbar_slots (world_id, project_id) WHERE project_id IS NOT NULL;
+    CREATE UNIQUE INDEX hotbar_slots_one_per_service
+      ON hotbar_slots (world_id, service_kind) WHERE service_kind IS NOT NULL;
+  `,
+};
+
 export const MIGRATIONS: readonly Migration[] = [
   m0001AppMeta,
   m0002ProfileWorldsProjects,
   m0003GraphEntities,
   m0004TemplateIdNamespaces,
+  m0005PlacementsAndHotbar,
 ];

@@ -47,8 +47,8 @@ Secrets are stored through the vault; the database holds opaque references. Prof
 | `profile_settings` | Local profile ID, display name, avatar config, timezone, preferences |
 | `worlds` | ID, name, theme ID, grid dimensions, camera settings, archived timestamp |
 | `projects` | ID, world ID, name, goal, template ID/version (namespaced ID such as `builtin.generic`, schema v4, changed by ADR-0020), status, settings revision |
-| `building_placements` | ID, world ID, project ID nullable, service kind nullable, appearance ID, tile position, rotation; exactly one target; unique placed project |
-| `hotbar_slots` | World ID, slot 0–9, target type, target ID; unique world/slot |
+| `building_placements` | ID, world ID, project ID nullable (composite FK to the project in the same world), service kind nullable, appearance ID, tile position, rotation (0/90/180/270); exactly one target; unique placed project. Schema v5; changed by ADR-0023 |
+| `hotbar_slots` | World ID, slot 0–9, target type, target as typed columns (project ID with composite FK, or service kind); unique world/slot; each target pinned at most once per world. Schema v5; changed by ADR-0023 |
 | `resource_packages` | ID, kind, version, source, source revision, digest, license metadata, review state |
 | `resource_dependencies` | Package/version, dependency ID/range, requirement kind |
 | `world_resources` | World ID, installed package/version, enablement settings |
