@@ -12,6 +12,11 @@
 // Changes take the revision the caller last read (see guardedUpdate / guardedDelete).
 import { randomUUID } from 'node:crypto';
 
+import {
+  isPlacementRotation,
+  PLACEMENT_ROTATIONS,
+  type PlacementRotation,
+} from '../../../common/world/placement-rules';
 import type { Database } from '../database';
 import { type RepresentationTarget, resolveTarget, targetFromRow } from './representation-target';
 import {
@@ -23,9 +28,9 @@ import {
   text,
 } from './repository-support';
 
-/** Quarter turns, in degrees (UI_SPEC §17.1). Must match the CHECK in migration 5. */
-export const PLACEMENT_ROTATIONS = [0, 90, 180, 270] as const;
-export type PlacementRotation = (typeof PLACEMENT_ROTATIONS)[number];
+// The rotation list lives with the shared placement rules (one list for preview, handler and
+// database). Re-exported so callers of this repository don't need a second import.
+export { PLACEMENT_ROTATIONS, type PlacementRotation };
 
 /** The largest tile index any world can have (grid max 256). Matches migration 5. */
 export const MAX_TILE = 255;
@@ -60,10 +65,6 @@ export interface NewPlacement extends PlacementSpot {
 const APPEARANCE_ID = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const APPEARANCE_ID_MAX_CHARS = 100;
 
-function isRotation(value: number): value is PlacementRotation {
-  return (PLACEMENT_ROTATIONS as readonly number[]).includes(value);
-}
-
 function assertSpot(spot: PlacementSpot): PlacementSpot {
   for (const [field, value] of [
     ['Tile x', spot.tileX],
@@ -76,7 +77,7 @@ function assertSpot(spot: PlacementSpot): PlacementSpot {
       );
     }
   }
-  if (!isRotation(spot.rotation)) {
+  if (!isPlacementRotation(spot.rotation)) {
     throw new RepositoryError('invalid_input', 'Rotation must be 0, 90, 180 or 270.');
   }
   return { tileX: spot.tileX, tileY: spot.tileY, rotation: spot.rotation };
@@ -94,7 +95,7 @@ function assertAppearanceId(value: string): string {
 
 function toPlacement(row: Row): Placement {
   const rotation = integer(row, 'rotation');
-  if (!isRotation(rotation)) throw new Error('Unknown rotation in database.');
+  if (!isPlacementRotation(rotation)) throw new Error('Unknown rotation in database.');
   return {
     id: text(row, 'id'),
     worldId: text(row, 'world_id'),
