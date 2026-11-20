@@ -2,10 +2,12 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-20 · **Branch:** chore/38-m1-acceptance-e2e (M1-11 PR, on main @ d90a819)
+**Last updated:** 2026-11-20 · **Branch:** chore/release-v0.2.0-m1 (M1 release PR, on main @ 8233666)
 
 ## Current milestone
-**M1 — Profiles, worlds, and project persistence** (🚧 in progress: 11 issues, #20 and #29–#38; see `docs/pm/milestones/M1.md`). M1-1 (#20), M1-2 (#29), M1-3 (#30), M1-4 (#31), M1-5 (#32), M1-6 (#33), M1-7 (#34) and M1-8 (#35, PR #50), M1-9 (#36, PR #51) and M1-10 (#37, PR #52) are merged. M1-11 (#38, acceptance E2E + packaged smoke) is in review; it is the last M1 issue.
+**M2 — Isometric world, placement, hotbar, library and Atlas shell** (📋 not planned yet; run `/plan-milestone M2`). `IMP-1 inspect` can run alongside it.
+
+**M1 — Profiles, worlds, and project persistence: ✅ closed 2026-11-20, tag `v0.2.0-m1`.** All 11 issues (#20, #29–#38) merged. Evidence on main @ 8233666: typecheck, lint, format:check pass; unit/integration 693/693, E2E 52/52, packaged E2E 15/15. See `docs/sessions/2026-11-20-m1-close.md`.
 
 **M0 — Foundation and risk spikes: ✅ closed 2026-11-10, tag `v0.1.0-m0`.** Evidence: unit/integration 193/193, E2E 35/35, packaged E2E 9/9 on main @ 2fbf944; CI green. See `docs/sessions/2026-11-10-m0-close.md`.
 
@@ -213,6 +215,7 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- M1 close, 2026-11-20, local Windows 11, on main @ 8233666 (after #38 merged): typecheck, lint, format:check pass. Unit/integration 693/693. E2E 52/52. Packaged E2E 15/15 after a fresh `pnpm package:test`.
 - M1-11, 2026-11-20, local Windows 11, on main @ d90a819: typecheck, lint, format:check pass. Unit/integration 693/693. E2E 52/52 (new: 4 in `m1-acceptance.spec.ts`). Packaged E2E 15/15 after `pnpm package` + `pnpm package:test` on this branch (new: "M1 Checks packaged"; first smoke test now drives first launch). Positive controls for the offline recorders pass in both suites. Reviews: invariant-reviewer found no violations or overclaiming (every evidence-table row checked against a real assertion); security-auditor not run (test-only, no src changes).
 - M1-10, 2026-11-18, local Windows 11, on main @ 20c668e: typecheck, lint, format:check pass. Unit/integration 692/693: the one failure was the known `ipc-router` "huge binary payload" flake, which passed 27/27 on its own (this branch changes no main-process code). E2E 48/48 (new: 5 in `projects.spec.ts`). Screenshots of the list, the create form and the trash dialog were checked by eye. Packaged E2E not run (no packaging or main-process change). Reviews: invariant-reviewer approved with no violations; its independent re-run gave unit 693/693 and E2E 48/48. security-auditor not run (no src/main, preload, contract, file, credential or provider changes).
 - M1-9 after merging main @ 7961f8b (M1-8) and enabling Switch, 2026-11-18: typecheck, lint, format:check pass. Unit/integration 680/681 (session-store now 12); the one failure is the known router flake, which passed 27/27 alone. E2E 43/43, including the profile picker switching both ways (onboarding → Second, Settings → back to Robin, with worlds isolated) and the adapted `profiles.spec.ts` from #35.
@@ -459,7 +462,7 @@
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- #20 and #29–#37 are merged; #38 (M1-11, acceptance E2E) is in review. Next: `/close-milestone M1` once #38 is merged (tag `v0.2.0-m1`), then `/plan-milestone M2`.
+- M1 is closed (`v0.2.0-m1`). Next: run `/plan-milestone M2`. These M1 follow-ups are still open; decide during planning which ones become M2 issues:
   - Open product question F5: projects inside an archived world can still be renamed, re-goaled and restored through the commands. The UI can't reach them yet (only active worlds are listed). Decide when world archiving gets a UI.
   - Follow-up from the #34 security review (L1): refuse Unicode variation selectors (U+E0100–E01EF, runs of U+FE00–FE0F) and invisible fillers (U+3164, U+115F, U+1160, U+FFA0, U+034F) in names and goals, in both the contracts and `repository-support.ts`, before goals reach prompts (M3).
   - Follow-up: `WorldSummary.name` still uses the strict `DisplayName` on output (the same issue as #34 L2, fixed there for projects).
