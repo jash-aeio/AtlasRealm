@@ -17,6 +17,19 @@ import { join, resolve } from 'node:path';
 
 import { type Browser, chromium, expect, type Page, test } from '@playwright/test';
 
+import type { ProjectSummary } from '../../src/common/contracts/project';
+import {
+  createProjectThroughUi,
+  editGoalThroughUi,
+  listProjects,
+  onboardThroughUi,
+  onlyWorldId,
+  renameThroughUi,
+  runEveryLifecycleChange,
+  screen,
+  snapshotFixtures,
+  writeExternalFixtures,
+} from '../e2e/support/m1-ui';
 import { openDeveloperSpikes } from '../e2e/support/onboarding';
 import {
   hasProfileData,
@@ -162,21 +175,98 @@ test('launches from a path with spaces and non-ASCII characters and keeps data a
   const first = await launchPackaged();
   try {
     await expect(first.page).toHaveTitle('Atlas Realm');
+    // A fresh install starts with first launch (M1-9), driven through its real UI here.
+    await onboardThroughUi(first.page, 'Default', 'Packaged Vale');
     await openDeveloperSpikes(first.page);
     await expect(first.page.getByTestId('launch-info')).toHaveText(/^Launch #1 · .* · schema v4$/);
   } finally {
     expect(await quit(first)).toBe(0);
   }
 
-  // node:sqlite works in the packaged app: the second start reads what the first one stored.
+  // node:sqlite works in the packaged app: the second start reads what the first one stored,
+  // and first launch doesn't come back.
   const second = await launchPackaged();
   try {
+    await expect(screen(second.page, 'main')).toBeVisible();
+    await expect(second.page.getByTestId('world-name')).toHaveText('Packaged Vale');
     await openDeveloperSpikes(second.page);
     await expect(second.page.getByTestId('launch-info')).toHaveText(/^Launch #2 · .* · schema v4$/);
   } finally {
     expect(await quit(second)).toBe(0);
   }
   expect(existsSync(requireDatabaseFile(userDataDir))).toBe(true);
+});
+
+/**
+ * Takes the network away from the window and records every attempt to leave app://, then
+ * reloads. An attempt is either a request that left, or one the page CSP (connect-src 'self')
+ * refused before it became a request, which Chromium reports as a console error.
+ * Over CDP this reaches only the renderer: the packaged fuses shut out the main process, so
+ * main-process traffic is covered by the dev test (tests/e2e/m1-acceptance).
+ */
+async function goOfflineRenderer(page: Page): Promise<string[]> {
+  const context = page.context();
+  const attempts: string[] = [];
+  context.on('request', (request) => {
+    if (!request.url().startsWith('app://')) attempts.push(request.url());
+  });
+  context.on('console', (message) => {
+    if (message.text().includes('Content Security Policy')) attempts.push(message.text());
+  });
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.locator('main[data-screen="main"]')).toBeVisible();
+  return attempts;
+}
+
+test('M1 Checks packaged: offline create and reopen, rename identity, external files untouched', async () => {
+  // Same userData as the test above, so the profile and its world already exist.
+  const name = 'Packaged notes';
+  const renamed = 'External Project'; // also the name of the external fixture folders
+  let before: ProjectSummary | undefined;
+  const first = await launchPackaged();
+  try {
+    const { page } = first;
+    const attempts = await goOfflineRenderer(page);
+    await createProjectThroughUi(page, name, 'Made offline');
+    [before] = await listProjects(page, await onlyWorldId(page));
+    await renameThroughUi(page, name, renamed);
+    expect(attempts).toEqual([]);
+  } finally {
+    expect(await quit(first)).toBe(0);
+  }
+  if (before === undefined) throw new Error('no project');
+
+  const fixtures = writeExternalFixtures(userDataDir, renamed);
+  const snapshot = snapshotFixtures(fixtures);
+  const second = await launchPackaged();
+  try {
+    const { page } = second;
+    const attempts = await goOfflineRenderer(page);
+    // Reopened offline after a restart, under its new name and the same identity.
+    const worldId = await onlyWorldId(page);
+    const after = await listProjects(page, worldId);
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({
+      id: before.id,
+      name: renamed,
+      goal: 'Made offline',
+      createdAt: before.createdAt,
+      revision: before.revision + 1,
+    });
+    await editGoalThroughUi(page, renamed, 'Edited after restart');
+    await runEveryLifecycleChange(page, renamed);
+    expect(attempts).toEqual([]);
+    // Positive control: a deliberate attempt to leave app:// is recorded, so the empty lists
+    // above mean something.
+    await page.evaluate(() => fetch('https://example.invalid/control').catch(() => undefined));
+    await expect
+      .poll(() => attempts.some((attempt) => attempt.includes('example.invalid/control')))
+      .toBe(true);
+  } finally {
+    expect(await quit(second)).toBe(0);
+  }
+  expect(snapshotFixtures(fixtures)).toEqual(snapshot);
 });
 
 test('loads the UI and its bundled assets only from app://atlas (works offline)', async () => {
