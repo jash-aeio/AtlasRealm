@@ -34,6 +34,8 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Exhaustiveness check** | Making the compiler prove every case of a union is handled, using `assertNever` in a `switch` default | `src/common/errors/assert-never.ts` |
 | **Formatter** | A tool that rewrites code layout (quotes, spacing) without changing behavior. We use Prettier. | `.prettierrc.json` |
 | **Hook (Claude Code)** | A script the harness runs automatically on events (before a tool runs, at session start…) | `.claude/hooks/` |
+| **Shared validation** | One pure rule used by both the preview (renderer) and the authoritative check (main), so they give the same answer. Main still runs it again itself, because the renderer is not trusted | `src/common/world/placement-rules.ts`, lesson 026 |
+| **Summed-area table** | A grid where each cell stores the total of everything above and to its left, so the total of any rectangle takes four lookups. Auto-place uses it to test "are these tiles all free?" quickly | `placement-rules.ts` |
 | **Idempotent** | Doing it twice has the same effect as doing it once | workflow engine §12.6 |
 | **Installer (NSIS)** | A Setup.exe that copies the app into a folder and adds Start-menu and uninstall entries. NSIS is the installer system electron-builder uses | `electron-builder.yml` |
 | **Invariant** | A rule that must *always* hold (e.g. "removing a building never deletes a project") | `PRODUCT_RULES.md` §3.1 |
@@ -95,6 +97,8 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Sprite** | A single picture (PNG) drawn into the world at a position, e.g. a building or a marker | `grid-scene.ts` |
 | **Footprint** | The grid tiles a sprite covers on the ground, e.g. 2×2. Used for placement and collision, never for permissions | `asset-manifest.json` |
 | **Ground pivot (anchor)** | The point of an image that is placed on the grid. Ours is the south corner of the footprint, the corner nearest the viewer (ADR-0013) | `asset-manifest.ts` |
+| **Placement anchor** | The tile a saved building position names: the north corner of its footprint (lowest x and y). Not the same point as the ground pivot, which sits on the opposite (south) corner (ADR-0024) | `placement-rules.ts` |
+| **Auto-place** | "Find me a spot": searches outward from a start tile in a fixed order and returns the nearest free spot, or nothing if the world is full (UI_SPEC §17.2) | `findNearbyPlot` |
 | **Asset manifest** | One JSON list of every bundled image with its size, pivot, footprint and digest, checked by a schema and tests | `resources/assets/asset-manifest.json` |
 | **Digest (SHA-256)** | A fingerprint of a file's bytes; any change gives a different value, so it detects edited or corrupted files | manifest `sha256` |
 | **Nearest-neighbour sampling** | Scaling an image by copying the closest pixel instead of blending, so pixel art stays crisp | `grid-scene.ts` |

@@ -29,6 +29,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 023 | [Cheap checks first, and what a flaky test is telling you](lessons/023-cheap-checks-first-and-flaky-tests.md) | M2 | flaky test, bounded check, algorithmic-complexity DoS, lower bound, waiting for conditions, mockRestore clears calls |
 | 024 | [Guard clauses in a trusted service: check order and failing closed](lessons/024-guard-clauses-and-check-order.md) | M2 | guard clause, check order, fail closed, information leak, synchronous check-then-act |
 | 025 | [Database uniqueness constraints as invariants](lessons/025-database-constraints-as-invariants.md) | M2 | invariant in the schema, UNIQUE / partial unique index, CHECK, composite foreign key, code check + constraint backstop, NULLs in UNIQUE |
+| 026 | [Shared validation: one rule for the preview and the real check](lessons/026-shared-validation-preview-vs-authority.md) | M2 | shared validation, preview vs authoritative check, pure module, discriminated union result, throw for bugs only |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map
