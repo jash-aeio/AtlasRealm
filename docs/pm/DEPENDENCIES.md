@@ -117,7 +117,7 @@ flowchart LR
 | M2-13 ([#78](https://github.com/jash-aeio/AtlasRealm/issues/78)) | Atlas Connections | M2-11, M2-12 | C | ❌ | `src/renderer/atlas/{ConnectionsGraph,ConnectionsList,LinkForm}.tsx` |
 | M2-14 ([#79](https://github.com/jash-aeio/AtlasRealm/issues/79)) | Comfort settings | M2-6 | B | ❌ | `src/renderer/world/comfort.ts`, `SettingsView.tsx` (comfort section) |
 | M2-15 ([#80](https://github.com/jash-aeio/AtlasRealm/issues/80)) | Acceptance E2E + packaged smoke | all | — | ❌ integrator | `tests/e2e/m2-acceptance.spec.ts`, `tests/e2e-packaged/*` |
-| [#56](https://github.com/jash-aeio/AtlasRealm/issues/56) | Fix flaky timing tests | — | D | ✅ | `tests/integration/{ipc-router,worker-messaging}.test.ts` |
+| [#56](https://github.com/jash-aeio/AtlasRealm/issues/56) | Fix flaky timing tests + IPC payload gate | — | D | ✅ | `tests/integration/{ipc-router,worker-messaging}.test.ts`, `src/main/ipc/router.ts`, `src/common/contracts/json-size.ts` (any later task touching these two goes after #56) |
 | [#57](https://github.com/jash-aeio/AtlasRealm/issues/57) | Packaged offline resource-timing test | — | D | ✅ | `tests/e2e-packaged/packaged.spec.ts` |
 | [#58](https://github.com/jash-aeio/AtlasRealm/issues/58) | CSP: drop `data:` from `img-src` | — | D | ✅ | `src/common/security/csp.ts` |
 | [#59](https://github.com/jash-aeio/AtlasRealm/issues/59) | Archived-world guard (F5) | — | D | ❌ before M2-3 | `src/main/services/project-service.ts` |
