@@ -5,6 +5,10 @@
 // Ownership (ADR-0020): every call names a world and a project. A project that doesn't exist,
 // lives in another world, or belongs to another profile's database is `not_found` all the
 // same, so the answer never reveals which of those it was.
+//
+// Archived worlds (F5, #59): no project in an archived world can be changed; reads still work.
+// The rule lives here, not in the repository, so other main-process code (placement, hotbar)
+// must change projects through this service rather than a ProjectRepository of its own.
 import { z } from 'zod';
 
 import {
@@ -241,7 +245,12 @@ export class ProjectService {
   private mutable(projects: ProjectRepository, worldId: string, projectId: string): Project {
     const project = this.owned(projects, worldId, projectId);
     const world = new WorldRepository(this.db()).get(worldId);
-    if (world !== undefined && world.archivedAt !== null) {
+    // The foreign key makes a missing world impossible today; refuse anyway (fail closed), with
+    // the same answer `owned` gives, so a damaged or restored database can't skip the rule.
+    if (world === undefined) {
+      throw new RepositoryError('not_found', 'No project with that ID in that world.');
+    }
+    if (world.archivedAt !== null) {
       throw new CommandError('invalid_transition', ARCHIVED_WORLD_REFUSAL);
     }
     return project;
