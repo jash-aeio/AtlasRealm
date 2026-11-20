@@ -175,7 +175,7 @@ export function assertGridSize(value: number, field: string): number {
   return value;
 }
 
-function assertRevision(value: number): void {
+export function assertRevision(value: number): void {
   if (!Number.isSafeInteger(value) || value < 1) {
     throw new RepositoryError('invalid_input', 'Expected revision must be a positive integer.');
   }
@@ -205,9 +205,12 @@ export function integer(row: Row, column: string): number {
 
 // --- Expected-revision update -----------------------------------------------------------------
 
+/** Tables with a single-column key. Compile-time constants: they are interpolated into SQL. */
+export type GuardedTable = 'profile_settings' | 'worlds' | 'projects' | 'building_placements';
+
 export interface GuardedUpdate {
   /** Compile-time constants only: they are interpolated into the SQL. */
-  readonly table: 'profile_settings' | 'worlds' | 'projects';
+  readonly table: GuardedTable;
   readonly keyColumn: 'profile_id' | 'id';
   readonly key: string;
   readonly expectedRevision: number;
@@ -243,21 +246,76 @@ export function guardedUpdate(db: Database, update: GuardedUpdate): Row {
       updated_at: update.now.toISOString(),
     });
   if (row !== undefined) return row;
+  explainUnchanged(
+    db,
+    `SELECT revision FROM ${update.table} WHERE ${update.keyColumn} = :key`,
+    { key: update.key },
+    update.expectedRevision,
+    {
+      notFound: `No ${update.table} record with that ID.`,
+      refusal: update.guard?.refusal ?? 'Update refused.',
+    },
+  );
+}
 
-  const current = db
-    .prepare(`SELECT revision FROM ${update.table} WHERE ${update.keyColumn} = ?`)
-    .get(update.key);
+export interface GuardedDelete {
+  readonly table: GuardedTable;
+  readonly keyColumn: 'profile_id' | 'id';
+  readonly key: string;
+  readonly expectedRevision: number;
+}
+
+/**
+ * Deletes a record only if it still has `expectedRevision`, so nobody removes something they
+ * haven't seen in its current state. Returns the deleted row. Like guardedUpdate it is one
+ * statement and explains a refusal (`not_found` or `revision_conflict`) without writing.
+ * Only for representation tables (placements); product records are never deleted.
+ */
+export function guardedDelete(db: Database, target: GuardedDelete): Row {
+  assertRevision(target.expectedRevision);
+  const row = db
+    .prepare(
+      `DELETE FROM ${target.table}
+       WHERE ${target.keyColumn} = :key AND revision = :expected_revision
+       RETURNING *`,
+    )
+    .get({ key: target.key, expected_revision: target.expectedRevision });
+  if (row !== undefined) return row;
+  explainUnchanged(
+    db,
+    `SELECT revision FROM ${target.table} WHERE ${target.keyColumn} = :key`,
+    { key: target.key },
+    target.expectedRevision,
+    { notFound: `No ${target.table} record with that ID.`, refusal: 'Delete refused.' },
+  );
+}
+
+/**
+ * After a guarded write matched no row, finds out why and throws: `not_found` (with
+ * `messages.notFound`) if `selectRevision` (a constant SQL string selecting the record's
+ * `revision`) finds nothing, `revision_conflict` (with the current revision) if the revision
+ * moved on, and otherwise `invalid_transition` with `messages.refusal` (the record exists at
+ * that revision, but a guard said no).
+ */
+export function explainUnchanged(
+  db: Database,
+  selectRevision: string,
+  params: Record<string, SQLInputValue>,
+  expectedRevision: number,
+  messages: { readonly notFound: string; readonly refusal: string },
+): never {
+  const current = db.prepare(selectRevision).get(params);
   if (current === undefined) {
-    throw new RepositoryError('not_found', `No ${update.table} record with that ID.`);
+    throw new RepositoryError('not_found', messages.notFound);
   }
   const currentRevision = integer(current, 'revision');
-  if (currentRevision !== update.expectedRevision) {
+  if (currentRevision !== expectedRevision) {
     throw new RepositoryError(
       'revision_conflict',
       `The record changed since it was read (revision ${String(currentRevision)}, ` +
-        `expected ${String(update.expectedRevision)}). Reload it and try again.`,
+        `expected ${String(expectedRevision)}). Reload it and try again.`,
       currentRevision,
     );
   }
-  throw new RepositoryError('invalid_transition', update.guard?.refusal ?? 'Update refused.');
+  throw new RepositoryError('invalid_transition', messages.refusal);
 }
