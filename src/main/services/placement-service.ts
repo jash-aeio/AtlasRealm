@@ -31,6 +31,9 @@ import type { ProjectService } from './project-service';
 export const ARCHIVED_WORLD_PLACEMENT_REFUSAL =
   'This world is archived. Restore it before changing its buildings.';
 
+/** Why move and remove refuse a service structure for now (ADR-0025). */
+export const SERVICE_BUILDING_REFUSAL = "Service buildings can't be changed yet.";
+
 /** Fixed, user-safe text per rules answer. The details travel in `placement`. */
 export const PLACEMENT_REFUSAL_MESSAGES: Record<PlacementRefusal['reason'], string> = {
   out_of_bounds: 'The building does not fit inside the world there.',
@@ -107,10 +110,7 @@ export class PlacementService {
   ): PlacementSummary {
     const world = this.mutableWorld(input.worldId);
     const placements = this.placements();
-    const placement = placements.get(input.placementId);
-    if (placement?.worldId !== world.id) {
-      throw new RepositoryError('not_found', 'No building with that ID in this world.');
-    }
+    const placement = this.projectBuilding(placements, world, input.placementId);
     // A stale caller first hears that its view is out of date, before any rules answer
     // computed from tiles it hasn't seen. The guarded write checks the revision again.
     if (placement.revision !== input.expectedRevision) {
@@ -139,9 +139,27 @@ export class PlacementService {
     readonly expectedRevision: number;
   }): PlacementSummary {
     const world = this.mutableWorld(input.worldId);
+    const placements = this.placements();
+    this.projectBuilding(placements, world, input.placementId);
     const projects = new ProjectRepository(this.db(), this.now);
-    const removed = this.placements().remove(world.id, input.placementId, input.expectedRevision);
+    const removed = placements.remove(world.id, input.placementId, input.expectedRevision);
     return this.summary(removed, projects);
+  }
+
+  /**
+   * The placement, which must be in this world and stand for a project. Service structures
+   * can't be moved or removed yet (default deny, user decision 2026-11-21, #68 security L2):
+   * nothing can put one back over IPC. The issue that seeds them decides how they may change.
+   */
+  private projectBuilding(placements: PlacementRepository, world: World, id: string): Placement {
+    const placement = placements.get(id);
+    if (placement?.worldId !== world.id) {
+      throw new RepositoryError('not_found', 'No building with that ID in this world.');
+    }
+    if (placement.target.type !== 'project') {
+      throw new CommandError('invalid_transition', SERVICE_BUILDING_REFUSAL);
+    }
+    return placement;
   }
 
   // Asked for on every call, so a profile switch (M1-8) is picked up immediately.

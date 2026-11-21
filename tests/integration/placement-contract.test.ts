@@ -33,6 +33,7 @@ import { ActiveProfile } from '../../src/main/profiles/active-profile';
 import {
   ARCHIVED_WORLD_PLACEMENT_REFUSAL,
   PlacementService,
+  SERVICE_BUILDING_REFUSAL,
 } from '../../src/main/services/placement-service';
 import { ProjectService } from '../../src/main/services/project-service';
 import { openStartupProfile, type StartupProfile } from '../../src/main/storage/profiles/startup';
@@ -485,5 +486,36 @@ describe('archive and trash remove the building in the same transaction (user de
     expect(() => projects.archive(lifecycle(project))).toThrow(/refused by test/);
     expect(() => projects.trash(lifecycle(project))).toThrow(/refused by test/);
     expect(snapshot()).toEqual(before);
+  });
+});
+
+describe('service structures (default deny, #68 security L2)', () => {
+  it('refuses to move or remove a service building and changes nothing', async () => {
+    const guild = new PlacementRepository(opened.db).create({
+      worldId: world.id,
+      target: { type: 'service', id: 'agents-guild' },
+      appearanceId: 'placeholder.building.2x2',
+      tileX: 0,
+      tileY: 0,
+      rotation: 0,
+    });
+    const ref = { worldId: world.id, placementId: guild.id, expectedRevision: guild.revision };
+    const before = snapshot();
+    const attempts = {
+      move: await move({ ...ref, ...spot(10, 10) }),
+      remove: await remove(ref),
+    };
+    for (const [command, result] of Object.entries(attempts)) {
+      expect(result, command).toEqual({
+        ok: false,
+        error: { code: 'invalid_transition', message: SERVICE_BUILDING_REFUSAL },
+      });
+    }
+    expect(snapshot()).toEqual(before);
+    // Still listed, as a service with no project status.
+    await expect(list({ worldId: world.id })).resolves.toMatchObject({
+      ok: true,
+      data: { placements: [{ id: guild.id, target: { type: 'service' }, projectStatus: null }] },
+    });
   });
 });

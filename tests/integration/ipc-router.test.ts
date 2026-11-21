@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   CommandError,
   createCommandHandler,
+  MAX_BLOCKING_IDS,
   MAX_PAYLOAD_BYTES,
   trustRendererEntry,
   type InvokeSender,
@@ -217,6 +218,25 @@ describe('createCommandHandler', () => {
         placement: { reason: 'overlaps', blockingIds: ['b1', 'b2'] },
       },
     });
+  });
+});
+
+describe('placement_blocked blocking IDs', () => {
+  it('caps the blocking IDs sent to the renderer at MAX_BLOCKING_IDS', async () => {
+    const many = Array.from({ length: MAX_BLOCKING_IDS + 10 }, (_, i) => `b${String(i)}`);
+    const handle = createCommandHandler(
+      echo,
+      () => {
+        throw new CommandError('placement_blocked', 'Another building is in the way.', undefined, {
+          placement: { reason: 'overlaps', blockingIds: many },
+        });
+      },
+      isTrusted,
+    );
+    const result = await handle(trustedSender, { text: 'hi' });
+    expect(!result.ok && result.error.placement?.blockingIds).toEqual(
+      many.slice(0, MAX_BLOCKING_IDS),
+    );
   });
 });
 

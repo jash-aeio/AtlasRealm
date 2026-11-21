@@ -22,6 +22,13 @@ import type {
 import { checkPlainJson, jsonByteLength } from '../../common/contracts/json-size';
 import { isAppOrigin } from '../bootstrap/app-origin';
 
+/**
+ * At most this many blocking building IDs travel with a `placement_blocked` error. A 4×4
+ * footprint can overlap at most 16 buildings; the cap only matters for a damaged world, and is
+ * explicit because error replies skip output validation (#68 security L1).
+ */
+export const MAX_BLOCKING_IDS = 64;
+
 /** Largest accepted payload, measured as UTF-8 JSON. Generous for commands, tiny for abuse. */
 export const MAX_PAYLOAD_BYTES = 64 * 1024;
 
@@ -157,7 +164,10 @@ export function createCommandHandler<I extends z.ZodType, O extends z.ZodType>(
             ...(placement === undefined
               ? {}
               : {
-                  placement: { reason: placement.reason, blockingIds: [...placement.blockingIds] },
+                  placement: {
+                    reason: placement.reason,
+                    blockingIds: placement.blockingIds.slice(0, MAX_BLOCKING_IDS),
+                  },
                 }),
           },
         };
