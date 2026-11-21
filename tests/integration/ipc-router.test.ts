@@ -219,6 +219,44 @@ describe('createCommandHandler', () => {
       },
     });
   });
+
+  it('passes the occupant along with slot_occupied, and nothing else', async () => {
+    const handle = createCommandHandler(
+      echo,
+      () => {
+        const hotbar = {
+          slot: 2,
+          occupant: {
+            target: { type: 'project', id: 'p1', name: 'Secret plan' },
+            projectStatus: 'archived',
+            revision: 4,
+          },
+          secret: 'x',
+        } as const;
+        throw new CommandError(
+          'slot_occupied',
+          'That hotbar slot holds something else.',
+          undefined,
+          {
+            hotbar,
+          },
+        );
+      },
+      isTrusted,
+    );
+
+    await expect(handle(trustedSender, { text: 'hi' })).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'slot_occupied',
+        message: 'That hotbar slot holds something else.',
+        hotbar: {
+          slot: 2,
+          occupant: { target: { type: 'project', id: 'p1' }, projectStatus: 'archived' },
+        },
+      },
+    });
+  });
 });
 
 describe('placement_blocked blocking IDs', () => {

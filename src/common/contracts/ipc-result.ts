@@ -13,6 +13,7 @@ export type IpcErrorCode =
   | 'invalid_transition' // the record's state doesn't allow this change
   | 'limit_reached' // a bounded list (profiles, worlds) is full
   | 'placement_blocked' // the building can't stand there; see `placement` for why (ADR-0025)
+  | 'slot_occupied' // the hotbar slot holds another target; see `hotbar` (ADR-0026)
   // Profile switching (M1-8 #35, ADR-0014).
   | 'profile_switching' // a switch is under way; commands are refused, not queued
   | 'profile_unavailable'; // the target profile could not be opened; the current one stays active
@@ -24,6 +25,19 @@ export interface PlacementRefusal {
   readonly blockingIds: readonly string[];
 }
 
+/**
+ * What a hotbar slot really holds, for `slot_occupied` (M2-4, ADR-0026): the slot was filled
+ * and no `replace` was given, or it holds something other than the expected target.
+ */
+export interface HotbarSlotConflict {
+  readonly slot: number;
+  readonly occupant: {
+    readonly target: { readonly type: 'project' | 'service'; readonly id: string };
+    /** The pinned project's status; null for a service. */
+    readonly projectStatus: 'active' | 'archived' | 'trashed' | null;
+  };
+}
+
 export interface IpcError {
   readonly code: IpcErrorCode;
   readonly message: string;
@@ -31,6 +45,8 @@ export interface IpcError {
   readonly currentRevision?: number;
   /** Only for `placement_blocked`. */
   readonly placement?: PlacementRefusal;
+  /** Only for `slot_occupied`. */
+  readonly hotbar?: HotbarSlotConflict;
 }
 
 export type IpcResult<T> =

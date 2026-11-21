@@ -14,6 +14,7 @@ import type { z } from 'zod';
 
 import type { Channel } from '../../common/contracts/channels';
 import type {
+  HotbarSlotConflict,
   IpcError,
   IpcErrorCode,
   IpcResult,
@@ -55,6 +56,7 @@ export type CommandErrorCode = Extract<
   | 'invalid_transition'
   | 'limit_reached'
   | 'placement_blocked'
+  | 'slot_occupied'
   | 'profile_switching'
   | 'profile_unavailable'
 >;
@@ -63,6 +65,8 @@ export type CommandErrorCode = Extract<
 export interface CommandErrorDetails {
   /** Only for `placement_blocked`. */
   readonly placement?: PlacementRefusal;
+  /** Only for `slot_occupied`. */
+  readonly hotbar?: HotbarSlotConflict;
 }
 
 /**
@@ -151,7 +155,7 @@ export function createCommandHandler<I extends z.ZodType, O extends z.ZodType>(
       return { ok: true, data };
     } catch (error) {
       if (error instanceof CommandError) {
-        const { placement } = error.details;
+        const { placement, hotbar } = error.details;
         return {
           ok: false,
           error: {
@@ -167,6 +171,17 @@ export function createCommandHandler<I extends z.ZodType, O extends z.ZodType>(
                   placement: {
                     reason: placement.reason,
                     blockingIds: placement.blockingIds.slice(0, MAX_BLOCKING_IDS),
+                  },
+                }),
+            ...(hotbar === undefined
+              ? {}
+              : {
+                  hotbar: {
+                    slot: hotbar.slot,
+                    occupant: {
+                      target: { type: hotbar.occupant.target.type, id: hotbar.occupant.target.id },
+                      projectStatus: hotbar.occupant.projectStatus,
+                    },
                   },
                 }),
           },
