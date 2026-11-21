@@ -45,6 +45,12 @@ const api: AtlasApi = {
     trash: (input) => ipcRenderer.invoke(Channels.projectTrash, input),
     restoreFromTrash: (input) => ipcRenderer.invoke(Channels.projectRestoreFromTrash, input),
   },
+  placement: {
+    list: (input) => ipcRenderer.invoke(Channels.placementList, input),
+    create: (input) => ipcRenderer.invoke(Channels.placementCreate, input),
+    move: (input) => ipcRenderer.invoke(Channels.placementMove, input),
+    remove: (input) => ipcRenderer.invoke(Channels.placementRemove, input),
+  },
 };
 
 contextBridge.exposeInMainWorld('atlas', api);

@@ -36,6 +36,9 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Hook (Claude Code)** | A script the harness runs automatically on events (before a tool runs, at session start…) | `.claude/hooks/` |
 | **Shared validation** | One pure rule used by both the preview (renderer) and the authoritative check (main), so they give the same answer. Main still runs it again itself, because the renderer is not trusted | `src/common/world/placement-rules.ts`, lesson 026 |
 | **Summed-area table** | A grid where each cell stores the total of everything above and to its left, so the total of any rectangle takes four lookups. Auto-place uses it to test "are these tiles all free?" quickly | `placement-rules.ts` |
+| **Trust boundary** | The line where data crosses from code we don't control (the renderer) into code we do (main). Data crossing it is checked, and anything the main process can look up itself is never taken from the request | `placement-service.ts`, lesson 027 |
+| **Derived data** | A value that follows from other data, like a building's footprint from its art. Look it up from the trusted source instead of accepting it as input | `building-appearances.ts`, ADR-0025 |
+| **Negative control** | Breaking the code on purpose to check that a test really fails, so a passing test means something | lesson 027 |
 | **Idempotent** | Doing it twice has the same effect as doing it once | workflow engine §12.6 |
 | **Installer (NSIS)** | A Setup.exe that copies the app into a folder and adds Start-menu and uninstall entries. NSIS is the installer system electron-builder uses | `electron-builder.yml` |
 | **Invariant** | A rule that must *always* hold (e.g. "removing a building never deletes a project") | `PRODUCT_RULES.md` §3.1 |

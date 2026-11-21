@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   CommandError,
   createCommandHandler,
+  MAX_BLOCKING_IDS,
   MAX_PAYLOAD_BYTES,
   trustRendererEntry,
   type InvokeSender,
@@ -195,6 +196,47 @@ describe('createCommandHandler', () => {
       ok: false,
       error: { code: 'revision_conflict', message: 'Changed elsewhere.', currentRevision: 7 },
     });
+  });
+
+  it('passes the placement refusal along with placement_blocked, and nothing else', async () => {
+    const handle = createCommandHandler(
+      echo,
+      () => {
+        const placement = { reason: 'overlaps', blockingIds: ['b1', 'b2'], secret: 'x' } as const;
+        throw new CommandError('placement_blocked', 'Another building is in the way.', undefined, {
+          placement,
+        });
+      },
+      isTrusted,
+    );
+
+    await expect(handle(trustedSender, { text: 'hi' })).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'placement_blocked',
+        message: 'Another building is in the way.',
+        placement: { reason: 'overlaps', blockingIds: ['b1', 'b2'] },
+      },
+    });
+  });
+});
+
+describe('placement_blocked blocking IDs', () => {
+  it('caps the blocking IDs sent to the renderer at MAX_BLOCKING_IDS', async () => {
+    const many = Array.from({ length: MAX_BLOCKING_IDS + 10 }, (_, i) => `b${String(i)}`);
+    const handle = createCommandHandler(
+      echo,
+      () => {
+        throw new CommandError('placement_blocked', 'Another building is in the way.', undefined, {
+          placement: { reason: 'overlaps', blockingIds: many },
+        });
+      },
+      isTrusted,
+    );
+    const result = await handle(trustedSender, { text: 'hi' });
+    expect(!result.ok && result.error.placement?.blockingIds).toEqual(
+      many.slice(0, MAX_BLOCKING_IDS),
+    );
   });
 });
 

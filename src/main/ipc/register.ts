@@ -6,11 +6,23 @@ import type { z } from 'zod';
 import { type ActiveProfile, refuseWhileSwitching } from '../profiles/active-profile';
 import { ProfileService } from '../profiles/profile-service';
 import type { WorkerBridge } from '../runtime-bridge/worker-bridge';
+import { PlacementService } from '../services/placement-service';
 import { ProfileSession } from '../services/profile-session';
 import { ProjectService } from '../services/project-service';
 import type { TemplateCatalog } from '../templates/catalog';
+import { BuildingAppearances } from '../world/building-appearances';
 import { appLaunchInfoCommand, createLaunchInfoHandler } from './commands/app-launch-info';
 import { appPingCommand, handleAppPing } from './commands/app-ping';
+import {
+  createPlacementCreateHandler,
+  createPlacementListHandler,
+  createPlacementMoveHandler,
+  createPlacementRemoveHandler,
+  placementCreateCommand,
+  placementListCommand,
+  placementMoveCommand,
+  placementRemoveCommand,
+} from './commands/placement';
 import {
   createProjectArchiveHandler,
   createProjectCreateHandler,
@@ -78,6 +90,8 @@ export function registerIpcHandlers(
   const profiles = new ProfileService(activeProfile);
   // Uses the stub "active runs" probe until the run runtime exists (M4).
   const projects = new ProjectService(activeProfile, templates);
+  // Footprints come from the bundled manifest, parsed once here; a broken one fails startup.
+  const placements = new PlacementService(activeProfile, projects, BuildingAppearances.bundled());
   const session = new ProfileSession({ active: activeProfile, worker, reloadRenderer });
 
   // Every command is refused while a profile switch is under way. Handlers that are already
@@ -122,4 +136,8 @@ export function registerIpcHandlers(
   handle(projectRestoreCommand, createProjectRestoreHandler(projects));
   handle(projectTrashCommand, createProjectTrashHandler(projects));
   handle(projectRestoreFromTrashCommand, createProjectRestoreFromTrashHandler(projects));
+  handle(placementListCommand, createPlacementListHandler(placements));
+  handle(placementCreateCommand, createPlacementCreateHandler(placements));
+  handle(placementMoveCommand, createPlacementMoveHandler(placements));
+  handle(placementRemoveCommand, createPlacementRemoveHandler(placements));
 }
