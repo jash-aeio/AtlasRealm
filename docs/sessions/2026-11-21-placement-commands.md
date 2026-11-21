@@ -35,8 +35,14 @@ Add IPC commands that list, place, move and remove a project's building. The com
 - Slice 4 (`9f11d16`): `ProjectService.archive/trash` run the status change and `removeByProject` in one `withTransaction` (5 more tests). A temporary trigger that makes the delete fail shows both writes roll back together. Negative control: with the transaction removed, that test fails.
 - Slice 5 (`126660f`): E2E `tests/e2e/placement.spec.ts` in the built app. The preload-shape test now lists `placement`.
 - Slice 6: ADR-0025, the ARCHITECTURE §16.1 row, the status Decisions entry.
+- /ship reviews:
+  - invariant-reviewer: no violations. It noted that `removeByProject` is restricted only by a comment, not by the type system. That is pre-existing and recorded as a known limit.
+  - security-auditor: approved, with two Low findings, both fixed in `fcfc324`:
+    - L1: the router now caps `blockingIds` at 64. The `(world_id, service_kind)` unique index is handed to the issue that seeds service buildings.
+    - L2: move and remove refuse service structures. This was a user decision via AskUserQuestion, "projects only for now".
+- Lesson 027 (trust boundaries for derived data); glossary: trust boundary, derived data, negative control.
 - The user wrote no code this session (project rule: Claude writes all code). The user made the four decisions above.
 
 ## Open questions
 - **Handoff to M2-6 #71:** draw a building whose `projectStatus` is `archived` differently, and offer "Unarchive" when it is clicked (user, 2026-11-21).
-- Service structures can be listed, moved and removed, but not created yet. Which issue adds that?
+- Which issue seeds service buildings? It must decide how they may be moved or removed (refused for now) and add a unique index on `(world_id, service_kind)`.

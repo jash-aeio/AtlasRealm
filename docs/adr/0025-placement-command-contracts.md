@@ -34,13 +34,14 @@ M2-3 exposes building placements to the renderer: list, create, move, remove (AR
 - **Lost art fails closed as 4×4**, with one warning per appearance ID (quoted and cut short, so a damaged row can't forge log lines). `placement.list` reports that 4×4 as the building's `footprint`.
 - **Archived projects may be placed** (user, 2026-11-21). Each listed placement carries `projectStatus`, so the world can draw an archived project's building differently. The different look, and offering "Unarchive" when it is clicked, are renderer work for M2-6 #71.
 - **Archive and trash remove the building in the same transaction** as the status change (`ProjectService.withoutBuilding` → `withTransaction` → `PlacementRepository.removeByProject`). A refused change keeps the building; restore leaves the project unplaced.
+- `placement_blocked` carries at most `MAX_BLOCKING_IDS` (64) blocking IDs; error replies skip output validation, so the router caps them.
 - The rules check and the write run in one synchronous call on the single writer connection, with `occupied` read from the database in that call. `placement.list` is not paged; it is bounded by `MAX_PLACEMENTS_PER_WORLD` (project cap + service kinds).
 
 ## Consequences
 - M2-4 can add `slot_occupied` with its occupant using the same `CommandErrorDetails` pattern.
 - M2-6/M2-7 call `placement.list` once per world and draw `footprint` as returned; they must handle `projectStatus: 'archived'` (different look, unarchive on click).
 - When an appearance picker arrives, add an optional `appearanceId` to `placement.create` (and probably a `placement.setAppearance`), validated against `building` manifest entries.
-- Service structures can be listed, moved and removed, but not created yet; a later issue adds that.
+- Service structures are listed (with `projectStatus: null`) but cannot be created, moved or removed over IPC yet: move and remove refuse them with `invalid_transition` (default deny, user decision 2026-11-21 after the security review). The issue that seeds service buildings decides how they may change and should add a unique index on `(world_id, service_kind)` so `MAX_PLACEMENTS_PER_WORLD` is enforced, not assumed.
 - Signals to revisit: worlds with more buildings than one list reply should carry; a need to place trashed projects; reserved areas getting a real definition (the rules already support them; the service passes `[]`).
 
 ## Learning note
