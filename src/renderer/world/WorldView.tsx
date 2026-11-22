@@ -1,14 +1,19 @@
 // The product world on the main screen (M2-6 #71, UI_SPEC §6.2 / §17): the world's saved
 // buildings, drawn from `placement.list` with the bundled placeholder art.
 //
-// A pure view. The buildings come from the placements store, the selection from the project
-// selection store, and nothing here writes data: a click only selects, a double-click only asks
-// the parent to open the project's details. The camera moves only when the user pans, zooms or
-// resets, never because something was selected.
-import { useEffect, useMemo, useRef } from 'react';
+// The buildings come from the placements store and the selection from the project selection
+// store. Normally nothing here writes data: a click only selects, a double-click only asks the
+// parent to open the project's details. While the placement tool (M2-7) is open, the pointer
+// drives its preview instead and letting go of the left button commits, so a click places and a
+// drag moves; every change goes through the tool's placement commands. The camera moves only
+// when the user pans, zooms or resets, never because something was selected or placed.
+import { useEffect, useMemo, useRef, type PointerEvent } from 'react';
 
 import type { PlacementSummary } from '../../common/contracts/placement';
 import type { WorldSummary } from '../../common/contracts/world';
+import { DEFAULT_BUILDING_APPEARANCE } from '../../common/world/building-appearance';
+import { footprintRect } from '../../common/world/placement-rules';
+import { useShortcut } from '../app/ShortcutLayer';
 import type { ProjectSelection } from '../state/selection';
 import { useStore } from '../state/use-store';
 import {
@@ -18,7 +23,9 @@ import {
   type PlacedBuilding,
   type WorldBuilding,
 } from './buildings';
-import type { WorldScene } from './grid-scene';
+import type { ScenePlacementPreview, WorldScene } from './grid-scene';
+import { previewOf, type PlacementTool } from './placement-tool';
+import { PlacementToolBar } from './PlacementToolBar';
 import { DEFAULT_TILE, type MapSize } from './projection';
 import { useWorldScene } from './use-world-scene';
 import { buildingSprites } from './world-assets';
@@ -29,6 +36,8 @@ interface WorldViewProps {
   readonly world: WorldSummary;
   readonly placements: WorldPlacements;
   readonly selection: ProjectSelection;
+  /** The placement tool for this world (M2-7). */
+  readonly tool: PlacementTool;
   /** Double-click on a project's building: show that project's details. */
   readonly onOpenProject: (projectId: string) => void;
 }
@@ -65,7 +74,7 @@ function plural(count: number, one: string, many: string): string {
   return `${String(count)} ${count === 1 ? one : many}`;
 }
 
-export function WorldView({ world, placements, selection, onOpenProject }: WorldViewProps) {
+export function WorldView({ world, placements, selection, tool, onOpenProject }: WorldViewProps) {
   const map = useMemo<MapSize>(
     () => ({ columns: world.gridWidth, rows: world.gridHeight }),
     [world.gridWidth, world.gridHeight],
@@ -80,9 +89,34 @@ export function WorldView({ world, placements, selection, onOpenProject }: World
     selectedProjectId === null
       ? null
       : (buildings.find((b) => b.projectId === selectedProjectId) ?? null);
+  const toolState = useStore(tool.store);
+  const toolActive = toolState.mode.kind !== 'idle';
+  const preview = useMemo(
+    () => previewOf(toolState, world, state.placements),
+    [toolState, world, state.placements],
+  );
+  const scenePreview = useMemo<ScenePlacementPreview | null>(() => {
+    if (preview === null) return null;
+    const moving =
+      preview.movingPlacementId === null
+        ? undefined
+        : state.placements.find((p) => p.id === preview.movingPlacementId);
+    return {
+      rect: footprintRect({ ...preview.anchor, rotation: preview.rotation }, preview.footprint),
+      fits: preview.check.kind === 'ok',
+      label: preview.label,
+      appearanceId: moving?.appearanceId ?? DEFAULT_BUILDING_APPEARANCE,
+      fadedPlacementId: preview.movingPlacementId,
+    };
+  }, [preview, state.placements]);
   // The scene is created asynchronously, so keep the latest values where its init can read them.
   const buildingsRef = useRef<readonly WorldBuilding[]>(buildings);
   const selectedRef = useRef<string | null>(selectedBuilding?.placementId ?? null);
+  const previewRef = useRef<ScenePlacementPreview | null>(scenePreview);
+  /** A left press that started on the map while the tool was open: its release commits. */
+  const toolPressRef = useRef(false);
+  /** The click that follows a tool release must not also select or clear the selection. */
+  const swallowClickRef = useRef(false);
 
   const sectionRef = useRef<HTMLElement>(null);
 
@@ -91,6 +125,7 @@ export function WorldView({ world, placements, selection, onOpenProject }: World
     onReady(scene) {
       scene.setBuildings(buildingsRef.current);
       scene.setSelectedBuilding(selectedRef.current);
+      scene.setPlacementPreview(previewRef.current);
       reportDrawn(sectionRef.current, scene);
     },
     onCamera(scene) {
@@ -113,6 +148,74 @@ export function WorldView({ world, placements, selection, onOpenProject }: World
     selectedRef.current = selectedPlacementId;
     sceneRef.current?.setSelectedBuilding(selectedPlacementId);
   }, [selectedPlacementId, sceneRef]);
+
+  useEffect(() => {
+    previewRef.current = scenePreview;
+    sceneRef.current?.setPlacementPreview(scenePreview);
+  }, [scenePreview, sceneRef]);
+
+  // Keyboard equivalents while the tool is open (UI_SPEC §6.6). The arrows follow the grid's
+  // axes; the tool bar shows the tile. Escape cancels (UI_SPEC §6.2) and saves nothing.
+  useShortcut(
+    'ArrowLeft',
+    () => {
+      tool.nudge(-1, 0);
+    },
+    { enabled: toolActive },
+  );
+  useShortcut(
+    'ArrowRight',
+    () => {
+      tool.nudge(1, 0);
+    },
+    { enabled: toolActive },
+  );
+  useShortcut(
+    'ArrowUp',
+    () => {
+      tool.nudge(0, -1);
+    },
+    { enabled: toolActive },
+  );
+  useShortcut(
+    'ArrowDown',
+    () => {
+      tool.nudge(0, 1);
+    },
+    { enabled: toolActive },
+  );
+  useShortcut('Escape', tool.cancel, { enabled: toolActive });
+
+  function toolPointerMove(event: PointerEvent<HTMLDivElement>) {
+    view.hostHandlers.onPointerMove(event);
+    if (!toolActive) return;
+    const tile = view.tileOf(event);
+    if (tile !== null) tool.pointAt(tile);
+  }
+
+  function toolPointerDown(event: PointerEvent<HTMLDivElement>) {
+    view.hostHandlers.onPointerDown(event);
+    if (!toolActive || event.button !== 0) return;
+    toolPressRef.current = true;
+    // Keep receiving the release even if the drag leaves the map area.
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function toolPointerUp(event: PointerEvent<HTMLDivElement>) {
+    view.hostHandlers.onPointerUp(event);
+    if (event.button !== 0 || !toolPressRef.current) return;
+    toolPressRef.current = false;
+    swallowClickRef.current = true;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (!toolActive) return;
+    // Let go off the map: nothing is saved and the tool stays open.
+    const tile = view.tileOf(event);
+    if (tile === null) return;
+    tool.pointAt(tile);
+    void tool.commit();
+  }
 
   /** The project building under a pointer event, or null (ground, service, no scene yet). */
   function projectAt(event: { clientX: number; clientY: number }): string | null {
@@ -146,13 +249,22 @@ export function WorldView({ world, placements, selection, onOpenProject }: World
       data-selected-placement={selectedPlacementId ?? undefined}
     >
       <WorldToolbar heading={world.name} headingId="world-view-heading" world={view} />
+      <PlacementToolBar tool={tool} state={toolState} preview={preview} />
 
       <div
         ref={hostRef}
         className="world-canvas"
         data-testid="world-view-host"
         {...view.hostHandlers}
+        data-tool={toolActive ? toolState.mode.kind : undefined}
+        onPointerMove={toolPointerMove}
+        onPointerDown={toolPointerDown}
+        onPointerUp={toolPointerUp}
         onClick={(event) => {
+          if (swallowClickRef.current || toolActive) {
+            swallowClickRef.current = false;
+            return;
+          }
           // UI_SPEC §6.2: click a building to select its project; click the ground to clear.
           if (view.worldPointOf(event) === null) return;
           const projectId = projectAt(event);
@@ -160,6 +272,7 @@ export function WorldView({ world, placements, selection, onOpenProject }: World
           else selection.select(projectId);
         }}
         onDoubleClick={(event) => {
+          if (toolActive) return;
           const projectId = projectAt(event);
           if (projectId !== null) onOpenProject(projectId);
         }}
@@ -196,7 +309,9 @@ export function WorldView({ world, placements, selection, onOpenProject }: World
       </p>
       <p className="muted" data-testid="world-view-hover">
         {hover === null
-          ? 'Hover the map to see a tile. Click a building to select its project.'
+          ? toolActive
+            ? 'Move the pointer over the map to choose a spot.'
+            : 'Hover the map to see a tile. Click a building to select its project.'
           : `Tile ${String(hover.gx)}, ${String(hover.gy)}${hoveredBuilding === null ? '' : ' · building'}`}
       </p>
       {state.status === 'ready' && buildings.length === 0 && (

@@ -1,10 +1,15 @@
 // One project in the list: its name, status, template and goal as text, plus the M1 actions
 // for its status. Renaming and editing the goal open small forms in place. Archive, restore and
 // trash first show a confirmation of what happens and what does not.
+//
+// The map actions (M2-7 #72) are the list equivalent of the placement tool (UI_SPEC §6.6):
+// "Place on map" opens the tool, "Auto-place" places without the map, and "Remove from map"
+// confirms that the project, its files and its runs are kept (§22.2 #3).
 import { useId, useRef, useState } from 'react';
 
 import type { ProjectSummary } from '../../common/contracts/project';
 import { nameProblem } from '../onboarding/form-messages';
+import { REMOVE_FROM_MAP_COPY, type PlacementActions } from '../world/placement-tool';
 import { ConfirmDialog } from './ConfirmDialog';
 import type {
   LifecycleAction,
@@ -36,6 +41,8 @@ interface ProjectItemProps {
   readonly fallbackFocus: () => void;
   /** Whether a building represents it in the world; undefined while that is unknown. */
   readonly placed?: boolean;
+  /** Place, auto-place and remove its building. Without it the row shows no map actions. */
+  readonly placementActions?: PlacementActions;
 }
 
 /** The template's name when it is still available, else its stored ID and version. */
@@ -61,6 +68,7 @@ export function ProjectItem({
   onMessage,
   fallbackFocus,
   placed,
+  placementActions,
 }: ProjectItemProps) {
   const headingId = `project-${project.id}`;
   const renameButton = useRef<HTMLButtonElement>(null);
@@ -69,6 +77,26 @@ export function ProjectItem({
   const [pending, setPending] = useState<LifecycleAction | null>(null);
   const [busy, setBusy] = useState(false);
   const editable = project.status !== 'trashed';
+  const [removing, setRemoving] = useState(false);
+  // A trashed project can't be placed (ADR-0025) and has no building; archived ones can be.
+  const mapActions = editable && placed !== undefined ? placementActions : undefined;
+  const target = { id: project.id, name: project.name };
+
+  async function autoPlace() {
+    if (mapActions === undefined) return;
+    setBusy(true);
+    onMessage(await mapActions.autoPlace(target));
+    setBusy(false);
+  }
+
+  async function removeFromMap() {
+    if (mapActions === undefined) return;
+    setBusy(true);
+    const result = await mapActions.remove(target);
+    setBusy(false);
+    setRemoving(false);
+    onMessage(result);
+  }
 
   function stopEditing(which: Exclude<Editing, null>) {
     setEditing(null);
@@ -175,7 +203,49 @@ export function ProjectItem({
             {LIFECYCLE_COPY[action].button}
           </button>
         ))}
+        {mapActions !== undefined && placed === false && (
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                mapActions.place(target);
+              }}
+            >
+              Place on map
+            </button>
+            <button type="button" disabled={busy} onClick={() => void autoPlace()}>
+              Auto-place
+            </button>
+          </>
+        )}
+        {mapActions !== undefined && placed === true && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setRemoving(true);
+            }}
+          >
+            {REMOVE_FROM_MAP_COPY.button}
+          </button>
+        )}
       </div>
+
+      {removing && (
+        <ConfirmDialog
+          title={REMOVE_FROM_MAP_COPY.title(project.name)}
+          happens={REMOVE_FROM_MAP_COPY.happens}
+          doesNotHappen={REMOVE_FROM_MAP_COPY.doesNotHappen}
+          confirmLabel={REMOVE_FROM_MAP_COPY.confirm}
+          busy={busy}
+          onConfirm={() => void removeFromMap()}
+          onClose={() => {
+            if (!busy) setRemoving(false);
+          }}
+          fallbackFocus={fallbackFocus}
+        />
+      )}
 
       {pending !== null && (
         <ConfirmDialog

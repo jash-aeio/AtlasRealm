@@ -405,6 +405,29 @@ button.primary {
   min-height: 160px;
 }
 
+/* The placement tool's bar (M2-7): what is placed, where, whether it fits, and its buttons. */
+.placement-tool {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #f2c14e;
+  border-radius: 6px;
+  background: #23252d;
+}
+
+.placement-tool p {
+  margin: 0 0 0.35rem;
+}
+
+.placement-tool-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.placement-message {
+  margin: 0.5rem 0 0;
+}
+
 /* Panels open over the world, so the world keeps its size behind them. */
 .entrance-panel {
   position: absolute;

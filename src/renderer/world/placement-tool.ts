@@ -88,22 +88,22 @@ export interface PlacementPreview {
 export interface PlacementTool {
   readonly store: Store<PlacementToolState>;
   /** Starts placing a new building for a project. The preview starts on the nearest free plot. */
-  startPlacing(project: ToolProject): void;
+  readonly startPlacing: (project: ToolProject) => void;
   /** Starts moving the project's building. Says so when the project has none. */
-  startMoving(project: ToolProject): void;
+  readonly startMoving: (project: ToolProject) => void;
   /** Puts the preview under the pointer's tile (the pointer sits on the footprint's middle). */
-  pointAt(tile: { readonly gx: number; readonly gy: number }): void;
+  readonly pointAt: (tile: { readonly gx: number; readonly gy: number }) => void;
   /** Moves the preview by whole tiles (arrow keys), keeping the footprint on the map. */
-  nudge(dx: number, dy: number): void;
+  readonly nudge: (dx: number, dy: number) => void;
   /** Saves the building at the preview. Refused locally when the preview says it can't stand. */
-  commit(): Promise<ToolMessage | null>;
+  readonly commit: () => Promise<ToolMessage | null>;
   /** Places the project's building on the free plot nearest the preview (or the map centre). */
-  autoPlace(project: ToolProject): Promise<ToolMessage>;
+  readonly autoPlace: (project: ToolProject) => Promise<ToolMessage>;
   /** Removes the project's building. The project itself is never touched (§22.2 #3). */
-  remove(project: ToolProject): Promise<ToolMessage>;
+  readonly remove: (project: ToolProject) => Promise<ToolMessage>;
   /** Leaves the tool. Nothing was saved, so nothing changes. */
-  cancel(): void;
-  dismissMessage(): void;
+  readonly cancel: () => void;
+  readonly dismissMessage: () => void;
 }
 
 /** The world as the tool needs it. Its size never changes. */
@@ -480,4 +480,17 @@ export function createPlacementTool(
     },
   };
   return tool;
+}
+
+/**
+ * What the project list and the inspector may ask of the placement tool. The main screen
+ * implements it: starting the tool also closes the panel that covers the map.
+ */
+export interface PlacementActions {
+  /** Opens the tool to place the project's building. */
+  readonly place: (project: ToolProject) => void;
+  /** Opens the tool to move the project's building. */
+  readonly move: (project: ToolProject) => void;
+  readonly autoPlace: (project: ToolProject) => Promise<ToolMessage>;
+  readonly remove: (project: ToolProject) => Promise<ToolMessage>;
 }
