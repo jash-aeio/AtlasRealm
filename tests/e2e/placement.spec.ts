@@ -384,6 +384,7 @@ test.describe('placement tool UI', () => {
     await expect(toolMessage(page)).toHaveAttribute('role', 'alert');
     expect(await savedBuildings(page)).toEqual(['Gamma@26,22']);
     // The map was read again, so the preview now shows Gamma in the way.
+    await hoverTile(page, 26, 22);
     await expect(toolBar(page)).toHaveAttribute('data-fits', 'false');
   });
 

@@ -26,6 +26,8 @@ Four commits on `feat/72-placement-tool`:
 
 Verification: typecheck, lint and format:check pass; unit/integration 970/970; placement E2E 8/8; full E2E 76/77. The one failure was the known hover/zoom/pan flake in `world.spec.ts`, which passed 5/5 when run again on its own. The failed run's hover readout moved without the test moving the mouse, which points to real cursor movement over the test window. Screenshots (taken with Electron's `capturePage`, not committed) confirmed the blocked and fits previews draw as intended.
 
+Review fixes (/ship): a command that gets no answer now reports "Not sure the change was saved", reloads the map and is never retried, and buttons can no longer get stuck busy (security-auditor L1/L2). Removing or auto-placing another project keeps an open placement session, and starting a new one says the old one was stopped with nothing saved (invariant-reviewer). Final numbers: unit/integration 973/973; placement E2E 24/24 over three repeats. The real-cursor interference showed up once more in a full E2E run (in the command-refusal test), so that test now hovers the tile again before its last check. Lesson 031 written.
+
 Not done: rotation (only square footprints exist) and undo (M2-8, #73). At 50% zoom the preview sign's text is small; the same text is always in the HTML tool bar.
 
 ## Open questions
