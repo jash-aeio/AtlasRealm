@@ -14,7 +14,7 @@
 // Pure TypeScript with no React, DOM or Pixi imports: the API is passed in, so the whole tool is
 // unit-tested with a fake (tests/domain/placement-tool.test.ts).
 import type { AtlasApi } from '../../common/contracts/atlas-api';
-import type { IpcError, PlacementRefusal } from '../../common/contracts/ipc-result';
+import type { IpcError, IpcResult, PlacementRefusal } from '../../common/contracts/ipc-result';
 import type { PlacementSummary } from '../../common/contracts/placement';
 import {
   checkPlacement,
@@ -155,7 +155,9 @@ export function previewLabel(check: PlacementCheck): string {
   }
 }
 
-function refusalText(reason: PlacementRefusal['reason'] | PlacementCheck['kind']): string {
+function refusalText(
+  reason: PlacementRefusal['reason'] | PlacementCheck['kind'] | 'unknown',
+): string {
   switch (reason) {
     case 'overlaps':
       return 'another building is in the way';
@@ -228,11 +230,18 @@ function rulesWorld(world: ToolWorld): PlacementWorld {
   return { gridWidth: world.gridWidth, gridHeight: world.gridHeight, reserved: [] };
 }
 
+/**
+ * When a command gave no answer at all (the call itself failed), the change may or may not have
+ * been saved. Say so, reload the map, and never send it again on our own (PRODUCT_RULES §3.1).
+ */
+export const UNKNOWN_OUTCOME =
+  'Not sure the change was saved: the app got no answer. The map was reloaded; check it before trying again.';
+
 /** The message for a refused or failed placement command. */
 export function placementProblem(error: IpcError): string {
   switch (error.code) {
     case 'placement_blocked':
-      return `It can't stand there: ${refusalText(error.placement?.reason ?? 'overlaps')}. Nothing was changed.`;
+      return `It can't stand there: ${refusalText(error.placement?.reason ?? 'unknown')}. Nothing was changed.`;
     case 'revision_conflict':
       return 'This building changed somewhere else. The map was reloaded; check it and try again.';
     case 'not_found':
@@ -240,7 +249,7 @@ export function placementProblem(error: IpcError): string {
     case 'already_exists':
       return 'This project already has a building. The map was reloaded; move that building instead.';
     case 'invalid_transition':
-      return error.message;
+      return `${error.message} Nothing was changed.`;
     default:
       return `Nothing was changed: ${error.message} (${error.code})`;
   }
@@ -273,6 +282,30 @@ export function createPlacementTool(
     return message;
   }
 
+  /** Reloads the buildings. A failed read shows its own error next to the map. */
+  async function reload(): Promise<void> {
+    try {
+      await placements.refresh();
+    } catch (error) {
+      console.error('[placement] could not reload the buildings', error);
+    }
+  }
+
+  /**
+   * Sends one command, then reloads the buildings either way. Returns null when the call itself
+   * failed (no answer), so the caller reports an unknown outcome instead of staying busy.
+   */
+  async function send<T>(call: () => Promise<IpcResult<T>>): Promise<IpcResult<T> | null> {
+    let result: IpcResult<T> | null = null;
+    try {
+      result = await call();
+    } catch (error) {
+      console.error('[placement] command got no answer', error);
+    }
+    await reload();
+    return result;
+  }
+
   /** The nearest free plot for this footprint, from a start tile. */
   function freePlot(start: Tile, footprint: Footprint, placementId?: string): Tile | null {
     return findNearbyPlot(rulesWorld(world), occupiedOf(buildings()), {
@@ -285,14 +318,16 @@ export function createPlacementTool(
 
   async function create(project: ToolProject, spot: Tile, how: string): Promise<ToolMessage> {
     store.set({ ...store.get(), busy: true, message: null });
-    const result = await api.placement.create({
-      worldId: world.id,
-      projectId: project.id,
-      tileX: spot.tileX,
-      tileY: spot.tileY,
-      rotation: 0,
-    });
-    await placements.refresh();
+    const result = await send(() =>
+      api.placement.create({
+        worldId: world.id,
+        projectId: project.id,
+        tileX: spot.tileX,
+        tileY: spot.tileY,
+        rotation: 0,
+      }),
+    );
+    if (result === null) return finish({ ok: false, text: UNKNOWN_OUTCOME });
     if (result.ok) {
       return finish({
         ok: true,
@@ -405,19 +440,21 @@ export function createPlacementTool(
       }
       const placement = buildings().find((p) => p.id === mode.placementId);
       if (placement === undefined) {
-        await placements.refresh();
+        await reload();
         return finish({ ok: false, text: placementProblem({ code: 'not_found', message: '' }) });
       }
       store.set({ ...current, busy: true, message: null });
-      const result = await api.placement.move({
-        worldId: world.id,
-        placementId: placement.id,
-        expectedRevision: placement.revision,
-        tileX: preview.anchor.tileX,
-        tileY: preview.anchor.tileY,
-        rotation: mode.rotation,
-      });
-      await placements.refresh();
+      const result = await send(() =>
+        api.placement.move({
+          worldId: world.id,
+          placementId: placement.id,
+          expectedRevision: placement.revision,
+          tileX: preview.anchor.tileX,
+          tileY: preview.anchor.tileY,
+          rotation: mode.rotation,
+        }),
+      );
+      if (result === null) return finish({ ok: false, text: UNKNOWN_OUTCOME });
       if (result.ok) {
         return finish({
           ok: true,
@@ -427,7 +464,7 @@ export function createPlacementTool(
       if (result.error.code === 'placement_blocked') {
         return say({
           ok: false,
-          text: `Not moved: ${refusalText(result.error.placement?.reason ?? 'overlaps')}. It stays at ${tileText(mode.origin)}.`,
+          text: `Not moved: ${refusalText(result.error.placement?.reason ?? 'unknown')}. It stays at ${tileText(mode.origin)}.`,
         });
       }
       return finish({ ok: false, text: placementProblem(result.error) });
@@ -456,12 +493,14 @@ export function createPlacementTool(
         return finish({ ok: false, text: `“${project.name}” has no building on the map.` });
       }
       store.set({ ...store.get(), busy: true, message: null });
-      const result = await api.placement.remove({
-        worldId: world.id,
-        placementId: placement.id,
-        expectedRevision: placement.revision,
-      });
-      await placements.refresh();
+      const result = await send(() =>
+        api.placement.remove({
+          worldId: world.id,
+          placementId: placement.id,
+          expectedRevision: placement.revision,
+        }),
+      );
+      if (result === null) return finish({ ok: false, text: UNKNOWN_OUTCOME });
       if (result.ok) {
         return finish({
           ok: true,

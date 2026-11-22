@@ -85,17 +85,22 @@ export function ProjectItem({
   async function autoPlace() {
     if (mapActions === undefined) return;
     setBusy(true);
-    onMessage(await mapActions.autoPlace(target));
-    setBusy(false);
+    try {
+      onMessage(await mapActions.autoPlace(target));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function removeFromMap() {
     if (mapActions === undefined) return;
     setBusy(true);
-    const result = await mapActions.remove(target);
-    setBusy(false);
-    setRemoving(false);
-    onMessage(result);
+    try {
+      onMessage(await mapActions.remove(target));
+    } finally {
+      setBusy(false);
+      setRemoving(false);
+    }
   }
 
   function stopEditing(which: Exclude<Editing, null>) {

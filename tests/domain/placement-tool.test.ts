@@ -14,6 +14,7 @@ import {
   createPlacementTool,
   previewOf,
   type PlacementToolApi,
+  UNKNOWN_OUTCOME,
 } from '../../src/renderer/world/placement-tool';
 import { createWorldPlacements } from '../../src/renderer/world/world-placements';
 
@@ -313,6 +314,23 @@ describe('placement tool', () => {
     t.tool.startMoving(BETA);
     expect(t.tool.store.get().mode.kind).toBe('idle');
     expect(t.tool.store.get().message?.text).toContain('has no building to move');
+  });
+
+  it('a command with no answer reports an unknown outcome, reloads and is not retried', async () => {
+    const t = setup();
+    await t.placements.refresh();
+    t.tool.startPlacing(ALPHA);
+    t.tool.pointAt({ gx: 3, gy: 3 });
+    t.api.placement.create.mockRejectedValueOnce(new Error('No handler registered'));
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const message = await t.tool.commit();
+    error.mockRestore();
+    expect(message).toEqual({ ok: false, text: UNKNOWN_OUTCOME });
+    expect(t.tool.store.get()).toMatchObject({ mode: { kind: 'idle' }, busy: false });
+    expect(t.api.placement.create).toHaveBeenCalledTimes(1);
+    expect(t.api.placement.list).toHaveBeenCalledTimes(2);
+    // The tool still works afterwards.
+    expect((await t.tool.autoPlace(ALPHA)).ok).toBe(true);
   });
 
   it('ignores a second commit while the first is on its way', async () => {

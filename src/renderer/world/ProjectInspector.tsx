@@ -107,10 +107,12 @@ function SelectedProject({
   async function removeFromMap() {
     if (placementActions === undefined) return;
     setBusy(true);
-    const result = await placementActions.remove({ id: project.id, name: project.name });
-    setBusy(false);
-    setRemoving(false);
-    setMessage(result);
+    try {
+      setMessage(await placementActions.remove({ id: project.id, name: project.name }));
+    } finally {
+      setBusy(false);
+      setRemoving(false);
+    }
   }
 
   // A trashed project can't be placed (ADR-0025); an archived one can.
