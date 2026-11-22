@@ -185,7 +185,7 @@ The suggested folders are logical boundaries. Claude can adapt naming to an exis
 | `world.create` | Name, theme | World summary |
 | `project.create` | World, template version, goal | Saved project ID and summary |
 | `placement.create` (also `.list`, `.move`, `.remove`) | Project ID, world, grid coordinates, rotation (never a footprint) | Placement, or `placement_blocked` with the reason. Changed by ADR-0025 (was `building.place`) |
-| `hotbar.pin` | World, slot, target | Updated slot |
+| `hotbar.assign` (also `.list`, `.clear`) | World, slot, target, optional `replace: { expectedTargetId }` (clear: `expectedTargetId`) | Slot, or `slot_occupied` with the current occupant. Changed by ADR-0026 (was `hotbar.pin`) |
 | `agent.recruit` | Project, template/version, overrides | Agent instance and readiness |
 | `resource.install` | Staged package reference | Validation/install report |
 | `provider.connection.create` | Provider config plus separate secret input | Connection ID; never raw secret |

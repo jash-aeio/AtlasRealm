@@ -7,6 +7,7 @@
 // No silent replacement: `assign` only fills an empty slot. Overwriting a filled slot is a
 // separate `replace` that names the revision the caller last saw (M2-4 adds the "expected
 // occupant" check on top). Each target is pinned at most once per world (ADR-0023).
+import { HOTBAR_SLOT_COUNT } from '../../../common/contracts/hotbar';
 import type { Database } from '../database';
 import { type RepresentationTarget, resolveTarget, targetFromRow } from './representation-target';
 import {
@@ -18,7 +19,8 @@ import {
   text,
 } from './repository-support';
 
-export const HOTBAR_SLOT_COUNT = 10;
+// One number for the contract, this repository and migration 5. Re-exported for callers.
+export { HOTBAR_SLOT_COUNT };
 
 export interface HotbarSlot {
   readonly worldId: string;

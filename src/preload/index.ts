@@ -51,6 +51,11 @@ const api: AtlasApi = {
     move: (input) => ipcRenderer.invoke(Channels.placementMove, input),
     remove: (input) => ipcRenderer.invoke(Channels.placementRemove, input),
   },
+  hotbar: {
+    list: (input) => ipcRenderer.invoke(Channels.hotbarList, input),
+    assign: (input) => ipcRenderer.invoke(Channels.hotbarAssign, input),
+    clear: (input) => ipcRenderer.invoke(Channels.hotbarClear, input),
+  },
 };
 
 contextBridge.exposeInMainWorld('atlas', api);

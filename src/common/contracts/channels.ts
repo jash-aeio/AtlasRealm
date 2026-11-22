@@ -27,6 +27,9 @@ export const Channels = {
   placementCreate: 'placement.create',
   placementMove: 'placement.move',
   placementRemove: 'placement.remove',
+  hotbarList: 'hotbar.list',
+  hotbarAssign: 'hotbar.assign',
+  hotbarClear: 'hotbar.clear',
 } as const;
 
 export type Channel = (typeof Channels)[keyof typeof Channels];

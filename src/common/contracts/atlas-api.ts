@@ -2,6 +2,13 @@
 // Keep it small and explicit: one typed method per command, no generic `invoke`.
 import type { LaunchInfoOutput } from './app-launch-info';
 import type { PingInput, PingOutput } from './app-ping';
+import type {
+  HotbarAssignInput,
+  HotbarClearInput,
+  HotbarListInput,
+  HotbarListOutput,
+  HotbarSlotOutput,
+} from './hotbar';
 import type { IpcResult } from './ipc-result';
 import type {
   PlacementCreateInput,
@@ -96,5 +103,14 @@ export interface AtlasApi {
     readonly create: (input: PlacementCreateInput) => Promise<IpcResult<PlacementOutput>>;
     readonly move: (input: PlacementMoveInput) => Promise<IpcResult<PlacementOutput>>;
     readonly remove: (input: PlacementRemoveInput) => Promise<IpcResult<PlacementOutput>>;
+  };
+  /**
+   * Hotbar shortcuts in one world (ADR-0026). A filled slot only changes when the caller names
+   * its current target; otherwise `slot_occupied` with the occupant. Clearing never touches it.
+   */
+  readonly hotbar: {
+    readonly list: (input: HotbarListInput) => Promise<IpcResult<HotbarListOutput>>;
+    readonly assign: (input: HotbarAssignInput) => Promise<IpcResult<HotbarSlotOutput>>;
+    readonly clear: (input: HotbarClearInput) => Promise<IpcResult<HotbarSlotOutput>>;
   };
 }
