@@ -20,6 +20,7 @@ import type {
   IpcResult,
   PlacementRefusal,
 } from '../../common/contracts/ipc-result';
+import { HotbarSlotConflictDetails } from '../../common/contracts/hotbar';
 import { checkPlainJson, jsonByteLength } from '../../common/contracts/json-size';
 import { isAppOrigin } from '../bootstrap/app-origin';
 
@@ -155,7 +156,17 @@ export function createCommandHandler<I extends z.ZodType, O extends z.ZodType>(
       return { ok: true, data };
     } catch (error) {
       if (error instanceof CommandError) {
-        const { placement, hotbar } = error.details;
+        const { placement } = error.details;
+        // Parsed, not copied: error replies skip the output schema (#69 security L2). A detail
+        // that doesn't fit is a handler bug, reported like any other.
+        const hotbar =
+          error.details.hotbar === undefined
+            ? undefined
+            : HotbarSlotConflictDetails.safeParse(error.details.hotbar);
+        if (hotbar?.success === false) {
+          console.error(`[ipc] ${definition.channel} returned malformed slot_occupied details`);
+          return fail('internal_error', 'Something went wrong. The error was logged.');
+        }
         return {
           ok: false,
           error: {
@@ -173,17 +184,7 @@ export function createCommandHandler<I extends z.ZodType, O extends z.ZodType>(
                     blockingIds: placement.blockingIds.slice(0, MAX_BLOCKING_IDS),
                   },
                 }),
-            ...(hotbar === undefined
-              ? {}
-              : {
-                  hotbar: {
-                    slot: hotbar.slot,
-                    occupant: {
-                      target: { type: hotbar.occupant.target.type, id: hotbar.occupant.target.id },
-                      projectStatus: hotbar.occupant.projectStatus,
-                    },
-                  },
-                }),
+            ...(hotbar === undefined ? {} : { hotbar: hotbar.data }),
           },
         };
       }

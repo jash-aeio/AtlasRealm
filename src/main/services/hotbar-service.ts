@@ -175,5 +175,9 @@ function statusOf(
   slot: HotbarSlot,
   projects: ProjectRepository,
 ): HotbarSlotSummary['projectStatus'] {
-  return slot.target.type === 'project' ? (projects.get(slot.target.id)?.status ?? null) : null;
+  if (slot.target.type !== 'project') return null;
+  // Scoped to the slot's world as well as the composite FK (#69 security L1): a pin can never
+  // report another world's project, even if a later rebuild lost the FK.
+  const project = projects.get(slot.target.id);
+  return project?.worldId === slot.worldId ? project.status : null;
 }

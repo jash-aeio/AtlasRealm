@@ -9,6 +9,7 @@ import { z } from 'zod';
 
 import { SERVICE_KINDS } from '../world/service-kinds';
 import { Revision, Timestamp } from './display-name';
+import type { HotbarSlotConflict } from './ipc-result';
 import { ProjectId, ProjectStatus } from './project';
 import { WorldId } from './world';
 
@@ -48,6 +49,22 @@ export const HotbarSlotSummary = z.strictObject({
   revision: Revision,
 });
 export type HotbarSlotSummary = z.infer<typeof HotbarSlotSummary>;
+
+/**
+ * The `hotbar` detail of a `slot_occupied` error. Error replies skip the command's output
+ * schema, so the router parses this instead of copying it (#69 security L2). A plain (not
+ * strict) object: anything else a service attached is dropped, not passed on.
+ */
+export const HotbarSlotConflictDetails = z.object({
+  slot: HotbarSlotIndex,
+  occupant: z.object({
+    target: z.discriminatedUnion('type', [
+      z.object({ type: z.literal('project'), id: ProjectId }),
+      z.object({ type: z.literal('service'), id: z.enum(SERVICE_KINDS) }),
+    ]),
+    projectStatus: ProjectStatus.nullable(),
+  }),
+}) satisfies z.ZodType<HotbarSlotConflict>;
 
 export const HotbarSlotOutput = z.strictObject({ slot: HotbarSlotSummary });
 export type HotbarSlotOutput = z.infer<typeof HotbarSlotOutput>;

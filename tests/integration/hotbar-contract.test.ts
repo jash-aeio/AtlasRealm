@@ -441,6 +441,24 @@ describe('hotbar.list', () => {
     ]);
   });
 
+  it("never reports another world's project status, even if the FK were lost (#69 security L1)", async () => {
+    const otherWorld = new WorldRepository(opened.db).create({ name: 'Away', themeId: 'meadow' });
+    const foreign = projects.archive(lifecycle(newProject('Foreign', otherWorld.id))).project;
+    // Simulates a damaged database: foreign keys off, a pin planted across worlds.
+    opened.db.exec('PRAGMA foreign_keys = OFF');
+    opened.db
+      .prepare(
+        `INSERT INTO hotbar_slots (world_id, slot, target_type, project_id, created_at, updated_at)
+         VALUES (?, 0, 'project', ?, '2026-11-22T00:00:00.000Z', '2026-11-22T00:00:00.000Z')`,
+      )
+      .run(world.id, foreign.id);
+    opened.db.exec('PRAGMA foreign_keys = ON');
+
+    const result = await list({ worldId: world.id });
+    if (!result.ok) throw new Error(result.error.code);
+    expect(result.data.slots).toMatchObject([{ slot: 0, projectStatus: null }]);
+  });
+
   it('refuses an unknown world as not_found', async () => {
     await expect(list({ worldId: UNKNOWN_ID })).resolves.toMatchObject({
       ok: false,

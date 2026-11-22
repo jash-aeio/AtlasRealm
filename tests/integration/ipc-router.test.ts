@@ -11,6 +11,8 @@ import {
 } from '../../src/main/ipc/router';
 import { APP_ENTRY_URL } from '../../src/main/bootstrap/app-origin';
 
+const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+
 const ENTRY = APP_ENTRY_URL;
 const isTrusted = trustRendererEntry(ENTRY);
 
@@ -227,7 +229,7 @@ describe('createCommandHandler', () => {
         const hotbar = {
           slot: 2,
           occupant: {
-            target: { type: 'project', id: 'p1', name: 'Secret plan' },
+            target: { type: 'project', id: PROJECT_ID, name: 'Secret plan' },
             projectStatus: 'archived',
             revision: 4,
           },
@@ -252,10 +254,41 @@ describe('createCommandHandler', () => {
         message: 'That hotbar slot holds something else.',
         hotbar: {
           slot: 2,
-          occupant: { target: { type: 'project', id: 'p1' }, projectStatus: 'archived' },
+          occupant: { target: { type: 'project', id: PROJECT_ID }, projectStatus: 'archived' },
         },
       },
     });
+  });
+
+  it('reports malformed slot_occupied details as internal_error, not passing them on', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const handle = createCommandHandler(
+      echo,
+      () => {
+        throw new CommandError(
+          'slot_occupied',
+          'That hotbar slot holds something else.',
+          undefined,
+          {
+            hotbar: {
+              slot: 2,
+              occupant: {
+                target: { type: 'project', id: 'C:/Users/me/secret-plan.md' },
+                projectStatus: null,
+              },
+            },
+          },
+        );
+      },
+      isTrusted,
+    );
+    const result = await handle(trustedSender, { text: 'hi' });
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'internal_error', message: 'Something went wrong. The error was logged.' },
+    });
+    expect(JSON.stringify(errors.mock.calls)).not.toContain('secret-plan');
+    errors.mockRestore();
   });
 });
 
