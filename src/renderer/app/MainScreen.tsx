@@ -16,6 +16,7 @@ import { DEFAULT_BUILDING_APPEARANCE } from '../../common/world/building-appeara
 import { createStore } from '../state/store';
 import type { Session, SessionData } from '../state/session';
 import { useStore } from '../state/use-store';
+import type { Comfort } from '../world/comfort';
 import { createPlacementHistory } from '../world/placement-history';
 import { createPlacementTool, type PlacementActions } from '../world/placement-tool';
 import { ProjectInspector } from '../world/ProjectInspector';
@@ -39,6 +40,8 @@ interface MainScreenProps {
   readonly session: Session;
   readonly data: SessionData;
   readonly notice: string | null;
+  /** Comfort preferences of this window (M2-14): labels, saved cameras, reduced motion. */
+  readonly comfort: Comfort;
 }
 
 /** Below this width the Atlas + inspector column becomes a drawer (matches app.css). */
@@ -67,7 +70,7 @@ interface OpenPanel {
   readonly project?: { readonly worldId: string; readonly projectId: string };
 }
 
-function MainLayout({ session, data, notice }: MainScreenProps) {
+function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
   const worldSelectId = useId();
   const sideColumnId = useId();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -226,7 +229,8 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
         </>
       );
     }
-    if (id === 'settings') return <SettingsView session={session} data={data} world={world} />;
+    if (id === 'settings')
+      return <SettingsView session={session} data={data} world={world} comfort={comfort} />;
     if (id === 'project') {
       return shownPanel?.project === undefined ? null : (
         <ProjectDetails
