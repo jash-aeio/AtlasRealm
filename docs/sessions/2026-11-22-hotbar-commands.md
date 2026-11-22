@@ -25,7 +25,10 @@ Add IPC commands that list, pin and unpin hotbar shortcuts in one world. Filling
 - Slice 1 (`9d82f27`): hotbar contracts, the `slot_occupied` error code with the occupant (`ipc-result.ts`, `router.ts`), `HotbarService` and the command handlers. `HotbarRepository` now takes its slot count from the contract. 23 integration tests through the real router, plus a router test showing that only known `hotbar` fields cross. Negative control: with the occupant check disabled, 3 tests fail (the slot_occupied, wrong-expected-target and §22.2 #2 tests).
 - Slice 2 (`8be67d9`): `window.atlas.hotbar` in the preload and `register.ts`. E2E `tests/e2e/hotbar.spec.ts` in the built app, and the preload-shape test lists `hotbar`.
 - Docs: ADR-0026, the ARCHITECTURE §16.1 row, the status Decisions entry.
-- Checks: typecheck, lint and format:check pass; unit/integration 934/934 (before slice 2, which adds no unit tests); E2E 54/54.
+- Review fixes (`969d68f`): security L1 (a pin's `projectStatus` is only reported for a project in the same world; new test plants a cross-world pin with foreign keys off, and it fails without the check) and L2 (the router parses the `slot_occupied` detail with Zod; malformed details become `internal_error`, with a router test).
+- /ship docs: status, roadmap, changelog, lesson 028 (the ABA problem), glossary.
+- Checks on the final branch: typecheck, lint and format:check pass; unit/integration 915/915; E2E 54/54. (An earlier count of 934 included #70's 21 shortcut tests from when both lanes shared one checkout.)
+- Reviews: invariant-reviewer found no violations. security-auditor approved with the two Low findings above, both fixed.
 
 ### Incident: two sessions in one folder
 The #70 session (lane B) was working in the same checkout without its own worktree. It switched the folder's branch, so my slice-1 commit first landed on `feat/70-main-layout-shortcuts` on top of its commit. With the user's OK, #69 moved to its own worktree (`D:/MyProjectsJCB/AtlasRealm-69`) and the commit was cherry-picked onto `feat/69-hotbar-commands`. #70 moved itself to `AtlasRealm-70`. Nothing was lost. Lesson: parallel lanes need separate worktrees from the start (MULTI_AGENT_GUIDE). The old shared checkout still needs tidying by the user (it is on a stale branch with leftover copies of my uncommitted edits).
