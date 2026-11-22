@@ -16,9 +16,11 @@ export function App() {
   }, [session]);
 
   const screen = screenFor(state);
+  // The main screen puts the title in its own top bar (UI_SPEC §6.1).
+  const showsMain = state.status === 'ready' && screen === 'main';
   return (
     <main className="app" data-screen={screen}>
-      <h1>Atlas Realm</h1>
+      {!showsMain && <h1>Atlas Realm</h1>}
       {state.status === 'loading' && <p role="status">Loading your profile…</p>}
       {state.status === 'error' && (
         <div role="alert" className="error">
