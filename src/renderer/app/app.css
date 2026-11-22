@@ -389,16 +389,20 @@ button.primary {
   background: #2f4a32;
 }
 
-.world-placeholder {
-  display: grid;
-  place-content: center;
+/* The product world fills the world area; panels open over it. */
+.world-product {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
   height: 100%;
-  padding: 1rem;
-  text-align: center;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
 }
 
-.world-placeholder p {
-  margin: 0.25rem 0;
+.world-product .world-canvas {
+  flex: 1;
+  height: auto;
+  min-height: 160px;
 }
 
 /* Panels open over the world, so the world keeps its size behind them. */

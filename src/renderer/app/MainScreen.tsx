@@ -5,11 +5,15 @@
 // Keys go through the one shortcut layer (shortcuts.ts): `E` toggles the library and Escape
 // closes the drawer, then the open panel. Closing a panel only hides it; focus goes back to
 // whatever opened it (UI_SPEC §6.6).
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { PlaceholderAvatar } from '../onboarding/PlaceholderAvatar';
 import { ProjectsPanel } from '../projects/ProjectsPanel';
+import { createProjectSelection } from '../state/selection';
 import type { Session, SessionData } from '../state/session';
+import { createWorldPlacements } from '../world/world-placements';
+import { WorldErrorBoundary } from '../world/WorldErrorBoundary';
+import { WorldView } from '../world/WorldView';
 import { DeveloperSpikes } from './DeveloperSpikes';
 import { EntrancePanel, NotBuilt } from './EntrancePanel';
 import { NOT_BUILT, panelTitle, type PanelId } from './entrances';
@@ -107,7 +111,24 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
   // The screen is only shown with at least one world; fall back to the first if the chosen
   // one is gone (for example archived elsewhere).
   const world = data.worlds.find((w) => w.id === selectedId) ?? data.worlds[0];
-  if (world === undefined) return null;
+  const worldId = world?.id;
+  // Per world: its buildings and the selected project. Another world starts with a fresh
+  // selection, so a project of the old world can never stay selected.
+  const scope = useMemo(
+    () =>
+      worldId === undefined
+        ? null
+        : {
+            placements: createWorldPlacements(window.atlas, worldId),
+            selection: createProjectSelection(),
+          },
+    [worldId],
+  );
+  useEffect(() => {
+    void scope?.placements.refresh();
+  }, [scope]);
+
+  if (world === undefined || scope === null) return null;
 
   function panelContent(id: PanelId) {
     if (world === undefined) return null;
@@ -187,15 +208,15 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
         <Sidebar open={panel?.id ?? null} onOpen={openPanel} />
 
         <div className="world-area" data-testid="world-area">
-          <div className="world-placeholder">
-            <p>
-              <strong>World view: not built yet</strong> (planned for M2-6).
-            </p>
-            <p className="muted">
-              The buildings for your projects will appear here. Until then, open Projects in the
-              sidebar.
-            </p>
-          </div>
+          <WorldErrorBoundary>
+            <WorldView
+              key={world.id}
+              world={world}
+              placements={scope.placements}
+              selection={scope.selection}
+              onOpenProject={scope.selection.select}
+            />
+          </WorldErrorBoundary>
           {panel !== null && (
             <EntrancePanel
               key={panel.id}
