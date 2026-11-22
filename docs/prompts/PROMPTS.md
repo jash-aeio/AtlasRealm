@@ -25,7 +25,8 @@ The spec's copy-ready prompts (§27) are now **skills**, so you rarely need to p
 | M4 | §27.5 |
 | M5 | §27.6, §27.11, §27.14 |
 | M6 | §27.7 |
-| M7/M8 | §27.8, §27.13 (Obsidian) |
+| M7/M9 | §27.8, §27.13 (Obsidian). The original prompt says "M7/M8"; MVP completion is now M9 (ADR-0027) |
+| M8 (UI/UX + art) | No original prompt; use art bible §34 and UI_SPEC §6 |
 
 ## Writing good prompts yourself (tips)
 1. **Say the goal and why**, not just the action.
