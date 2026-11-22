@@ -66,3 +66,20 @@ export function createWorldPlacements(api: WorldPlacementsApi, worldId: string):
     },
   };
 }
+
+/** The building that represents a project, or undefined when it is not placed. */
+export function placementOf(
+  state: WorldPlacementsState,
+  projectId: string,
+): PlacementSummary | undefined {
+  return state.placements.find(
+    (placement) => placement.target.type === 'project' && placement.target.id === projectId,
+  );
+}
+
+/** "Building at tile 10, 4", or "Not placed" (the project is still fully usable). */
+export function placementText(placement: PlacementSummary | undefined): string {
+  return placement === undefined
+    ? 'Not placed'
+    : `Building at tile ${String(placement.tileX)}, ${String(placement.tileY)}`;
+}

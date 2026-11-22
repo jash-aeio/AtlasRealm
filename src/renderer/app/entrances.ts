@@ -4,7 +4,8 @@
 export type EntranceId =
   'projects' | 'agents' | 'skills' | 'tools' | 'automations' | 'activity' | 'settings';
 
-export type PanelId = EntranceId | 'library';
+/** 'project' is the details panel that "Open" shows for one project (M2-6). */
+export type PanelId = EntranceId | 'library' | 'project';
 
 interface Entrance {
   readonly id: EntranceId;
@@ -55,5 +56,6 @@ export const NOT_BUILT: Readonly<
 
 export function panelTitle(id: PanelId): string {
   if (id === 'library') return 'Library';
+  if (id === 'project') return 'Project details';
   return ENTRANCES.find((entrance) => entrance.id === id)?.label ?? id;
 }

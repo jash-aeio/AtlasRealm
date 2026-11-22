@@ -692,3 +692,32 @@ kbd {
   display: block;
   margin-top: 0.2rem;
 }
+
+/* Inspector and project details (M2-6): short facts as a two-column list. */
+.inspector-name {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+.inspector-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.25rem 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.inspector-facts dt {
+  color: #a9adb8;
+}
+
+.inspector-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.inspector-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
