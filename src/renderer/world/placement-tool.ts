@@ -106,6 +106,38 @@ export interface PlacementTool {
   readonly dismissMessage: () => void;
 }
 
+/** A placement change the tool saved, as reported to the undo history (M2-8 #73). */
+export type PlacementChange =
+  | {
+      readonly kind: 'placed';
+      readonly project: ToolProject;
+      readonly placement: PlacementSummary;
+    }
+  | {
+      readonly kind: 'moved';
+      readonly project: ToolProject;
+      /** The building as it was saved before the move. */
+      readonly before: PlacementSummary;
+      readonly after: PlacementSummary;
+    }
+  | {
+      readonly kind: 'removed';
+      readonly project: ToolProject;
+      /** The building as it was when removed (`placement.remove` returns it). */
+      readonly placement: PlacementSummary;
+    };
+
+/** Where the tool reports saved changes: the undo history (placement-history.ts). */
+export interface PlacementRecorder {
+  /** Called once per change the main process confirmed; never for a refused or unknown one. */
+  readonly record: (change: PlacementChange) => void;
+  /** True while an undo or redo is being saved; the tool sends nothing meanwhile. */
+  readonly isBusy: () => boolean;
+}
+
+/** Said when the tool is asked to save while an undo or redo is on its way. */
+export const HISTORY_BUSY = 'An undo or redo is still being saved. Try again in a moment.';
+
 /** The world as the tool needs it. Its size never changes. */
 export interface ToolWorld {
   readonly id: string;
@@ -260,8 +292,10 @@ export function createPlacementTool(
   world: ToolWorld,
   placements: WorldPlacements,
   defaultFootprint: Footprint,
+  history?: PlacementRecorder,
 ): PlacementTool {
   const store = createStore<PlacementToolState>(IDLE);
+
   const centre: Tile = {
     tileX: Math.floor(world.gridWidth / 2),
     tileY: Math.floor(world.gridHeight / 2),
@@ -348,6 +382,7 @@ export function createPlacementTool(
     );
     if (result === null) return finish({ ok: false, text: UNKNOWN_OUTCOME }, project);
     if (result.ok) {
+      history?.record({ kind: 'placed', project, placement: result.data.placement });
       return finish(
         {
           ok: true,
@@ -433,6 +468,7 @@ export function createPlacementTool(
       const current = store.get();
       const { mode } = current;
       if (mode.kind === 'idle' || current.busy) return null;
+      if (history?.isBusy() === true) return say({ ok: false, text: HISTORY_BUSY });
       const preview = previewOf(current, world, buildings());
       if (preview === null) return null;
 
@@ -482,6 +518,12 @@ export function createPlacementTool(
       );
       if (result === null) return finish({ ok: false, text: UNKNOWN_OUTCOME });
       if (result.ok) {
+        history?.record({
+          kind: 'moved',
+          project: mode.project,
+          before: placement,
+          after: result.data.placement,
+        });
         return finish({
           ok: true,
           text: `Moved “${mode.project.name}” to ${tileText(result.data.placement)}.`,
@@ -498,6 +540,7 @@ export function createPlacementTool(
     async autoPlace(project) {
       const current = store.get();
       if (current.busy) return { ok: false, text: 'Another placement is still being saved.' };
+      if (history?.isBusy() === true) return say({ ok: false, text: HISTORY_BUSY });
       if (placementOf(placements.store.get(), project.id) !== undefined) {
         return finish({ ok: false, text: `“${project.name}” already has a building.` }, project);
       }
@@ -514,6 +557,7 @@ export function createPlacementTool(
     },
     async remove(project) {
       if (store.get().busy) return { ok: false, text: 'Another placement is still being saved.' };
+      if (history?.isBusy() === true) return say({ ok: false, text: HISTORY_BUSY });
       const placement = placementOf(placements.store.get(), project.id);
       if (placement === undefined) {
         return finish(
@@ -531,6 +575,7 @@ export function createPlacementTool(
       );
       if (result === null) return finish({ ok: false, text: UNKNOWN_OUTCOME }, project);
       if (result.ok) {
+        history?.record({ kind: 'removed', project, placement: result.data.placement });
         return finish(
           {
             ok: true,
