@@ -16,6 +16,7 @@ import { DEFAULT_BUILDING_APPEARANCE } from '../../common/world/building-appeara
 import { createStore } from '../state/store';
 import type { Session, SessionData } from '../state/session';
 import { useStore } from '../state/use-store';
+import { createPlacementHistory } from '../world/placement-history';
 import { createPlacementTool, type PlacementActions } from '../world/placement-tool';
 import { ProjectInspector } from '../world/ProjectInspector';
 import { worldSprite } from '../world/world-assets';
@@ -136,22 +137,29 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
   const worldId = world?.id;
   const gridWidth = world?.gridWidth ?? 0;
   const gridHeight = world?.gridHeight ?? 0;
-  // Per world: its buildings, the selected project and the placement tool. Another world starts
-  // fresh, so a project of the old world can never stay selected or half-placed.
+  const profileId = data.profiles.activeProfileId;
+  // Per world: its buildings, the selected project, the placement tool and its undo history.
+  // Another world (or profile) starts fresh, so a project of the old world can never stay
+  // selected or half-placed, and undo never reaches a change made in another world (M2-8).
+  // A profile switch also reloads the window (ADR-0014); keying on it doesn't rely on that.
   const scope = useMemo(() => {
     if (worldId === undefined) return null;
+    const toolWorld = { id: worldId, gridWidth, gridHeight };
     const placements = createWorldPlacements(window.atlas, worldId);
+    const history = createPlacementHistory(window.atlas, toolWorld, placements);
     return {
       placements,
       selection: createProjectSelection(),
+      history,
       tool: createPlacementTool(
         window.atlas,
-        { id: worldId, gridWidth, gridHeight },
+        toolWorld,
         placements,
         worldSprite(DEFAULT_BUILDING_APPEARANCE).footprint,
+        history,
       ),
     };
-  }, [worldId, gridWidth, gridHeight]);
+  }, [profileId, worldId, gridWidth, gridHeight]);
   useEffect(() => {
     void scope?.placements.refresh();
   }, [scope]);
@@ -166,7 +174,7 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
   );
 
   if (world === undefined || scope === null) return null;
-  const { placements, selection, tool } = scope;
+  const { placements, selection, tool, history } = scope;
 
   /** The map actions the Projects list and the inspector offer (M2-7). */
   const placementActions: PlacementActions = {
@@ -300,6 +308,7 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
               placements={placements}
               selection={selection}
               tool={tool}
+              history={history}
               onOpenProject={openProject}
             />
           </WorldErrorBoundary>

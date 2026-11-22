@@ -24,6 +24,8 @@ import {
   type WorldBuilding,
 } from './buildings';
 import type { ScenePlacementPreview, WorldScene } from './grid-scene';
+import type { PlacementHistory } from './placement-history';
+import { PlacementHistoryControls } from './PlacementHistoryControls';
 import { previewOf, type PlacementTool } from './placement-tool';
 import { PlacementToolBar } from './PlacementToolBar';
 import { DEFAULT_TILE, type MapSize } from './projection';
@@ -38,6 +40,8 @@ interface WorldViewProps {
   readonly selection: ProjectSelection;
   /** The placement tool for this world (M2-7). */
   readonly tool: PlacementTool;
+  /** Undo and redo for the tool's changes in this world (M2-8). */
+  readonly history: PlacementHistory;
   /** Double-click on a project's building: show that project's details. */
   readonly onOpenProject: (projectId: string) => void;
 }
@@ -74,7 +78,14 @@ function plural(count: number, one: string, many: string): string {
   return `${String(count)} ${count === 1 ? one : many}`;
 }
 
-export function WorldView({ world, placements, selection, tool, onOpenProject }: WorldViewProps) {
+export function WorldView({
+  world,
+  placements,
+  selection,
+  tool,
+  history,
+  onOpenProject,
+}: WorldViewProps) {
   const map = useMemo<MapSize>(
     () => ({ columns: world.gridWidth, rows: world.gridHeight }),
     [world.gridWidth, world.gridHeight],
@@ -90,6 +101,7 @@ export function WorldView({ world, placements, selection, tool, onOpenProject }:
       ? null
       : (buildings.find((b) => b.projectId === selectedProjectId) ?? null);
   const toolState = useStore(tool.store);
+  const historyState = useStore(history.store);
   const toolActive = toolState.mode.kind !== 'idle';
   const preview = useMemo(
     () => previewOf(toolState, world, state.placements),
@@ -249,6 +261,12 @@ export function WorldView({ world, placements, selection, tool, onOpenProject }:
       data-selected-placement={selectedPlacementId ?? undefined}
     >
       <WorldToolbar heading={world.name} headingId="world-view-heading" world={view} />
+      <PlacementHistoryControls
+        history={history}
+        state={historyState}
+        tool={tool}
+        toolState={toolState}
+      />
       <PlacementToolBar tool={tool} state={toolState} preview={preview} />
 
       <div
