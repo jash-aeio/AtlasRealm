@@ -32,6 +32,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 026 | [Shared validation: one rule for the preview and the real check](lessons/026-shared-validation-preview-vs-authority.md) | M2 | shared validation, preview vs authoritative check, pure module, discriminated union result, throw for bugs only |
 | 027 | [Trust boundaries for derived data](lessons/027-trust-boundaries-for-derived-data.md) | M2 | trust boundary, derived data from a trusted source, fail closed, one action one transaction, negative control |
 | 028 | [The ABA problem and explicit replacement](lessons/028-aba-problem-and-explicit-replacement.md) | M2 | ABA problem, version markers that repeat, expected target, explicit replacement, refusal with details |
+| 029 | [One keyboard shortcut layer](lessons/029-one-shortcut-layer.md) | M2 | keyboard shortcut layer, event bubbling, editable targets, modal dialogs, focus restoration |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map

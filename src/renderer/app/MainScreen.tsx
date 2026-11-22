@@ -1,14 +1,22 @@
-// The screen after onboarding (M1-9 #36): a header with the world, the profile and Settings,
-// then the world's home with its project list (M1-10 #37). The world canvas with real
-// buildings comes in M2.
-import { useId, useState } from 'react';
+// The screen after onboarding, laid out per UI_SPEC §6.1 (M2-5 #70): a top bar, the sidebar
+// entrances, the world area (panels open over it), the Realm Atlas + inspector column (a drawer
+// in narrow windows) and the bottom bar with the Library button and the hotbar.
+//
+// Keys go through the one shortcut layer (shortcuts.ts): `E` toggles the library and Escape
+// closes the drawer, then the open panel. Closing a panel only hides it; focus goes back to
+// whatever opened it (UI_SPEC §6.6).
+import { useEffect, useId, useRef, useState } from 'react';
 
-import type { WorldSummary } from '../../common/contracts/world';
 import { PlaceholderAvatar } from '../onboarding/PlaceholderAvatar';
 import { ProjectsPanel } from '../projects/ProjectsPanel';
 import type { Session, SessionData } from '../state/session';
 import { DeveloperSpikes } from './DeveloperSpikes';
+import { EntrancePanel, NotBuilt } from './EntrancePanel';
+import { NOT_BUILT, panelTitle, type PanelId } from './entrances';
 import { SettingsView } from './SettingsView';
+import { ShortcutProvider, useShortcut } from './ShortcutLayer';
+import { Sidebar } from './Sidebar';
+import { useMediaQuery } from './use-media-query';
 
 interface MainScreenProps {
   readonly session: Session;
@@ -16,89 +24,242 @@ interface MainScreenProps {
   readonly notice: string | null;
 }
 
-export function MainScreen({ session, data, notice }: MainScreenProps) {
+/** Below this width the Atlas + inspector column becomes a drawer (matches app.css). */
+const NARROW = '(max-width: 60rem)';
+const HOTBAR_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'] as const;
+
+export function MainScreen(props: MainScreenProps) {
+  return (
+    <ShortcutProvider>
+      <MainLayout {...props} />
+    </ShortcutProvider>
+  );
+}
+
+interface OpenPanel {
+  readonly id: PanelId;
+  /** False for the panel shown at startup, so loading the screen doesn't move focus. */
+  readonly focus: boolean;
+}
+
+function MainLayout({ session, data, notice }: MainScreenProps) {
   const worldSelectId = useId();
+  const sideColumnId = useId();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [view, setView] = useState<'home' | 'settings'>('home');
+  // The project list stays one glance away: it is open when the screen loads.
+  const [panel, setPanel] = useState<OpenPanel | null>({ id: 'projects', focus: false });
+  const opener = useRef<HTMLElement | null>(null);
+  const restoreFocusTo = useRef<HTMLElement | null>(null);
+
+  const narrow = useMediaQuery(NARROW);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerVisible = narrow && drawerOpen;
+  const drawerToggle = useRef<HTMLButtonElement>(null);
+  const drawerClose = useRef<HTMLButtonElement>(null);
+
+  function openPanel(id: PanelId) {
+    const active = document.activeElement;
+    opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
+    setPanel({ id, focus: true });
+  }
+
+  function closePanel() {
+    if (panel === null) return;
+    // The opener may be gone (it lived in a panel that was replaced); then use the entrance.
+    restoreFocusTo.current =
+      opener.current?.isConnected === true
+        ? opener.current
+        : document.querySelector<HTMLElement>(`[data-entrance="${panel.id}"]`);
+    opener.current = null;
+    setPanel(null);
+  }
+
+  function toggleLibrary() {
+    if (panel?.id === 'library') closePanel();
+    else openPanel('library');
+  }
+
+  function closeDrawer() {
+    setDrawerOpen(false);
+    drawerToggle.current?.focus();
+  }
+
+  // After a panel closes and React has removed it, put focus back.
+  useEffect(() => {
+    restoreFocusTo.current?.focus();
+    restoreFocusTo.current = null;
+  }, [panel]);
+
+  useEffect(() => {
+    if (drawerVisible) drawerClose.current?.focus();
+  }, [drawerVisible]);
+
+  useShortcut('e', toggleLibrary);
+  useShortcut(
+    'Escape',
+    () => {
+      if (drawerVisible) closeDrawer();
+      else closePanel();
+    },
+    { enabled: drawerVisible || panel !== null },
+  );
+
   // The screen is only shown with at least one world; fall back to the first if the chosen
   // one is gone (for example archived elsewhere).
   const world = data.worlds.find((w) => w.id === selectedId) ?? data.worlds[0];
   if (world === undefined) return null;
 
+  function panelContent(id: PanelId) {
+    if (world === undefined) return null;
+    if (id === 'projects') {
+      return (
+        <>
+          <ProjectsPanel key={world.id} world={world} />
+          <p className="muted">
+            Everything here works offline. AI work will need a model connection later; nothing asks
+            for one yet.
+          </p>
+        </>
+      );
+    }
+    if (id === 'settings') return <SettingsView session={session} data={data} world={world} />;
+    const notBuilt = NOT_BUILT[id];
+    return notBuilt === undefined ? null : <NotBuilt {...notBuilt} />;
+  }
+
   return (
     <>
-      <header className="main-header">
-        <div className="world-picker">
-          {data.worlds.length > 1 ? (
-            <>
-              <label htmlFor={worldSelectId}>World</label>
-              <select
-                id={worldSelectId}
-                value={world.id}
-                onChange={(event) => {
-                  setSelectedId(event.target.value);
-                }}
-              >
-                {data.worlds.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
-                ))}
-              </select>
-            </>
-          ) : (
-            <span>
-              World: <strong data-testid="world-name">{world.name}</strong>
-            </span>
+      <div className="shell">
+        <div className="shell-top">
+          <header className="top-bar">
+            <h1 className="brand">Atlas Realm</h1>
+            <div className="world-picker">
+              {data.worlds.length > 1 ? (
+                <>
+                  <label htmlFor={worldSelectId}>World</label>
+                  <select
+                    id={worldSelectId}
+                    value={world.id}
+                    onChange={(event) => {
+                      setSelectedId(event.target.value);
+                    }}
+                  >
+                    {data.worlds.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : (
+                <span>
+                  World: <strong data-testid="world-name">{world.name}</strong>
+                </span>
+              )}
+            </div>
+            <div className="profile-chip">
+              <PlaceholderAvatar colour={data.settings.avatarColour} size={28} />
+              <span data-testid="profile-name">{data.settings.displayName}</span>
+            </div>
+            <button
+              type="button"
+              ref={drawerToggle}
+              className="drawer-toggle"
+              aria-expanded={drawerVisible}
+              aria-controls={sideColumnId}
+              onClick={() => {
+                setDrawerOpen((open) => !open);
+              }}
+            >
+              Atlas &amp; inspector
+            </button>
+          </header>
+          {notice !== null && (
+            <div role="status" className="notice">
+              {notice}{' '}
+              <button type="button" onClick={session.dismissNotice}>
+                Dismiss
+              </button>
+            </div>
           )}
         </div>
-        <div className="profile-chip">
-          <PlaceholderAvatar colour={data.settings.avatarColour} size={28} />
-          <span data-testid="profile-name">{data.settings.displayName}</span>
+
+        <Sidebar open={panel?.id ?? null} onOpen={openPanel} />
+
+        <div className="world-area" data-testid="world-area">
+          <div className="world-placeholder">
+            <p>
+              <strong>World view: not built yet</strong> (planned for M2-6).
+            </p>
+            <p className="muted">
+              The buildings for your projects will appear here. Until then, open Projects in the
+              sidebar.
+            </p>
+          </div>
+          {panel !== null && (
+            <EntrancePanel
+              key={panel.id}
+              title={panel.id === 'projects' ? world.name : panelTitle(panel.id)}
+              focusOnOpen={panel.focus}
+              onClose={closePanel}
+            >
+              {panelContent(panel.id)}
+            </EntrancePanel>
+          )}
         </div>
-        <button
-          type="button"
-          aria-pressed={view === 'settings'}
-          onClick={() => {
-            setView((v) => (v === 'settings' ? 'home' : 'settings'));
-          }}
+
+        <aside
+          id={sideColumnId}
+          className="side-column"
+          data-open={drawerVisible}
+          aria-label="Realm Atlas and inspector"
         >
-          {view === 'settings' ? 'Back to world' : 'Settings'}
-        </button>
-      </header>
+          {drawerVisible && (
+            <button type="button" ref={drawerClose} onClick={closeDrawer}>
+              Close Atlas &amp; inspector
+            </button>
+          )}
+          <section className="side-card" aria-labelledby={`${sideColumnId}-atlas`}>
+            <h2 id={`${sideColumnId}-atlas`}>Realm Atlas</h2>
+            <p className="not-built">Not built yet (planned later in M2)</p>
+            <p className="muted">
+              A map of your world and the connections between projects. A mock version lives under
+              Developer spikes.
+            </p>
+          </section>
+          <section className="side-card" aria-labelledby={`${sideColumnId}-inspector`}>
+            <h2 id={`${sideColumnId}-inspector`}>Inspector</h2>
+            <p>Nothing selected.</p>
+            <p className="muted">
+              Selecting a building will show its project here once the world view is built.
+            </p>
+          </section>
+        </aside>
 
-      {notice !== null && (
-        <div role="status" className="notice">
-          {notice}{' '}
-          <button type="button" onClick={session.dismissNotice}>
-            Dismiss
+        <footer className="bottom-bar">
+          <button
+            type="button"
+            data-entrance="library"
+            aria-pressed={panel?.id === 'library'}
+            aria-keyshortcuts="E"
+            onClick={toggleLibrary}
+          >
+            Library <kbd>E</kbd>
           </button>
-        </div>
-      )}
-
-      {view === 'settings' ? (
-        <section aria-labelledby="settings-heading">
-          <h2 id="settings-heading">Settings</h2>
-          <SettingsView session={session} data={data} world={world} />
-        </section>
-      ) : (
-        <WorldHome world={world} />
-      )}
+          <div className="hotbar" role="group" aria-label="Hotbar">
+            <ol className="hotbar-slots" aria-hidden="true">
+              {HOTBAR_KEYS.map((key) => (
+                <li key={key} className="hotbar-slot">
+                  {key}
+                </li>
+              ))}
+            </ol>
+            <span className="not-built">Hotbar: not built yet (planned later in M2)</span>
+          </div>
+        </footer>
+      </div>
 
       <DeveloperSpikes />
     </>
-  );
-}
-
-function WorldHome({ world }: { readonly world: WorldSummary }) {
-  return (
-    <section className="panel world-home" aria-labelledby="world-home-heading">
-      <h2 id="world-home-heading">{world.name}</h2>
-      <ProjectsPanel key={world.id} world={world} />
-      <p className="muted">
-        The world map with buildings comes later (M2). Everything here works offline. AI work will
-        need a model connection later; nothing asks for one yet.
-      </p>
-    </section>
   );
 }
