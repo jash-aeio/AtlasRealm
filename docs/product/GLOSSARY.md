@@ -167,3 +167,8 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Command pattern** | Keeping each change as a small object that knows how to do itself again and how to reverse itself. Undo and redo are built on it | `placement-history.ts`, M2-8 |
 | **Inverse operation** | The change that reverses another: removing what was placed, moving back, placing again what was removed. Undo sends it as an ordinary command, which can still be refused | `placement-history.ts`, M2-8 |
 | **Undo stack / redo stack** | Two lists of changes, newest last. Undo takes from the first and puts on the second; a new change empties the second | `placement-history.ts`, UI_SPEC §17.2 |
+| **Design tokens** | Named values for colours, type sizes and spacing that every UI component reads, so the whole app stays consistent and one change updates it everywhere | M8 (ADR-0027) |
+| **Vertical slice** | A small piece taken through every step of a process end to end (here one building from generation to the packaged offline build), to prove the process works before scaling it up | M5 art pipeline proof, ADR-0027 |
+| **Texture atlas** | Many small sprites packed into one image with a map of where each sits, so the GPU loads and draws them faster | art bible §34.5, M8 |
+| **WCAG AA contrast** | The common accessibility standard for readable text: at least 4.5:1 contrast between text and background (3:1 for large text) | UI_SPEC §6.6, M8 |
+| **Usability session** | Watching someone do a few real tasks in the app and noting where they get stuck. The findings become fixes or issues | M8 exit (ADR-0027) |

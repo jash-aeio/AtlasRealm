@@ -18,7 +18,7 @@ Provide a profile-level master switch and per-world/project bindings. Effective 
 | O2 — Later | Read-only indexing of selected vault folders, supported links, and changed notes | Explicit read scope; index availability/freshness visible |
 | O3 — Later | Deliberate two-way updates for selected editable notes | Ownership, version comparison, conflicts, loop prevention, deletion policy |
 
-O1 is part of M7/MVP completion. O2 can follow M9; O3 follows a separate integration slice in M10. Do not describe O1 as bidirectional synchronization.
+O1 is part of M7/MVP completion. O2 can follow M10; O3 follows a separate integration slice in M11. Do not describe O1 as bidirectional synchronization.
 
 ### 32.3 Local interoperability
 

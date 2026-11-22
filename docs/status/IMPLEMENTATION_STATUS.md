@@ -532,6 +532,7 @@
 - `userData/profiles-index.json` (M1-2, not in SQLite): `{ schemaVersion: 1, profiles: [{ id, displayName }], lastUsedProfileId }`. Profile folders: `profiles/<default | uuid>/`.
 
 ## Decisions
+- [ADR-0027](../adr/0027-ui-ux-polish-and-art-milestone.md) (roadmap, #93): new **M8 — UI/UX polish and art integration** before MVP; old M8–M11 are now M9–M12 (MVP = M9); art from PixelLab MCP under a per-batch budget the user approves; M5 only proves the art pipeline with a small slice.
 - M2-8 (plan approved via AskUserQuestion, no ADR, recorded in `docs/sessions/2026-11-22-placement-undo-redo.md`): undo/redo wait while the placement tool is open; a refused or unanswered undo drops that step and is never retried.
 - M2-7 (user choices via AskUserQuestion, no ADR, recorded in `docs/sessions/2026-11-22-placement-tool.md`): an invalid drop leaves the building at its saved spot (UI_SPEC §17.2's "last valid location" means the last saved one), and Auto-place saves straight away and says where.
 - [ADR-0026](../adr/0026-hotbar-command-contracts.md): `hotbar.list/assign/clear`; a filled slot changes only with `replace: { expectedTargetId }` naming its current target, else `slot_occupied` with `{ slot, occupant }`; `clear` is guarded by the expected target ID too (a refilled slot restarts at revision 1); archived projects may be pinned, trashed ones not; existing pins stay with `projectStatus`
