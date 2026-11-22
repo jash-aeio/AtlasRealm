@@ -301,7 +301,9 @@ describe('placement tool', () => {
       placementId: 'b0',
       expectedRevision: 1,
     });
-    expect(message.text).toContain('The project, its files and its runs are kept');
+    expect(message.text).toContain(
+      'The project and its files are kept, no runs were stopped or deleted',
+    );
     expect(t.placements.store.get().placements).toHaveLength(0);
   });
 
@@ -331,6 +333,35 @@ describe('placement tool', () => {
     expect(t.api.placement.list).toHaveBeenCalledTimes(2);
     // The tool still works afterwards.
     expect((await t.tool.autoPlace(ALPHA)).ok).toBe(true);
+  });
+
+  it('removing or auto-placing another project keeps the open session for this one', async () => {
+    const t = setup([summary('b1', BETA.id, 2, 2)]);
+    await t.placements.refresh();
+    t.tool.startPlacing(ALPHA);
+    t.tool.pointAt({ gx: 9, gy: 9 });
+    const removed = await t.tool.remove(BETA);
+    expect(removed.ok).toBe(true);
+    expect(t.tool.store.get()).toMatchObject({
+      mode: { kind: 'placing', project: ALPHA },
+      anchor: { tileX: 9, tileY: 9 },
+      busy: false,
+      message: removed,
+    });
+    expect((await t.tool.autoPlace(BETA)).ok).toBe(true);
+    expect(t.tool.store.get().mode.kind).toBe('placing');
+  });
+
+  it('starting a session over another says the first one was stopped and nothing was saved', async () => {
+    const t = setup([summary('b1', BETA.id, 2, 2)]);
+    await t.placements.refresh();
+    t.tool.startPlacing(ALPHA);
+    t.tool.startMoving(BETA);
+    expect(t.tool.store.get()).toMatchObject({
+      mode: { kind: 'moving', project: BETA },
+      message: { ok: true, text: 'Stopped placing “Alpha”; nothing was saved for it.' },
+    });
+    expect(t.api.placement.create).not.toHaveBeenCalled();
   });
 
   it('ignores a second commit while the first is on its way', async () => {

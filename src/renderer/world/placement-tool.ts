@@ -271,10 +271,29 @@ export function createPlacementTool(
     return placements.store.get().placements;
   }
 
-  /** Ends the tool (if it was open) and reports what happened. */
-  function finish(message: ToolMessage): ToolMessage {
+  /** The project the open tool is for, or null when it is idle. */
+  function activeProject(): ToolProject | null {
+    const { mode } = store.get();
+    return mode.kind === 'idle' ? null : mode.project;
+  }
+
+  /**
+   * Reports what an action did and ends the tool, unless the tool is open for another project:
+   * removing or auto-placing project B never silently drops project A's unsaved session.
+   */
+  function finish(message: ToolMessage, project?: ToolProject): ToolMessage {
+    const open = activeProject();
+    if (project !== undefined && open !== null && open.id !== project.id) return say(message);
     store.set({ ...IDLE, message });
     return message;
+  }
+
+  /** Said when a new session replaces an open one for another project. */
+  function stoppedNote(next: ToolProject): ToolMessage | null {
+    const { mode } = store.get();
+    if (mode.kind === 'idle' || mode.project.id === next.id) return null;
+    const verb = mode.kind === 'placing' ? 'placing' : 'moving';
+    return { ok: true, text: `Stopped ${verb} “${mode.project.name}”; nothing was saved for it.` };
   }
 
   function say(message: ToolMessage): ToolMessage {
@@ -327,18 +346,21 @@ export function createPlacementTool(
         rotation: 0,
       }),
     );
-    if (result === null) return finish({ ok: false, text: UNKNOWN_OUTCOME });
+    if (result === null) return finish({ ok: false, text: UNKNOWN_OUTCOME }, project);
     if (result.ok) {
-      return finish({
-        ok: true,
-        text: `Placed “${project.name}” at ${tileText(result.data.placement)}${how}.`,
-      });
+      return finish(
+        {
+          ok: true,
+          text: `Placed “${project.name}” at ${tileText(result.data.placement)}${how}.`,
+        },
+        project,
+      );
     }
     // Blocked: stay in the tool (if open) so the user can pick another spot.
     if (result.error.code === 'placement_blocked') {
       return say({ ok: false, text: placementProblem(result.error) });
     }
-    return finish({ ok: false, text: placementProblem(result.error) });
+    return finish({ ok: false, text: placementProblem(result.error) }, project);
   }
 
   const tool: PlacementTool = {
@@ -346,10 +368,13 @@ export function createPlacementTool(
     startPlacing(project) {
       const existing = placementOf(placements.store.get(), project.id);
       if (existing !== undefined) {
-        finish({
-          ok: false,
-          text: `“${project.name}” already has a building. Use Move building instead.`,
-        });
+        finish(
+          {
+            ok: false,
+            text: `“${project.name}” already has a building. Use Move building instead.`,
+          },
+          project,
+        );
         return;
       }
       const start = freePlot(centre, defaultFootprint) ?? centre;
@@ -357,16 +382,17 @@ export function createPlacementTool(
         mode: { kind: 'placing', project, footprint: defaultFootprint, rotation: 0 },
         anchor: start,
         busy: false,
-        message: null,
+        message: stoppedNote(project),
       });
     },
     startMoving(project) {
       const placement = placementOf(placements.store.get(), project.id);
       if (placement === undefined) {
-        finish({ ok: false, text: `“${project.name}” has no building to move.` });
+        finish({ ok: false, text: `“${project.name}” has no building to move.` }, project);
         return;
       }
       const origin = { tileX: placement.tileX, tileY: placement.tileY };
+      const note = stoppedNote(project);
       store.set({
         mode: {
           kind: 'moving',
@@ -378,7 +404,7 @@ export function createPlacementTool(
         },
         anchor: origin,
         busy: false,
-        message: null,
+        message: note,
       });
     },
     pointAt(tile) {
@@ -473,7 +499,7 @@ export function createPlacementTool(
       const current = store.get();
       if (current.busy) return { ok: false, text: 'Another placement is still being saved.' };
       if (placementOf(placements.store.get(), project.id) !== undefined) {
-        return finish({ ok: false, text: `“${project.name}” already has a building.` });
+        return finish({ ok: false, text: `“${project.name}” already has a building.` }, project);
       }
       const start =
         current.mode.kind === 'placing' && current.anchor !== null ? current.anchor : centre;
@@ -490,7 +516,10 @@ export function createPlacementTool(
       if (store.get().busy) return { ok: false, text: 'Another placement is still being saved.' };
       const placement = placementOf(placements.store.get(), project.id);
       if (placement === undefined) {
-        return finish({ ok: false, text: `“${project.name}” has no building on the map.` });
+        return finish(
+          { ok: false, text: `“${project.name}” has no building on the map.` },
+          project,
+        );
       }
       store.set({ ...store.get(), busy: true, message: null });
       const result = await send(() =>
@@ -500,14 +529,17 @@ export function createPlacementTool(
           expectedRevision: placement.revision,
         }),
       );
-      if (result === null) return finish({ ok: false, text: UNKNOWN_OUTCOME });
+      if (result === null) return finish({ ok: false, text: UNKNOWN_OUTCOME }, project);
       if (result.ok) {
-        return finish({
-          ok: true,
-          text: `Removed the building of “${project.name}” from the map. The project, its files and its runs are kept; it shows as Not placed.`,
-        });
+        return finish(
+          {
+            ok: true,
+            text: `Removed the building of “${project.name}” from the map. The project and its files are kept, no runs were stopped or deleted, and it shows as Not placed.`,
+          },
+          project,
+        );
       }
-      return finish({ ok: false, text: placementProblem(result.error) });
+      return finish({ ok: false, text: placementProblem(result.error) }, project);
     },
     cancel() {
       if (store.get().mode.kind === 'idle') return;

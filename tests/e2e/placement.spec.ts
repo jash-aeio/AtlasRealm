@@ -452,7 +452,7 @@ test.describe('placement tool UI', () => {
     await expect(dialog).toContainText('No runs are stopped or deleted.');
     await dialog.getByRole('button', { name: 'Remove from map' }).click();
     await expect(page.getByTestId('projects-message')).toContainText(
-      'Removed the building of “Beta” from the map. The project, its files and its runs are kept',
+      'Removed the building of “Beta” from the map. The project and its files are kept, no runs were stopped or deleted',
     );
     await expect(row(page, 'Beta').getByTestId('project-not-placed')).toHaveText('Not placed');
     await expect(row(page, 'Beta').getByTestId('project-status')).toHaveText('Active');
