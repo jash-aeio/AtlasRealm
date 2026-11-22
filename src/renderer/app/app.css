@@ -428,6 +428,14 @@ button.primary {
   margin: 0.5rem 0 0;
 }
 
+.placement-history {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
 /* Panels open over the world, so the world keeps its size behind them. */
 .entrance-panel {
   position: absolute;

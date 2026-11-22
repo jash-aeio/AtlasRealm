@@ -573,6 +573,103 @@ test.describe('placement tool UI', () => {
     expect(await savedBuildings(page)).toEqual([`Beta@${expected}`]);
   });
 
+  // M2-8 (#73): undo and redo for placement changes.
+  const undoButton = (page: Page) =>
+    page.getByTestId('placement-history').getByRole('button', { name: /^Undo/ });
+  const redoButton = (page: Page) =>
+    page.getByTestId('placement-history').getByRole('button', { name: /^Redo/ });
+  const historyMessage = (page: Page) => page.getByTestId('placement-history-message');
+
+  test('place → undo → redo, with the buttons and with Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z', async () => {
+    const { page } = await launchApp();
+    await seed(page, [{ name: 'Beta' }]);
+    await expect(undoButton(page)).toHaveAccessibleName('Undo (nothing to undo)');
+    await expect(undoButton(page)).toBeDisabled();
+
+    await row(page, 'Beta').getByRole('button', { name: 'Place on map' }).click();
+    // While the tool is open, undo waits.
+    await expect(undoButton(page)).toBeDisabled();
+    await hoverTile(page, 24, 24);
+    await clickTile(page, 24, 24);
+    await expect(toolMessage(page)).toHaveText(/Placed “Beta” at tile 24, 24\./);
+    expect(await savedBuildings(page)).toEqual(['Beta@24,24']);
+
+    await expect(undoButton(page)).toHaveAccessibleName('Undo: place “Beta”');
+    await undoButton(page).click();
+    await expect(historyMessage(page)).toHaveText(
+      /Undone: the building of “Beta” was removed from the map again\. The project is kept and shows as Not placed\./,
+    );
+    await expect(page.getByTestId('world-view')).toHaveAttribute('data-buildings', '0');
+    expect(await savedBuildings(page)).toEqual([]);
+    await expect(redoButton(page)).toHaveAccessibleName('Redo: place “Beta”');
+
+    await page.keyboard.press('Control+y');
+    await expect(historyMessage(page)).toHaveText(
+      /Redone: “Beta” is on the map again at tile 24, 24\./,
+    );
+    expect(await savedBuildings(page)).toEqual(['Beta@24,24']);
+
+    await page.keyboard.press('Control+z');
+    await expect(page.getByTestId('world-view')).toHaveAttribute('data-buildings', '0');
+    expect(await savedBuildings(page)).toEqual([]);
+    // The project itself was never touched.
+    await page.locator('[data-entrance="projects"]').click();
+    await expect(row(page, 'Beta').getByTestId('project-not-placed')).toHaveText('Not placed');
+    await expect(row(page, 'Beta').getByTestId('project-status')).toHaveText('Active');
+
+    await backToWorld(page);
+    await page.keyboard.press('Control+Shift+Z');
+    await expect(page.getByTestId('world-view')).toHaveAttribute('data-buildings', '1');
+    expect(await savedBuildings(page)).toEqual(['Beta@24,24']);
+  });
+
+  test('Ctrl+Z in a text field is left to the field; undo after a change elsewhere drops the step', async () => {
+    const { page } = await launchApp();
+    await seed(page, [{ name: 'Beta' }]);
+    await row(page, 'Beta').getByRole('button', { name: 'Place on map' }).click();
+    await hoverTile(page, 24, 24);
+    await clickTile(page, 24, 24);
+    await expect(toolMessage(page)).toHaveText(/Placed “Beta”/);
+
+    // In a text field the keys belong to the field: nothing is undone.
+    await page.locator('[data-entrance="projects"]').click();
+    const search = page.getByTestId('entrance-panel').getByRole('searchbox');
+    await search.fill('Be');
+    await search.press('Control+z');
+    await expect(historyMessage(page)).toHaveCount(0);
+    expect(await savedBuildings(page)).toEqual(['Beta@24,24']);
+    await search.fill('');
+    await backToWorld(page);
+
+    // Another window moves the building: the undo is refused, the step dropped, nothing forced.
+    await page.evaluate(async () => {
+      const worlds = await window.atlas.world.list();
+      if (!worlds.ok) throw new Error(worlds.error.code);
+      const worldId = worlds.data.worlds[0]?.id ?? '';
+      const list = await window.atlas.placement.list({ worldId });
+      if (!list.ok) throw new Error(list.error.code);
+      const building = list.data.placements[0];
+      if (building === undefined) throw new Error('no building');
+      const moved = await window.atlas.placement.move({
+        worldId,
+        placementId: building.id,
+        expectedRevision: building.revision,
+        tileX: 10,
+        tileY: 10,
+        rotation: 0,
+      });
+      if (!moved.ok) throw new Error(moved.error.code);
+    });
+    await undoButton(page).click();
+    await expect(historyMessage(page)).toHaveText(
+      /Couldn't undo place “Beta”: this building changed since then\. That step was dropped; nothing was changed or forced\./,
+    );
+    await expect(historyMessage(page)).toHaveAttribute('role', 'alert');
+    expect(await savedBuildings(page)).toEqual(['Beta@10,10']);
+    await expect(undoButton(page)).toBeDisabled();
+    await expect(redoButton(page)).toBeDisabled();
+  });
+
   test('§22.2 #1: create a project, cancel placement, restart: it is still there and unplaced', async () => {
     const first = await launchApp();
     let { page } = first;
