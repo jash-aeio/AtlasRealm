@@ -1,7 +1,7 @@
 # 2026-11-22 · Main screen layout and keyboard shortcut layer (M2-5, #70)
 
 ## Task
-Issue [#70](https://github.com/jash-aeio/AtlasRealm/issues/70): rebuild the main screen into the UI_SPEC §6.1 layout (top bar, sidebar entrances, world area, Atlas + inspector column, bottom bar) with one keyboard shortcut layer that never takes keys from text fields. Branch `feat/70-main-layout-shortcuts`.
+Issue [#70](https://github.com/jash-aeio/AtlasRealm/issues/70): rebuild the main screen into the UI_SPEC §6.1 layout (top bar, sidebar entrances, world area, Atlas + inspector column, bottom bar) with one keyboard shortcut layer that never takes keys from text fields. Branch `feat/70-main-screen-layout`, in the worktree `D:/MyProjectsJCB/AtlasRealm-70` (see "Shared checkout clash" below).
 
 ## Definition of Ready
 - Acceptance criteria: present on the issue.
@@ -20,3 +20,17 @@ Issue [#70](https://github.com/jash-aeio/AtlasRealm/issues/70): rebuild the main
 - No new dependency: the shortcut logic is tested in plain Node with small fake events, so no jsdom is needed.
 - Top-bar search, runner, connections and the "Stop work" button are left out until their features exist, rather than shown as fake controls.
 - The world area shows a labelled placeholder until M2-6 (#71) draws real buildings.
+- Escape typed into a text field is left to the field (the create form uses it to cancel its draft), so it never closes the panel behind it.
+- Clicking an entrance that is already open keeps it open; the Library button and `E` toggle.
+
+## What was done
+- `c01c7ca` shortcut layer (`shortcuts.ts`, `ShortcutLayer.tsx`) with 21 unit tests (`tests/domain/shortcuts.test.ts`).
+- `4433f3f` the §6.1 layout: `MainScreen.tsx`, `Sidebar.tsx`, `EntrancePanel.tsx`, `entrances.ts`, `use-media-query.ts`, `app.css`. The title moved into the top bar (`App.tsx`).
+- `f116f9c` ten new E2E tests in `shell.spec.ts`: the regions, each unbuilt entrance, Escape and "Back to world" restoring focus, `E` ignored in a text field and while the archive dialog is open (the project stays active), and the narrow-width drawer. A screenshot check found the panel's right edge clipped (fixed with `box-sizing: border-box`).
+- Evidence on f116f9c: typecheck, lint, format:check pass; unit 910/910; E2E 63/63 (53 existing + 10 new).
+
+## Shared checkout clash
+The #69 session (hotbar commands) was working in the same folder, `D:/MyProjectsJCB/AtlasRealm`. Its commit landed on this task's first branch, and the uncommitted files of both tasks were mixed. The user chose to move #70 to its own worktree. Only #70's files were copied over, and they were removed from the shared checkout. The other session moved #69 to `D:/MyProjectsJCB/AtlasRealm-69`. The old branch `feat/70-main-layout-shortcuts` is stale, and the shared checkout still holds #69's leftover copies, which the user will clean up.
+
+## Open questions
+- Whichever of #69 and #70 merges second must combine the `preload exposes only the explicit API` expectations in `shell.spec.ts` (#69 adds `hotbar`).
