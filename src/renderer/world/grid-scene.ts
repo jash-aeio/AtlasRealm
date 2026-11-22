@@ -12,6 +12,7 @@ import 'pixi.js/unsafe-eval';
 
 import { Application, Container, Graphics, ImageSource, Sprite, Text, Texture } from 'pixi.js';
 
+import type { TileRect } from '../../common/world/placement-rules';
 import {
   footprintCorners,
   isOnScreen,
@@ -52,6 +53,18 @@ const MARKER_LINE = WORLD_COLOURS.markerLine;
 /** Markers are half-size diamonds centred in their tile, so the selection shows around them. */
 const MARKER_SCALE = 0.5;
 
+/** The placement tool's preview (M2-7): which tiles, whether it fits, and its text label. */
+export interface ScenePlacementPreview {
+  readonly rect: TileRect;
+  readonly fits: boolean;
+  /** Shown on a sign above the preview, so the colour never stands alone (UI_SPEC §6.5). */
+  readonly label: string;
+  /** The building art to show faded on the spot, or null for tiles only. */
+  readonly appearanceId: string | null;
+  /** A building being moved: drawn faded at its saved spot meanwhile. */
+  readonly fadedPlacementId: string | null;
+}
+
 export interface WorldScene {
   /** The renderer Pixi actually picked ('webgl' or 'canvas'). */
   readonly rendererName: string;
@@ -66,6 +79,8 @@ export interface WorldScene {
   setBuildings(buildings: readonly WorldBuilding[]): void;
   /** Outlines the footprint of the building with this placement ID, or nothing. */
   setSelectedBuilding(placementId: string | null): void;
+  /** Shows the placement tool's preview, or nothing. */
+  setPlacementPreview(preview: ScenePlacementPreview | null): void;
   /** How many buildings are drawn after culling (shown to tests and the dev measurement). */
   readonly drawnBuildingCount: () => number;
   resize(width: number, height: number): void;
@@ -159,6 +174,11 @@ const SIGN_ROOM = 28;
 /** An archived project's building is faded and greyed, and also carries an "Archived" sign. */
 const ARCHIVED_TINT = WORLD_COLOURS.stoneLight;
 const ARCHIVED_ALPHA = 0.6;
+/** A building being moved stays visible at its saved spot, faded, until the move is saved. */
+const MOVING_ALPHA = 0.35;
+/** The building art drawn on the preview spot. A blocked spot is also tinted red. */
+const GHOST_ALPHA = 0.6;
+const GHOST_BLOCKED_TINT = 0xff8a80;
 
 /**
  * A small text sign above a building. Text is always paired with any colour change (UI_SPEC
@@ -263,6 +283,8 @@ export async function createWorldScene(
   // Load the art first: if a bundled file is missing there is no app to clean up yet.
   const selectionArt = worldSprite(WORLD_SPRITES.selection);
   const selectionImage = await loadImage(selectionArt.url);
+  const invalidArt = worldSprite(WORLD_SPRITES.invalid);
+  const invalidImage = await loadImage(invalidArt.url);
   const buildingArt = buildingSprites();
   const buildingImages = await Promise.all(buildingArt.map((art) => loadImage(art.url)));
 
@@ -297,9 +319,22 @@ export async function createWorldScene(
   const markers = new Graphics();
   const buildingLayer = new Container();
   const buildingOutline = new Graphics();
+  const previewLayer = new Container();
   // Back to front: ground, spike selection, spike markers, buildings, building selection,
-  // hover outline.
-  world.addChild(drawGround(map, tile), selected, markers, buildingLayer, buildingOutline, hover);
+  // placement preview, hover outline.
+  world.addChild(
+    drawGround(map, tile),
+    selected,
+    markers,
+    buildingLayer,
+    buildingOutline,
+    previewLayer,
+    hover,
+  );
+  const imageTexture = (image: HTMLImageElement) =>
+    new Texture({ source: new ImageSource({ resource: image, scaleMode: 'nearest' }) });
+  const fitsTexture = imageTexture(selectionImage);
+  const blockedTexture = imageTexture(invalidImage);
   app.stage.addChild(world);
 
   // One texture per appearance, shared by every building that uses it.
@@ -317,7 +352,51 @@ export async function createWorldScene(
   let buildings: readonly WorldBuilding[] = [];
   let buildingNodes: Container[] = [];
   let selectedPlacementId: string | null = null;
+  let fadedPlacementId: string | null = null;
   let drawn = 0;
+
+  /** The moving building is drawn faded; every other one at its normal strength. */
+  const applyFade = () => {
+    buildings.forEach((building, index) => {
+      const node = buildingNodes[index];
+      if (node !== undefined)
+        node.alpha = building.placementId === fadedPlacementId ? MOVING_ALPHA : 1;
+    });
+  };
+
+  /** Redraws the preview from scratch: at most 16 tile markers, a ghost and a sign. */
+  const drawPreview = (preview: ScenePlacementPreview | null) => {
+    for (const node of previewLayer.removeChildren())
+      node.destroy({ children: true, context: true });
+    if (preview === null) return;
+    const { rect } = preview;
+    const art = preview.fits ? selectionArt : invalidArt;
+    for (let dy = 0; dy < rect.rows; dy++) {
+      for (let dx = 0; dx < rect.columns; dx++) {
+        const marker = new Sprite(preview.fits ? fitsTexture : blockedTexture);
+        marker.anchor.set(art.pivot.x / art.width, art.pivot.y / art.height);
+        const at = pivotPosition(art, { gx: rect.x + dx, gy: rect.y + dy }, tile);
+        marker.position.set(at.x, at.y);
+        previewLayer.addChild(marker);
+      }
+    }
+    const corners = footprintCorners(rect, tile);
+    let top = corners.north.y;
+    const loaded = preview.appearanceId === null ? undefined : textures.get(preview.appearanceId);
+    if (loaded !== undefined) {
+      const ghost = new Sprite(loaded.texture);
+      ghost.anchor.set(
+        loaded.art.pivot.x / loaded.art.width,
+        loaded.art.pivot.y / loaded.art.height,
+      );
+      ghost.position.set(corners.south.x, corners.south.y);
+      ghost.alpha = GHOST_ALPHA;
+      if (!preview.fits) ghost.tint = GHOST_BLOCKED_TINT;
+      previewLayer.addChild(ghost);
+      top = Math.min(top, corners.south.y - loaded.art.pivot.y);
+    }
+    previewLayer.addChild(drawSign(preview.label, corners.south.x, top - 2));
+  };
 
   /** Hides buildings outside the view (UI_SPEC §17.4: cull offscreen sprites). */
   const cull = () => {
@@ -384,6 +463,7 @@ export async function createWorldScene(
       buildings = next;
       buildingNodes = next.map((building) => drawBuilding(building, textures, tile));
       if (buildingNodes.length > 0) buildingLayer.addChild(...buildingNodes);
+      applyFade();
       outlineSelected();
       cull();
       requestRender();
@@ -391,6 +471,12 @@ export async function createWorldScene(
     setSelectedBuilding(placementId) {
       selectedPlacementId = placementId;
       outlineSelected();
+      requestRender();
+    },
+    setPlacementPreview(preview) {
+      fadedPlacementId = preview?.fadedPlacementId ?? null;
+      applyFade();
+      drawPreview(preview);
       requestRender();
     },
     drawnBuildingCount: () => drawn,
