@@ -2,7 +2,7 @@
 // Each profile has its own database (ADR-0014), so this normally holds one row, keyed by the
 // profile's local ID (`default` or a UUID). Every change takes the revision the caller last
 // read; see guardedUpdate.
-import type { Database, SQLInputValue } from '../database';
+import { type Database, type SQLInputValue, withTransaction } from '../database';
 import { PROFILE_ID_PATTERN } from '../profiles/profile-id';
 import {
   assertSlug,
@@ -169,6 +169,35 @@ export class ProfileSettingsRepository {
       .prepare('SELECT * FROM profile_settings WHERE profile_id = ?')
       .get(profileId);
     return row === undefined ? undefined : toProfileSettings(row);
+  }
+
+  /**
+   * Read-modify-write of the preferences alone, in one transaction (ADR-0028). Unlike update it
+   * takes no revision and leaves `revision` and `updated_at` alone: preferences are cosmetic and
+   * merged key by key (last write wins), so saving the camera never makes a settings form that
+   * holds an older revision report a conflict. `change` gets the stored object and returns the
+   * whole new one.
+   */
+  updatePreferences(
+    profileId: string,
+    change: (current: ProfilePreferences) => ProfilePreferences,
+  ): ProfileSettings {
+    return withTransaction(this.db, (db) => {
+      const current = this.get(profileId);
+      if (current === undefined) {
+        throw new RepositoryError('not_found', 'No profile_settings record with that ID.');
+      }
+      const row = db
+        .prepare(
+          `UPDATE profile_settings SET preferences_json = :preferences_json
+           WHERE profile_id = :key
+           RETURNING *`,
+        )
+        .get({ preferences_json: preferencesJson(change(current.preferences)), key: profileId });
+      // The row was just read inside this transaction, so it is still there.
+      if (row === undefined) throw new Error('profile_settings row vanished inside a transaction');
+      return toProfileSettings(row);
+    });
   }
 
   update(

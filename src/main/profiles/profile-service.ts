@@ -9,6 +9,13 @@ import { mkdir, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import { MAX_PROFILES } from '../../common/contracts/profile';
+import {
+  applyComfortPatch,
+  type ComfortPatch,
+  type ComfortPreferences,
+  parseComfortPreferences,
+  withComfort,
+} from '../../common/preferences/comfort';
 import { CommandError } from '../ipc/router';
 import { createProfileDatabase, profilePaths } from '../storage/app-database';
 import type { Database } from '../storage/database';
@@ -196,6 +203,21 @@ export class ProfileService {
   ): ProfileSettings {
     const { profileId, db } = this.active.current();
     return new ProfileSettingsRepository(db, this.now).update(profileId, expectedRevision, patch);
+  }
+
+  /** The active profile's comfort preferences; broken stored values read as defaults. */
+  getComfort(): ComfortPreferences {
+    return parseComfortPreferences(this.getSettings().preferences);
+  }
+
+  /** Merges one comfort change into the stored preferences (ADR-0028: no revision). */
+  updateComfort(patch: ComfortPatch): ComfortPreferences {
+    const { profileId, db } = this.active.current();
+    const saved = new ProfileSettingsRepository(db, this.now).updatePreferences(
+      profileId,
+      (current) => withComfort(current, applyComfortPatch(parseComfortPreferences(current), patch)),
+    );
+    return parseComfortPreferences(saved.preferences);
   }
 
   private settingsOf(repository: ProfileSettingsRepository, profileId: ProfileId): ProfileSettings {

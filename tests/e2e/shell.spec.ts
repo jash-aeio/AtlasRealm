@@ -75,6 +75,7 @@ test('preload exposes only the explicit API', async () => {
     template: Object.keys(window.atlas.template),
     profile: Object.keys(window.atlas.profile),
     profileSettings: Object.keys(window.atlas.profile.settings),
+    profilePreferences: Object.keys(window.atlas.profile.preferences),
     world: Object.keys(window.atlas.world),
     project: Object.keys(window.atlas.project),
     placement: Object.keys(window.atlas.placement),
@@ -85,8 +86,9 @@ test('preload exposes only the explicit API', async () => {
     app: ['ping', 'launchInfo'],
     runtime: ['workerStatus', 'workerCheck'],
     template: ['list'],
-    profile: ['list', 'create', 'rename', 'switch', 'settings'],
+    profile: ['list', 'create', 'rename', 'switch', 'settings', 'preferences'],
     profileSettings: ['get', 'update'],
+    profilePreferences: ['get', 'update'],
     world: ['create', 'list', 'rename'],
     project: [
       'create',

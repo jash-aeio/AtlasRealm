@@ -22,6 +22,8 @@ import type {
   ProfileCreateInput,
   ProfileCreateOutput,
   ProfileListOutput,
+  ProfilePreferencesOutput,
+  ProfilePreferencesUpdateInput,
   ProfileRenameInput,
   ProfileSettingsOutput,
   ProfileSettingsUpdateInput,
@@ -74,6 +76,13 @@ export interface AtlasApi {
       readonly update: (
         input: ProfileSettingsUpdateInput,
       ) => Promise<IpcResult<ProfileSettingsOutput>>;
+    };
+    /** Comfort preferences (ADR-0028): no revision, each update merges and the last one wins. */
+    readonly preferences: {
+      readonly get: () => Promise<IpcResult<ProfilePreferencesOutput>>;
+      readonly update: (
+        input: ProfilePreferencesUpdateInput,
+      ) => Promise<IpcResult<ProfilePreferencesOutput>>;
     };
   };
   /** Worlds of the active profile. */

@@ -6,6 +6,9 @@ import {
   ProfileCreateOutput,
   ProfileListInput,
   ProfileListOutput,
+  ProfilePreferencesGetInput,
+  ProfilePreferencesOutput,
+  ProfilePreferencesUpdateInput,
   ProfileRenameInput,
   ProfileSettingsGetInput,
   ProfileSettingsOutput,
@@ -47,9 +50,24 @@ export const profileSettingsUpdateCommand = {
   output: ProfileSettingsOutput,
 } satisfies CommandDefinition<typeof ProfileSettingsUpdateInput, typeof ProfileSettingsOutput>;
 
+export const profilePreferencesGetCommand = {
+  channel: Channels.profilePreferencesGet,
+  input: ProfilePreferencesGetInput,
+  output: ProfilePreferencesOutput,
+} satisfies CommandDefinition<typeof ProfilePreferencesGetInput, typeof ProfilePreferencesOutput>;
+
+export const profilePreferencesUpdateCommand = {
+  channel: Channels.profilePreferencesUpdate,
+  input: ProfilePreferencesUpdateInput,
+  output: ProfilePreferencesOutput,
+} satisfies CommandDefinition<
+  typeof ProfilePreferencesUpdateInput,
+  typeof ProfilePreferencesOutput
+>;
+
 /**
- * Only the fields the contract lists. Preferences stay in the main process until a later
- * milestone gives them a schema. The output schema then checks values such as the avatar preset.
+ * Only the fields the contract lists. Preferences have their own commands
+ * (profile.preferences.*, ADR-0028), which return only the parts with a schema. The output schema then checks values such as the avatar preset.
  */
 function toDto(settings: ProfileSettings): { settings: ProfileSettingsDto } {
   return {
@@ -106,4 +124,16 @@ export function createProfileSettingsUpdateHandler(
 ): CommandHandler<typeof ProfileSettingsUpdateInput, typeof ProfileSettingsOutput> {
   return ({ expectedRevision, ...patch }) =>
     withRepositoryErrors(() => toDto(service.updateSettings(expectedRevision, patch)));
+}
+
+export function createProfilePreferencesGetHandler(
+  service: ProfileService,
+): CommandHandler<typeof ProfilePreferencesGetInput, typeof ProfilePreferencesOutput> {
+  return () => ({ preferences: service.getComfort() });
+}
+
+export function createProfilePreferencesUpdateHandler(
+  service: ProfileService,
+): CommandHandler<typeof ProfilePreferencesUpdateInput, typeof ProfilePreferencesOutput> {
+  return (patch) => withRepositoryErrors(() => ({ preferences: service.updateComfort(patch) }));
 }

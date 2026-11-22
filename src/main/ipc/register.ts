@@ -66,11 +66,15 @@ import {
   createProfileRenameHandler,
   createProfileSettingsGetHandler,
   createProfileSettingsUpdateHandler,
+  createProfilePreferencesGetHandler,
+  createProfilePreferencesUpdateHandler,
   profileCreateCommand,
   profileListCommand,
   profileRenameCommand,
   profileSettingsGetCommand,
   profileSettingsUpdateCommand,
+  profilePreferencesGetCommand,
+  profilePreferencesUpdateCommand,
 } from './commands/profile';
 import {
   createWorldCreateHandler,
@@ -134,6 +138,8 @@ export function registerIpcHandlers(
   handle(profileSwitchCommand, createProfileSwitchHandler(session));
   handle(profileSettingsGetCommand, createProfileSettingsGetHandler(profiles));
   handle(profileSettingsUpdateCommand, createProfileSettingsUpdateHandler(profiles));
+  handle(profilePreferencesGetCommand, createProfilePreferencesGetHandler(profiles));
+  handle(profilePreferencesUpdateCommand, createProfilePreferencesUpdateHandler(profiles));
   handle(worldCreateCommand, createWorldCreateHandler(activeProfile));
   handle(worldListCommand, createWorldListHandler(activeProfile));
   handle(worldRenameCommand, createWorldRenameHandler(activeProfile));
