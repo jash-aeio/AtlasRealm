@@ -6,6 +6,7 @@ import type { z } from 'zod';
 import { type ActiveProfile, refuseWhileSwitching } from '../profiles/active-profile';
 import { ProfileService } from '../profiles/profile-service';
 import type { WorkerBridge } from '../runtime-bridge/worker-bridge';
+import { HotbarService } from '../services/hotbar-service';
 import { PlacementService } from '../services/placement-service';
 import { ProfileSession } from '../services/profile-session';
 import { ProjectService } from '../services/project-service';
@@ -23,6 +24,14 @@ import {
   placementMoveCommand,
   placementRemoveCommand,
 } from './commands/placement';
+import {
+  createHotbarAssignHandler,
+  createHotbarClearHandler,
+  createHotbarListHandler,
+  hotbarAssignCommand,
+  hotbarClearCommand,
+  hotbarListCommand,
+} from './commands/hotbar';
 import {
   createProjectArchiveHandler,
   createProjectCreateHandler,
@@ -92,6 +101,7 @@ export function registerIpcHandlers(
   const projects = new ProjectService(activeProfile, templates);
   // Footprints come from the bundled manifest, parsed once here; a broken one fails startup.
   const placements = new PlacementService(activeProfile, projects, BuildingAppearances.bundled());
+  const hotbar = new HotbarService(activeProfile, projects);
   const session = new ProfileSession({ active: activeProfile, worker, reloadRenderer });
 
   // Every command is refused while a profile switch is under way. Handlers that are already
@@ -140,4 +150,7 @@ export function registerIpcHandlers(
   handle(placementCreateCommand, createPlacementCreateHandler(placements));
   handle(placementMoveCommand, createPlacementMoveHandler(placements));
   handle(placementRemoveCommand, createPlacementRemoveHandler(placements));
+  handle(hotbarListCommand, createHotbarListHandler(hotbar));
+  handle(hotbarAssignCommand, createHotbarAssignHandler(hotbar));
+  handle(hotbarClearCommand, createHotbarClearHandler(hotbar));
 }
