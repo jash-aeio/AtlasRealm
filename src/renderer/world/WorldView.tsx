@@ -16,6 +16,7 @@ import { footprintRect } from '../../common/world/placement-rules';
 import { useShortcut } from '../app/ShortcutLayer';
 import type { ProjectSelection } from '../state/selection';
 import { useStore } from '../state/use-store';
+import type { Comfort } from './comfort';
 import {
   layoutBuildings,
   pickBuilding,
@@ -44,6 +45,8 @@ interface WorldViewProps {
   readonly history: PlacementHistory;
   /** Double-click on a project's building: show that project's details. */
   readonly onOpenProject: (projectId: string) => void;
+  /** Comfort preferences (M2-14): the name label toggle and the saved camera. */
+  readonly comfort: Comfort;
 }
 
 /** Bundled building art by appearance ID. Read once: the manifest is part of the build. */
@@ -57,6 +60,7 @@ function toPlaced(placement: PlacementSummary): PlacedBuilding {
   return {
     placementId: placement.id,
     projectId: placement.target.type === 'project' ? placement.target.id : null,
+    name: placement.projectName,
     archived: placement.projectStatus === 'archived',
     appearanceId: placement.appearanceId,
     tileX: placement.tileX,
@@ -67,11 +71,13 @@ function toPlaced(placement: PlacementSummary): PlacedBuilding {
 }
 
 /**
- * How many buildings survive culling, written straight to the DOM for tests and the
- * performance measurement (no React render per camera move).
+ * How many buildings and name labels survive culling, written straight to the DOM for tests
+ * and the performance measurement (no React render per camera move).
  */
 function reportDrawn(element: HTMLElement | null, scene: WorldScene): void {
-  if (element !== null) element.dataset['drawnBuildings'] = String(scene.drawnBuildingCount());
+  if (element === null) return;
+  element.dataset['drawnBuildings'] = String(scene.drawnBuildingCount());
+  element.dataset['drawnLabels'] = String(scene.drawnLabelCount());
 }
 
 function plural(count: number, one: string, many: string): string {
@@ -85,6 +91,7 @@ export function WorldView({
   tool,
   history,
   onOpenProject,
+  comfort,
 }: WorldViewProps) {
   const map = useMemo<MapSize>(
     () => ({ columns: world.gridWidth, rows: world.gridHeight }),
@@ -100,6 +107,7 @@ export function WorldView({
     selectedProjectId === null
       ? null
       : (buildings.find((b) => b.projectId === selectedProjectId) ?? null);
+  const showLabels = useStore(comfort.store).preferences.buildingLabels;
   const toolState = useStore(tool.store);
   const historyState = useStore(history.store);
   const toolActive = toolState.mode.kind !== 'idle';
@@ -125,6 +133,7 @@ export function WorldView({
   const buildingsRef = useRef<readonly WorldBuilding[]>(buildings);
   const selectedRef = useRef<string | null>(selectedBuilding?.placementId ?? null);
   const previewRef = useRef<ScenePlacementPreview | null>(scenePreview);
+  const labelsRef = useRef(showLabels);
   /** A left press that started on the map while the tool was open: its release commits. */
   const toolPressRef = useRef(false);
   /** The click that follows a tool release must not also select or clear the selection. */
@@ -138,6 +147,7 @@ export function WorldView({
       scene.setBuildings(buildingsRef.current);
       scene.setSelectedBuilding(selectedRef.current);
       scene.setPlacementPreview(previewRef.current);
+      scene.setLabels(labelsRef.current);
       reportDrawn(sectionRef.current, scene);
     },
     onCamera(scene) {
@@ -160,6 +170,14 @@ export function WorldView({
     selectedRef.current = selectedPlacementId;
     sceneRef.current?.setSelectedBuilding(selectedPlacementId);
   }, [selectedPlacementId, sceneRef]);
+
+  useEffect(() => {
+    labelsRef.current = showLabels;
+    const scene = sceneRef.current;
+    if (scene === null) return;
+    scene.setLabels(showLabels);
+    reportDrawn(sectionRef.current, scene);
+  }, [showLabels, sceneRef]);
 
   useEffect(() => {
     previewRef.current = scenePreview;
@@ -259,8 +277,18 @@ export function WorldView({
       data-renderer={view.renderer ?? undefined}
       data-buildings={state.status === 'ready' ? String(buildings.length) : undefined}
       data-selected-placement={selectedPlacementId ?? undefined}
+      data-labels={showLabels ? 'on' : 'off'}
     >
-      <WorldToolbar heading={world.name} headingId="world-view-heading" world={view} />
+      <WorldToolbar heading={world.name} headingId="world-view-heading" world={view}>
+        <label className="world-labels-toggle">
+          <input
+            type="checkbox"
+            checked={showLabels}
+            onChange={(event) => void comfort.setBuildingLabels(event.target.checked)}
+          />
+          Labels
+        </label>
+      </WorldToolbar>
       <PlacementHistoryControls
         history={history}
         state={historyState}
@@ -330,7 +358,7 @@ export function WorldView({
           ? toolActive
             ? 'Move the pointer over the map to choose a spot.'
             : 'Hover the map to see a tile. Click a building to select its project.'
-          : `Tile ${String(hover.gx)}, ${String(hover.gy)}${hoveredBuilding === null ? '' : ' · building'}`}
+          : `Tile ${String(hover.gx)}, ${String(hover.gy)}${hoveredBuilding === null ? '' : ` · ${hoveredBuilding.name ?? 'building'}`}`}
       </p>
       {state.status === 'ready' && buildings.length === 0 && (
         <p className="muted" data-testid="world-view-empty">

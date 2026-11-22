@@ -314,6 +314,7 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
               tool={tool}
               history={history}
               onOpenProject={openProject}
+              comfort={comfort}
             />
           </WorldErrorBoundary>
           {shownPanel !== null && (

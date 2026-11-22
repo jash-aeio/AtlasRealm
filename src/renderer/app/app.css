@@ -772,3 +772,14 @@ kbd {
   display: block;
   margin: 0.4rem 0;
 }
+
+.world-view-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.world-labels-toggle {
+  white-space: nowrap;
+}

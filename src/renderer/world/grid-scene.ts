@@ -14,6 +14,7 @@ import { Application, Container, Graphics, ImageSource, Sprite, Text, Texture } 
 
 import type { TileRect } from '../../common/world/placement-rules';
 import {
+  buildingLabel,
   footprintCorners,
   isOnScreen,
   MISSING_ART_HEIGHT,
@@ -53,6 +54,14 @@ const MARKER_LINE = WORLD_COLOURS.markerLine;
 /** Markers are half-size diamonds centred in their tile, so the selection shows around them. */
 const MARKER_SCALE = 0.5;
 
+/**
+ * Name labels stay this size on screen at every zoom (user decision 2026-11-23, ADR-0028) and
+ * are hidden below LABEL_MIN_ZOOM, where the map is an overview and labels would pile up.
+ */
+export const LABEL_MIN_ZOOM = 0.35;
+/** World pixels a status sign ("Archived", "Missing art") takes, so a name label sits above it. */
+const STATUS_SIGN_HEIGHT = 22;
+
 /** The placement tool's preview (M2-7): which tiles, whether it fits, and its text label. */
 export interface ScenePlacementPreview {
   readonly rect: TileRect;
@@ -81,6 +90,10 @@ export interface WorldScene {
   setSelectedBuilding(placementId: string | null): void;
   /** Shows the placement tool's preview, or nothing. */
   setPlacementPreview(preview: ScenePlacementPreview | null): void;
+  /** Shows or hides the buildings' name labels (M2-14, UI_SPEC §6.6). On by default. */
+  setLabels(show: boolean): void;
+  /** How many name labels are drawn right now (shown to tests). */
+  readonly drawnLabelCount: () => number;
   /** How many buildings are drawn after culling (shown to tests and the dev measurement). */
   readonly drawnBuildingCount: () => number;
   resize(width: number, height: number): void;
@@ -249,9 +262,29 @@ function drawBuilding(
     }
     node.addChild(sprite);
   }
-  const sign = loaded === undefined ? 'Missing art' : building.archived ? 'Archived' : null;
+  const sign = statusSign(building, loaded !== undefined);
   if (sign !== null) node.addChild(drawSign(sign, building.pivot.x, building.bounds.top - 2));
   return node;
+}
+
+/** The status sign a building carries, if any. Status signs are always shown. */
+function statusSign(building: WorldBuilding, hasArt: boolean): string | null {
+  return !hasArt ? 'Missing art' : building.archived ? 'Archived' : null;
+}
+
+/**
+ * A building's name label, or null for a building without a name (a service structure). Its
+ * origin is the bottom middle, so scaling it by 1 / zoom keeps it the same size on screen and
+ * still standing just above the building (and above any status sign).
+ */
+function drawNameLabel(building: WorldBuilding, hasArt: boolean): Container | null {
+  if (building.name === null) return null;
+  const label = drawSign(buildingLabel(building.name), 0, 0);
+  const holder = new Container();
+  holder.addChild(label);
+  const above = statusSign(building, hasArt) === null ? 0 : STATUS_SIGN_HEIGHT;
+  holder.position.set(building.pivot.x, building.bounds.top - 2 - above);
+  return holder;
 }
 
 /** The selected building's footprint outline, drawn above the buildings so it always shows. */
@@ -319,15 +352,18 @@ export async function createWorldScene(
   const markers = new Graphics();
   const buildingLayer = new Container();
   const buildingOutline = new Graphics();
+  const labelLayer = new Container();
   const previewLayer = new Container();
   // Back to front: ground, spike selection, spike markers, buildings, building selection,
-  // placement preview, hover outline.
+  // name labels (above every building, so one never hides behind another), placement
+  // preview, hover outline.
   world.addChild(
     drawGround(map, tile),
     selected,
     markers,
     buildingLayer,
     buildingOutline,
+    labelLayer,
     previewLayer,
     hover,
   );
@@ -351,6 +387,10 @@ export async function createWorldScene(
   let viewHeight = Math.max(1, height);
   let buildings: readonly WorldBuilding[] = [];
   let buildingNodes: Container[] = [];
+  /** One per building, in the same order; null for a building without a name. */
+  let labelNodes: (Container | null)[] = [];
+  let showLabels = true;
+  let drawnLabels = 0;
   let selectedPlacementId: string | null = null;
   let fadedPlacementId: string | null = null;
   let drawn = 0;
@@ -408,7 +448,20 @@ export async function createWorldScene(
       node.visible = isOnScreen(box, camera, viewWidth, viewHeight, CULL_MARGIN);
       if (node.visible) drawn++;
     });
+    updateLabels();
   };
+
+  /** Labels follow their building's culling, the toggle and the zoom; sized for the screen. */
+  function updateLabels() {
+    drawnLabels = 0;
+    const zoomedIn = camera.zoom >= LABEL_MIN_ZOOM;
+    labelNodes.forEach((label, index) => {
+      if (label === null) return;
+      label.visible = showLabels && zoomedIn && buildingNodes[index]?.visible === true;
+      label.scale.set(1 / camera.zoom);
+      if (label.visible) drawnLabels++;
+    });
+  }
 
   const outlineSelected = () => {
     const building = buildings.find((b) => b.placementId === selectedPlacementId) ?? null;
@@ -458,11 +511,16 @@ export async function createWorldScene(
     setBuildings(next) {
       // Rebuilt from scratch: at most a few hundred nodes, and only when the saved list changes.
       // Shared textures survive; each Graphics frees the shapes it built (context: true).
-      for (const node of buildingLayer.removeChildren())
+      for (const node of [...buildingLayer.removeChildren(), ...labelLayer.removeChildren()])
         node.destroy({ children: true, context: true });
       buildings = next;
       buildingNodes = next.map((building) => drawBuilding(building, textures, tile));
       if (buildingNodes.length > 0) buildingLayer.addChild(...buildingNodes);
+      labelNodes = next.map((building) =>
+        drawNameLabel(building, building.art !== null && textures.has(building.appearanceId)),
+      );
+      const labels = labelNodes.filter((label) => label !== null);
+      if (labels.length > 0) labelLayer.addChild(...labels);
       applyFade();
       outlineSelected();
       cull();
@@ -479,7 +537,13 @@ export async function createWorldScene(
       drawPreview(preview);
       requestRender();
     },
+    setLabels(show) {
+      showLabels = show;
+      updateLabels();
+      requestRender();
+    },
     drawnBuildingCount: () => drawn,
+    drawnLabelCount: () => drawnLabels,
     resize(newWidth, newHeight) {
       viewWidth = Math.max(1, newWidth);
       viewHeight = Math.max(1, newHeight);

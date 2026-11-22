@@ -686,7 +686,7 @@ test.describe('100 buildings', () => {
     await page.mouse.down({ button: 'middle' });
     for (let i = 0; i < 40; i++) await page.mouse.move(cx + i * 5, cy + i * 2);
     await page.mouse.up({ button: 'middle' });
-    // Contains: over a building the line adds " · building".
+    // Contains: over a building the line adds " · <project name>".
     await expect(page.getByTestId('world-view-hover')).toContainText(
       await expectedHover(page, { x: cx + 195, y: cy + 78 }),
     );
