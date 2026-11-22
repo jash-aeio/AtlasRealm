@@ -18,13 +18,13 @@ Out of scope: rotation (only square footprints exist) and undo (M2-8, #73).
 - Routine: the preview anchor puts the pointer on the footprint's centre tile (the north tile for 2×2). Only left-button releases commit; middle-drag still pans.
 
 ## What was done
-Four commits on :
-1. : the state machine, the preview (, shared ), and place/move/remove/auto-place through the placement commands.  moved to  (main re-exports it). 16 unit tests in .
-2. :  draws the footprint tiles with the valid () or invalid () marker, a faded copy of the building (tinted red when blocked), and a text sign. A building being moved is drawn faded at its saved spot.
-3. UI:  (mode, tile, a ✓/✕ text label, Place/Move here, Auto-place, Cancel Esc, result line).  turns pointer moves into the preview and a left release into a commit, and registers arrow keys and Escape with the shortcut layer. The Projects list gets Place on map / Auto-place / Remove from map. The inspector gets Move building / Place on map / Remove from map. Removing asks for confirmation. Starting the tool closes the open panel.
-4. E2E: 7 new UI tests in  (one test per acceptance criterion, including §22.2 #1 with a real restart, and a world filled with 484 buildings so auto-place finds no plot).
+Four commits on `feat/72-placement-tool`:
+1. `placement-tool.ts`: the state machine, the preview (`previewOf`, shared `checkPlacement`), and place/move/remove/auto-place through the placement commands. `DEFAULT_BUILDING_APPEARANCE` moved to `src/common/world/building-appearance.ts` (main re-exports it). 16 unit tests in `tests/domain/placement-tool.test.ts`.
+2. `grid-scene.ts`: `setPlacementPreview` draws the footprint tiles with the valid (`placeholder.marker.selection`) or invalid (`placeholder.marker.invalid`) marker, a faded copy of the building (tinted red when blocked), and a text sign. A building being moved is drawn faded at its saved spot.
+3. UI: `PlacementToolBar.tsx` (mode, tile, a ✓/✕ text label, Place/Move here, Auto-place, Cancel Esc, result line). `WorldView` turns pointer moves into the preview and a left release into a commit, and registers arrow keys and Escape with the shortcut layer. The Projects list gets Place on map / Auto-place / Remove from map. The inspector gets Move building / Place on map / Remove from map. Removing asks for confirmation. Starting the tool closes the open panel.
+4. E2E: 7 new UI tests in `tests/e2e/placement.spec.ts` (one test per acceptance criterion, including §22.2 #1 with a real restart, and a world filled with 484 buildings so auto-place finds no plot).
 
-Verification: typecheck, lint and format:check pass; unit/integration 970/970; placement E2E 8/8; full E2E 76/77. The one failure was the known hover/zoom/pan flake in , which passed 5/5 when run again on its own. The failed run's hover readout moved without the test moving the mouse, which points to real cursor movement over the test window. Screenshots (taken with Electron's , not committed) confirmed the blocked and fits previews draw as intended.
+Verification: typecheck, lint and format:check pass; unit/integration 970/970; placement E2E 8/8; full E2E 76/77. The one failure was the known hover/zoom/pan flake in `world.spec.ts`, which passed 5/5 when run again on its own. The failed run's hover readout moved without the test moving the mouse, which points to real cursor movement over the test window. Screenshots (taken with Electron's `capturePage`, not committed) confirmed the blocked and fits previews draw as intended.
 
 Not done: rotation (only square footprints exist) and undo (M2-8, #73). At 50% zoom the preview sign's text is small; the same text is always in the HTML tool bar.
 
