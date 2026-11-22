@@ -6,14 +6,15 @@
 // The manifest is imported at build time, so this works offline and reads no files at run time.
 import manifestJson from '../../../resources/assets/asset-manifest.json';
 import { AssetManifest } from '../../common/assets/asset-manifest';
+import { DEFAULT_BUILDING_APPEARANCE } from '../../common/world/building-appearance';
 import {
   BUILDING_SIZES,
   type Footprint,
   squareFootprint,
 } from '../../common/world/placement-rules';
 
-/** The art every new building gets until users can choose one (no picker is planned in M2). */
-export const DEFAULT_BUILDING_APPEARANCE = 'placeholder.building.2x2';
+// Re-exported for callers that already import it from here.
+export { DEFAULT_BUILDING_APPEARANCE };
 
 /**
  * What a stored building counts as when its appearance is no longer in the manifest (art
