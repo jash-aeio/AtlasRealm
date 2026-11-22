@@ -5,11 +5,23 @@
 // Keys go through the one shortcut layer (shortcuts.ts): `E` toggles the library and Escape
 // closes the drawer, then the open panel. Closing a panel only hides it; focus goes back to
 // whatever opened it (UI_SPEC §6.6).
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { PlaceholderAvatar } from '../onboarding/PlaceholderAvatar';
+import { ProjectDetails } from '../projects/ProjectDetails';
 import { ProjectsPanel } from '../projects/ProjectsPanel';
+import { createProjectSelection } from '../state/selection';
+import { createStore } from '../state/store';
 import type { Session, SessionData } from '../state/session';
+import { useStore } from '../state/use-store';
+import { ProjectInspector } from '../world/ProjectInspector';
+import {
+  createWorldPlacements,
+  placedProjectIds,
+  type WorldPlacementsState,
+} from '../world/world-placements';
+import { WorldErrorBoundary } from '../world/WorldErrorBoundary';
+import { WorldView } from '../world/WorldView';
 import { DeveloperSpikes } from './DeveloperSpikes';
 import { EntrancePanel, NotBuilt } from './EntrancePanel';
 import { NOT_BUILT, panelTitle, type PanelId } from './entrances';
@@ -26,6 +38,12 @@ interface MainScreenProps {
 
 /** Below this width the Atlas + inspector column becomes a drawer (matches app.css). */
 const NARROW = '(max-width: 60rem)';
+/** Read before the screen has a world (never shown: the screen renders nothing then). */
+const EMPTY_PLACEMENTS = createStore<WorldPlacementsState>({
+  status: 'loading',
+  placements: [],
+  error: null,
+});
 const HOTBAR_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'] as const;
 
 export function MainScreen(props: MainScreenProps) {
@@ -40,6 +58,8 @@ interface OpenPanel {
   readonly id: PanelId;
   /** False for the panel shown at startup, so loading the screen doesn't move focus. */
   readonly focus: boolean;
+  /** Only for the 'project' details panel: which project of which world it shows. */
+  readonly project?: { readonly worldId: string; readonly projectId: string };
 }
 
 function MainLayout({ session, data, notice }: MainScreenProps) {
@@ -57,10 +77,10 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
   const drawerToggle = useRef<HTMLButtonElement>(null);
   const drawerClose = useRef<HTMLButtonElement>(null);
 
-  function openPanel(id: PanelId) {
+  function openPanel(id: PanelId, project?: OpenPanel['project']) {
     const active = document.activeElement;
     opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
-    setPanel({ id, focus: true });
+    setPanel({ id, focus: true, project });
   }
 
   function closePanel() {
@@ -107,14 +127,63 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
   // The screen is only shown with at least one world; fall back to the first if the chosen
   // one is gone (for example archived elsewhere).
   const world = data.worlds.find((w) => w.id === selectedId) ?? data.worlds[0];
-  if (world === undefined) return null;
+  const worldId = world?.id;
+  // Per world: its buildings and the selected project. Another world starts with a fresh
+  // selection, so a project of the old world can never stay selected.
+  const scope = useMemo(
+    () =>
+      worldId === undefined
+        ? null
+        : {
+            placements: createWorldPlacements(window.atlas, worldId),
+            selection: createProjectSelection(),
+          },
+    [worldId],
+  );
+  useEffect(() => {
+    void scope?.placements.refresh();
+  }, [scope]);
+  /** Bumped after any project change, so the inspector and details read it again. */
+  const [projectChanges, setProjectChanges] = useState(0);
+  /** Bumped after the inspector changed a project, so the Projects list reloads. */
+  const [inspectorChanges, setInspectorChanges] = useState(0);
+  const placementState = useStore(scope?.placements.store ?? EMPTY_PLACEMENTS);
+  const placedIds = useMemo(
+    () => (placementState.status === 'loading' ? null : placedProjectIds(placementState)),
+    [placementState],
+  );
+
+  if (world === undefined || scope === null) return null;
+  const { placements, selection } = scope;
+
+  /** "Open" or double-click: select the project and show its details (UI_SPEC §6.2). */
+  function openProject(projectId: string) {
+    if (world === undefined) return;
+    selection.select(projectId);
+    openPanel('project', { worldId: world.id, projectId });
+  }
+
+  /** After a change in the Projects list: archive and trash remove buildings (ADR-0025). */
+  function projectsChanged() {
+    void placements.refresh();
+    setProjectChanges((n) => n + 1);
+  }
+
+  // A details panel left open for a project of another world is not shown.
+  const shownPanel = panel?.id === 'project' && panel.project?.worldId !== world.id ? null : panel;
 
   function panelContent(id: PanelId) {
     if (world === undefined) return null;
     if (id === 'projects') {
       return (
         <>
-          <ProjectsPanel key={world.id} world={world} />
+          <ProjectsPanel
+            key={world.id}
+            world={world}
+            placedIds={placedIds}
+            onProjectsChanged={projectsChanged}
+            changeToken={inspectorChanges}
+          />
           <p className="muted">
             Everything here works offline. AI work will need a model connection later; nothing asks
             for one yet.
@@ -123,6 +192,16 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
       );
     }
     if (id === 'settings') return <SettingsView session={session} data={data} world={world} />;
+    if (id === 'project') {
+      return shownPanel?.project === undefined ? null : (
+        <ProjectDetails
+          world={world}
+          projectId={shownPanel.project.projectId}
+          placements={placements}
+          version={projectChanges}
+        />
+      );
+    }
     const notBuilt = NOT_BUILT[id];
     return notBuilt === undefined ? null : <NotBuilt {...notBuilt} />;
   }
@@ -187,23 +266,23 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
         <Sidebar open={panel?.id ?? null} onOpen={openPanel} />
 
         <div className="world-area" data-testid="world-area">
-          <div className="world-placeholder">
-            <p>
-              <strong>World view: not built yet</strong> (planned for M2-6).
-            </p>
-            <p className="muted">
-              The buildings for your projects will appear here. Until then, open Projects in the
-              sidebar.
-            </p>
-          </div>
-          {panel !== null && (
+          <WorldErrorBoundary>
+            <WorldView
+              key={world.id}
+              world={world}
+              placements={placements}
+              selection={selection}
+              onOpenProject={openProject}
+            />
+          </WorldErrorBoundary>
+          {shownPanel !== null && (
             <EntrancePanel
-              key={panel.id}
-              title={panel.id === 'projects' ? world.name : panelTitle(panel.id)}
-              focusOnOpen={panel.focus}
+              key={`${shownPanel.id}:${shownPanel.project?.projectId ?? ''}`}
+              title={shownPanel.id === 'projects' ? world.name : panelTitle(shownPanel.id)}
+              focusOnOpen={shownPanel.focus}
               onClose={closePanel}
             >
-              {panelContent(panel.id)}
+              {panelContent(shownPanel.id)}
             </EntrancePanel>
           )}
         </div>
@@ -229,10 +308,17 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
           </section>
           <section className="side-card" aria-labelledby={`${sideColumnId}-inspector`}>
             <h2 id={`${sideColumnId}-inspector`}>Inspector</h2>
-            <p>Nothing selected.</p>
-            <p className="muted">
-              Selecting a building will show its project here once the world view is built.
-            </p>
+            <ProjectInspector
+              world={world}
+              selection={selection}
+              placements={placements}
+              version={projectChanges}
+              onOpen={openProject}
+              onChanged={() => {
+                projectsChanged();
+                setInspectorChanges((n) => n + 1);
+              }}
+            />
           </section>
         </aside>
 

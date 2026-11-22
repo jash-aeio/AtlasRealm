@@ -389,16 +389,20 @@ button.primary {
   background: #2f4a32;
 }
 
-.world-placeholder {
-  display: grid;
-  place-content: center;
+/* The product world fills the world area; panels open over it. */
+.world-product {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
   height: 100%;
-  padding: 1rem;
-  text-align: center;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
 }
 
-.world-placeholder p {
-  margin: 0.25rem 0;
+.world-product .world-canvas {
+  flex: 1;
+  height: auto;
+  min-height: 160px;
 }
 
 /* Panels open over the world, so the world keeps its size behind them. */
@@ -687,4 +691,33 @@ kbd {
 .template-details .block {
   display: block;
   margin-top: 0.2rem;
+}
+
+/* Inspector and project details (M2-6): short facts as a two-column list. */
+.inspector-name {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+.inspector-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.25rem 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.inspector-facts dt {
+  color: #a9adb8;
+}
+
+.inspector-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.inspector-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }

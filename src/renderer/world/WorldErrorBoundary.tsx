@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 
-import { WorldUnavailable } from './WorldCanvas';
+import { WorldUnavailable } from './WorldChrome';
 
 interface Props {
   readonly children: ReactNode;

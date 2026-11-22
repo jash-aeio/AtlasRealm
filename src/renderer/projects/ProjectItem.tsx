@@ -34,6 +34,8 @@ interface ProjectItemProps {
   readonly onMessage: (message: ActionMessage) => void;
   /** Where focus goes when this row disappears (for example after archiving). */
   readonly fallbackFocus: () => void;
+  /** Whether a building represents it in the world; undefined while that is unknown. */
+  readonly placed?: boolean;
 }
 
 /** The template's name when it is still available, else its stored ID and version. */
@@ -58,6 +60,7 @@ export function ProjectItem({
   list,
   onMessage,
   fallbackFocus,
+  placed,
 }: ProjectItemProps) {
   const headingId = `project-${project.id}`;
   const renameButton = useRef<HTMLButtonElement>(null);
@@ -93,6 +96,12 @@ export function ProjectItem({
         <span className="badge" data-testid="project-status">
           {STATUS_LABELS[project.status]}
         </span>
+        {placed === false && (
+          // A project needs no building: it stays fully usable from this list (PRODUCT_RULES §3.1).
+          <span className="tag" data-testid="project-not-placed">
+            Not placed
+          </span>
+        )}
       </div>
       <p className="muted">Template: {templateLabel(project, templates)}</p>
       <p className="project-goal" data-testid="project-goal">

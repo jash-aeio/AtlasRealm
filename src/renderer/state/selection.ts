@@ -66,3 +66,30 @@ export function createSelectionState(initialGraph: SpikeGraph = SMALL_SPIKE_GRAP
 
 /** The one instance the app uses. Tests create their own with createSelectionState(). */
 export const spikeSelection = createSelectionState();
+
+// ---- The product world's selection (M2-6 #71) ------------------------------------------
+
+/**
+ * Which project is selected on the main screen: its building in the world and its summary in
+ * the inspector. Only an ID: what the project looks like is always read again from the main
+ * process, so the selection can never show stale saved data. Like the spike selection it is
+ * UI state, never persisted, and selecting never changes anything.
+ */
+export interface ProjectSelection {
+  readonly projectId: Store<string | null>;
+  readonly select: (projectId: string) => void;
+  readonly clear: () => void;
+}
+
+export function createProjectSelection(): ProjectSelection {
+  const projectId = createStore<string | null>(null);
+  return {
+    projectId,
+    select(id) {
+      projectId.set(id);
+    },
+    clear() {
+      projectId.set(null);
+    },
+  };
+}

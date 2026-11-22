@@ -20,11 +20,22 @@ import { FILTER_ADJECTIVES, FILTER_LABELS } from './project-messages';
 
 interface ProjectsPanelProps {
   readonly world: WorldSummary;
+  /** Projects with a building in the world, for the "Not placed" tag; null while unknown. */
+  readonly placedIds?: ReadonlySet<string> | null;
+  /** Called after any project action here, since archiving or trashing removes a building. */
+  readonly onProjectsChanged?: () => void;
+  /** Bumped by the parent when a project changed elsewhere (the inspector); reloads the list. */
+  readonly changeToken?: number;
 }
 
 const FILTERS: readonly ProjectStatus[] = ['active', 'archived', 'trashed'];
 
-export function ProjectsPanel({ world }: ProjectsPanelProps) {
+export function ProjectsPanel({
+  world,
+  placedIds = null,
+  onProjectsChanged,
+  changeToken = 0,
+}: ProjectsPanelProps) {
   const searchId = useId();
   const formId = useId();
   const newButton = useRef<HTMLButtonElement>(null);
@@ -38,6 +49,20 @@ export function ProjectsPanel({ world }: ProjectsPanelProps) {
   useEffect(() => {
     void list.start();
   }, [list]);
+
+  // A change made elsewhere: read the list again. Skipped on mount (start() reads it).
+  const seenToken = useRef(changeToken);
+  useEffect(() => {
+    if (seenToken.current === changeToken) return;
+    seenToken.current = changeToken;
+    void list.refresh();
+  }, [changeToken, list]);
+
+  /** Every action reports here, so the world reloads its buildings too. */
+  function report(next: ActionMessage) {
+    setMessage(next);
+    onProjectsChanged?.();
+  }
 
   function closeForm() {
     setCreating(false);
@@ -74,7 +99,7 @@ export function ProjectsPanel({ world }: ProjectsPanelProps) {
           list={list}
           templates={state.templates}
           onCreated={(name) => {
-            setMessage({ ok: true, text: `Created “${name}”.` });
+            report({ ok: true, text: `Created “${name}”.` });
             closeForm();
           }}
           onCancel={closeForm}
@@ -149,8 +174,9 @@ export function ProjectsPanel({ world }: ProjectsPanelProps) {
               project={project}
               templates={state.templates}
               list={list}
-              onMessage={setMessage}
+              onMessage={report}
               fallbackFocus={() => heading.current?.focus()}
+              placed={placedIds === null ? undefined : placedIds.has(project.id)}
             />
           ))}
         </ul>
