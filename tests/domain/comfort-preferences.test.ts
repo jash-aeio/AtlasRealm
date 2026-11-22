@@ -138,7 +138,7 @@ describe('applyComfortPatch', () => {
     const prefs = applyComfortPatch(DEFAULT_COMFORT, {
       camera: {
         worldId: WORLD_A,
-        camera: { centerX: 1.23456789, centerY: -9.87654321, zoom: ZOOM_MIN + 0.00001 },
+        camera: { centerX: 1.23456789, centerY: -9.87654321, zoom: ZOOM_MIN + 1e-9 },
       },
     });
     expect(prefs.cameras[WORLD_A]).toEqual({ centerX: 1.23, centerY: -9.88, zoom: ZOOM_MIN });

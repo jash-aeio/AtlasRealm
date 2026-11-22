@@ -125,7 +125,7 @@ export function applyComfortPatch(
     const saved: SavedCamera = {
       centerX: round(camera.centerX, 2),
       centerY: round(camera.centerY, 2),
-      zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, round(camera.zoom, 4))),
+      zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, round(camera.zoom, 6))),
     };
     cameras = Object.fromEntries([...others, [worldId, saved] as const].slice(-MAX_SAVED_CAMERAS));
   }

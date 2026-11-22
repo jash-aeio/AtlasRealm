@@ -7,7 +7,7 @@
 // drives its preview instead and letting go of the left button commits, so a click places and a
 // drag moves; every change goes through the tool's placement commands. The camera moves only
 // when the user pans, zooms or resets, never because something was selected or placed.
-import { useEffect, useMemo, useRef, type PointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type PointerEvent } from 'react';
 
 import type { PlacementSummary } from '../../common/contracts/placement';
 import type { WorldSummary } from '../../common/contracts/world';
@@ -16,7 +16,7 @@ import { footprintRect } from '../../common/world/placement-rules';
 import { useShortcut } from '../app/ShortcutLayer';
 import type { ProjectSelection } from '../state/selection';
 import { useStore } from '../state/use-store';
-import type { Comfort } from './comfort';
+import { cameraToSaved, savedToCamera, type Comfort } from './comfort';
 import {
   layoutBuildings,
   pickBuilding,
@@ -29,7 +29,7 @@ import type { PlacementHistory } from './placement-history';
 import { PlacementHistoryControls } from './PlacementHistoryControls';
 import { previewOf, type PlacementTool } from './placement-tool';
 import { PlacementToolBar } from './PlacementToolBar';
-import { DEFAULT_TILE, type MapSize } from './projection';
+import { DEFAULT_TILE, type Camera, type MapSize } from './projection';
 import { useWorldScene } from './use-world-scene';
 import { buildingSprites } from './world-assets';
 import type { WorldPlacements } from './world-placements';
@@ -107,7 +107,8 @@ export function WorldView({
     selectedProjectId === null
       ? null
       : (buildings.find((b) => b.projectId === selectedProjectId) ?? null);
-  const showLabels = useStore(comfort.store).preferences.buildingLabels;
+  const comfortState = useStore(comfort.store);
+  const showLabels = comfortState.preferences.buildingLabels;
   const toolState = useStore(tool.store);
   const historyState = useStore(history.store);
   const toolActive = toolState.mode.kind !== 'idle';
@@ -140,9 +141,26 @@ export function WorldView({
   const swallowClickRef = useRef(false);
 
   const sectionRef = useRef<HTMLElement>(null);
+  /** Set once the user pans or zooms: a saved view that arrives later must not jump over it. */
+  const userMovedRef = useRef(false);
+
+  /** This world's saved camera for a canvas of this size, kept on the map (M2-14). */
+  const worldId = world.id;
+  const savedCameraFor = useCallback(
+    (width: number, height: number): Camera | null => {
+      const saved = comfort.store.get().preferences.cameras[worldId];
+      return saved === undefined ? null : savedToCamera(saved, width, height, map);
+    },
+    [comfort, worldId, map],
+  );
 
   const view = useWorldScene({
     map,
+    initialCamera: savedCameraFor,
+    onUserCamera(camera, width, height) {
+      userMovedRef.current = true;
+      comfort.saveCamera(worldId, cameraToSaved(camera, width, height));
+    },
     onReady(scene) {
       scene.setBuildings(buildingsRef.current);
       scene.setSelectedBuilding(selectedRef.current);
@@ -154,7 +172,25 @@ export function WorldView({
       reportDrawn(sectionRef.current, scene);
     },
   });
-  const { sceneRef, hostRef, status, hover } = view;
+  const { sceneRef, hostRef, status, hover, ready, restoreCamera } = view;
+
+  // The preferences are read at startup alongside the scene. If they arrive after the scene
+  // started, open the saved view then, unless the user has already moved the camera.
+  const comfortStatus = comfortState.status;
+  useEffect(() => {
+    if (comfortStatus === 'ready' && ready && !userMovedRef.current) restoreCamera(savedCameraFor);
+  }, [comfortStatus, ready, restoreCamera, savedCameraFor]);
+
+  // Leaving this world (switching worlds, closing the window): save a waiting camera now
+  // rather than after the debounce. On close it is best effort: the window may be gone first.
+  useEffect(() => {
+    const flush = () => void comfort.flushCamera();
+    window.addEventListener('pagehide', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, [comfort]);
 
   // Store → Pixi. The scene never reads a store itself; it's only told what to draw.
   useEffect(() => {
