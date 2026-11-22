@@ -33,6 +33,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 027 | [Trust boundaries for derived data](lessons/027-trust-boundaries-for-derived-data.md) | M2 | trust boundary, derived data from a trusted source, fail closed, one action one transaction, negative control |
 | 028 | [The ABA problem and explicit replacement](lessons/028-aba-problem-and-explicit-replacement.md) | M2 | ABA problem, version markers that repeat, expected target, explicit replacement, refusal with details |
 | 029 | [One keyboard shortcut layer](lessons/029-one-shortcut-layer.md) | M2 | keyboard shortcut layer, event bubbling, editable targets, modal dialogs, focus restoration |
+| 030 | [Drawing order, culling and hit testing](lessons/030-drawing-order-culling-hit-testing.md) | M2 | painter's algorithm, depth key, culling, hit testing, reading the real camera in E2E |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map
