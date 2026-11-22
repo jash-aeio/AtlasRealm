@@ -44,8 +44,8 @@ Secrets are stored through the vault; the database holds opaque references. Prof
 
 | Table | Essential fields and constraints |
 |---|---|
-| `profile_settings` | Local profile ID, display name, avatar config, timezone, preferences |
-| `worlds` | ID, name, theme ID, grid dimensions, camera settings, archived timestamp |
+| `profile_settings` | Local profile ID, display name, avatar config, timezone, preferences (`preferences_json`; comfort values under `comfort`: reduced motion, building labels, saved camera per world, read and merged without a revision. Changed by ADR-0028) |
+| `worlds` | ID, name, theme ID, grid dimensions, archived timestamp (the saved camera lives in profile preferences instead, so it needs no migration. Changed by ADR-0028) |
 | `projects` | ID, world ID, name, goal, template ID/version (namespaced ID such as `builtin.generic`, schema v4, changed by ADR-0020), status, settings revision |
 | `building_placements` | ID, world ID, project ID nullable (composite FK to the project in the same world), service kind nullable, appearance ID, tile position, rotation (0/90/180/270); exactly one target; unique placed project. Schema v5; changed by ADR-0023. The tile is the footprint's north corner and rotation turns in place (ADR-0024) |
 | `hotbar_slots` | World ID, slot 0–9, target type, target as typed columns (project ID with composite FK, or service kind); unique world/slot; each target pinned at most once per world. Schema v5; changed by ADR-0023 |
