@@ -29,6 +29,10 @@ Issue [#70](https://github.com/jash-aeio/AtlasRealm/issues/70): rebuild the main
 - `f116f9c` ten new E2E tests in `shell.spec.ts`: the regions, each unbuilt entrance, Escape and "Back to world" restoring focus, `E` ignored in a text field and while the archive dialog is open (the project stays active), and the narrow-width drawer. A screenshot check found the panel's right edge clipped (fixed with `box-sizing: border-box`).
 - Evidence on f116f9c: typecheck, lint, format:check pass; unit 910/910; E2E 63/63 (53 existing + 10 new).
 
+## Docs (at /ship)
+- Lesson 029 (one keyboard shortcut layer); lesson 028 went to #69. Glossary: keyboard shortcut layer, event bubbling, focus restoration, drawer. Changelog, status, roadmap and M2 milestone updated. No ADR: every choice here was routine and follows the spec.
+- Nothing in this task was written by the user; Claude wrote all code and docs.
+
 ## Shared checkout clash
 The #69 session (hotbar commands) was working in the same folder, `D:/MyProjectsJCB/AtlasRealm`. Its commit landed on this task's first branch, and the uncommitted files of both tasks were mixed. The user chose to move #70 to its own worktree. Only #70's files were copied over, and they were removed from the shared checkout. The other session moved #69 to `D:/MyProjectsJCB/AtlasRealm-69`. The old branch `feat/70-main-layout-shortcuts` is stale, and the shared checkout still holds #69's leftover copies, which the user will clean up.
 
