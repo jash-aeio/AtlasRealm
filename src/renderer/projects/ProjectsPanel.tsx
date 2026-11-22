@@ -8,6 +8,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { ProjectStatus } from '../../common/contracts/project';
 import type { WorldSummary } from '../../common/contracts/world';
 import { useStore } from '../state/use-store';
+import type { PlacementActions } from '../world/placement-tool';
 import { CreateProjectForm } from './CreateProjectForm';
 import { ProjectItem, type ActionMessage } from './ProjectItem';
 import {
@@ -26,6 +27,8 @@ interface ProjectsPanelProps {
   readonly onProjectsChanged?: () => void;
   /** Bumped by the parent when a project changed elsewhere (the inspector); reloads the list. */
   readonly changeToken?: number;
+  /** Map actions for each project (M2-7). */
+  readonly placementActions?: PlacementActions;
 }
 
 const FILTERS: readonly ProjectStatus[] = ['active', 'archived', 'trashed'];
@@ -35,6 +38,7 @@ export function ProjectsPanel({
   placedIds = null,
   onProjectsChanged,
   changeToken = 0,
+  placementActions,
 }: ProjectsPanelProps) {
   const searchId = useId();
   const formId = useId();
@@ -177,6 +181,7 @@ export function ProjectsPanel({
               onMessage={report}
               fallbackFocus={() => heading.current?.focus()}
               placed={placedIds === null ? undefined : placedIds.has(project.id)}
+              {...(placementActions === undefined ? {} : { placementActions })}
             />
           ))}
         </ul>

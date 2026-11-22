@@ -47,6 +47,8 @@ export function worldSprite(id: string): WorldSprite {
 /** The sprites the world draws besides building appearances. */
 export const WORLD_SPRITES = {
   selection: 'placeholder.marker.selection',
+  /** The placement preview's "can't stand here" tile marker (M2-7). */
+  invalid: 'placeholder.marker.invalid',
 } as const;
 
 /**

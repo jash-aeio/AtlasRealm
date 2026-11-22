@@ -161,3 +161,6 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Culling** | Not drawing what is outside the view. Offscreen buildings are hidden so the GPU skips them (UI_SPEC §17.4) | `grid-scene.ts`, lesson 030 |
 | **Hit testing** | Working out what is under the mouse. The front-most building whose outline contains the point wins | `pickBuilding` in `buildings.ts`, lesson 030 |
 | **Inspector** | The card under the Realm Atlas that shows the selected project's summary. It reads the project again from the main process; selecting changes nothing | `ProjectInspector.tsx`, UI_SPEC §6.1 |
+| **State machine** | A fixed list of states and the allowed moves between them. The placement tool is idle, placing or moving, and each input means one thing in each state | `placement-tool.ts`, lesson 031 |
+| **Pointer capture** | Asking the browser to keep sending pointer events to one element until the button is released, even if the pointer leaves it. A drag that ends off the map is still seen | `WorldView.tsx`, lesson 031 |
+| **Placement tool** | The mode for placing, moving or removing a building, with a preview that says whether the spot fits. Every change goes through the placement commands | `placement-tool.ts`, UI_SPEC §17.2 |

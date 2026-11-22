@@ -4,17 +4,21 @@
 //
 // Keys go through the one shortcut layer (shortcuts.ts): `E` toggles the library and Escape
 // closes the drawer, then the open panel. Closing a panel only hides it; focus goes back to
-// whatever opened it (UI_SPEC §6.6).
+// whatever opened it (UI_SPEC §6.6). Starting the placement tool (M2-7) closes the panel so the
+// map is visible; the tool then holds focus until it closes.
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { PlaceholderAvatar } from '../onboarding/PlaceholderAvatar';
 import { ProjectDetails } from '../projects/ProjectDetails';
 import { ProjectsPanel } from '../projects/ProjectsPanel';
 import { createProjectSelection } from '../state/selection';
+import { DEFAULT_BUILDING_APPEARANCE } from '../../common/world/building-appearance';
 import { createStore } from '../state/store';
 import type { Session, SessionData } from '../state/session';
 import { useStore } from '../state/use-store';
+import { createPlacementTool, type PlacementActions } from '../world/placement-tool';
 import { ProjectInspector } from '../world/ProjectInspector';
+import { worldSprite } from '../world/world-assets';
 import {
   createWorldPlacements,
   placedProjectIds,
@@ -83,11 +87,13 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
     setPanel({ id, focus: true, project });
   }
 
-  function closePanel() {
+  /** Hides the open panel. `restoreFocus: false` when something else takes focus next. */
+  function closePanel({ restoreFocus = true } = {}) {
     if (panel === null) return;
     // The opener may be gone (it lived in a panel that was replaced); then use the entrance.
-    restoreFocusTo.current =
-      opener.current?.isConnected === true
+    restoreFocusTo.current = !restoreFocus
+      ? null
+      : opener.current?.isConnected === true
         ? opener.current
         : document.querySelector<HTMLElement>(`[data-entrance="${panel.id}"]`);
     opener.current = null;
@@ -128,18 +134,24 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
   // one is gone (for example archived elsewhere).
   const world = data.worlds.find((w) => w.id === selectedId) ?? data.worlds[0];
   const worldId = world?.id;
-  // Per world: its buildings and the selected project. Another world starts with a fresh
-  // selection, so a project of the old world can never stay selected.
-  const scope = useMemo(
-    () =>
-      worldId === undefined
-        ? null
-        : {
-            placements: createWorldPlacements(window.atlas, worldId),
-            selection: createProjectSelection(),
-          },
-    [worldId],
-  );
+  const gridWidth = world?.gridWidth ?? 0;
+  const gridHeight = world?.gridHeight ?? 0;
+  // Per world: its buildings, the selected project and the placement tool. Another world starts
+  // fresh, so a project of the old world can never stay selected or half-placed.
+  const scope = useMemo(() => {
+    if (worldId === undefined) return null;
+    const placements = createWorldPlacements(window.atlas, worldId);
+    return {
+      placements,
+      selection: createProjectSelection(),
+      tool: createPlacementTool(
+        window.atlas,
+        { id: worldId, gridWidth, gridHeight },
+        placements,
+        worldSprite(DEFAULT_BUILDING_APPEARANCE).footprint,
+      ),
+    };
+  }, [worldId, gridWidth, gridHeight]);
   useEffect(() => {
     void scope?.placements.refresh();
   }, [scope]);
@@ -154,7 +166,21 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
   );
 
   if (world === undefined || scope === null) return null;
-  const { placements, selection } = scope;
+  const { placements, selection, tool } = scope;
+
+  /** The map actions the Projects list and the inspector offer (M2-7). */
+  const placementActions: PlacementActions = {
+    place(project) {
+      closePanel({ restoreFocus: false });
+      tool.startPlacing(project);
+    },
+    move(project) {
+      closePanel({ restoreFocus: false });
+      tool.startMoving(project);
+    },
+    autoPlace: (project) => tool.autoPlace(project),
+    remove: (project) => tool.remove(project),
+  };
 
   /** "Open" or double-click: select the project and show its details (UI_SPEC §6.2). */
   function openProject(projectId: string) {
@@ -183,6 +209,7 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
             placedIds={placedIds}
             onProjectsChanged={projectsChanged}
             changeToken={inspectorChanges}
+            placementActions={placementActions}
           />
           <p className="muted">
             Everything here works offline. AI work will need a model connection later; nothing asks
@@ -272,6 +299,7 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
               world={world}
               placements={placements}
               selection={selection}
+              tool={tool}
               onOpenProject={openProject}
             />
           </WorldErrorBoundary>
@@ -314,6 +342,7 @@ function MainLayout({ session, data, notice }: MainScreenProps) {
               placements={placements}
               version={projectChanges}
               onOpen={openProject}
+              placementActions={placementActions}
               onChanged={() => {
                 projectsChanged();
                 setInspectorChanges((n) => n + 1);
