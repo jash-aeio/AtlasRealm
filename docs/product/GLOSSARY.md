@@ -164,3 +164,6 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **State machine** | A fixed list of states and the allowed moves between them. The placement tool is idle, placing or moving, and each input means one thing in each state | `placement-tool.ts`, lesson 031 |
 | **Pointer capture** | Asking the browser to keep sending pointer events to one element until the button is released, even if the pointer leaves it. A drag that ends off the map is still seen | `WorldView.tsx`, lesson 031 |
 | **Placement tool** | The mode for placing, moving or removing a building, with a preview that says whether the spot fits. Every change goes through the placement commands | `placement-tool.ts`, UI_SPEC §17.2 |
+| **Command pattern** | Keeping each change as a small object that knows how to do itself again and how to reverse itself. Undo and redo are built on it | `placement-history.ts`, M2-8 |
+| **Inverse operation** | The change that reverses another: removing what was placed, moving back, placing again what was removed. Undo sends it as an ordinary command, which can still be refused | `placement-history.ts`, M2-8 |
+| **Undo stack / redo stack** | Two lists of changes, newest last. Undo takes from the first and puts on the second; a new change empties the second | `placement-history.ts`, UI_SPEC §17.2 |
