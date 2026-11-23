@@ -2,6 +2,9 @@
 // profile; the router has already checked the sender, schema and size before these run.
 import { Channels } from '../../../common/contracts/channels';
 import {
+  ProfileAtlasViewGetInput,
+  ProfileAtlasViewOutput,
+  ProfileAtlasViewUpdateInput,
   ProfileCreateInput,
   ProfileCreateOutput,
   ProfileListInput,
@@ -64,6 +67,18 @@ export const profilePreferencesUpdateCommand = {
   typeof ProfilePreferencesUpdateInput,
   typeof ProfilePreferencesOutput
 >;
+
+export const profileAtlasViewGetCommand = {
+  channel: Channels.profileAtlasViewGet,
+  input: ProfileAtlasViewGetInput,
+  output: ProfileAtlasViewOutput,
+} satisfies CommandDefinition<typeof ProfileAtlasViewGetInput, typeof ProfileAtlasViewOutput>;
+
+export const profileAtlasViewUpdateCommand = {
+  channel: Channels.profileAtlasViewUpdate,
+  input: ProfileAtlasViewUpdateInput,
+  output: ProfileAtlasViewOutput,
+} satisfies CommandDefinition<typeof ProfileAtlasViewUpdateInput, typeof ProfileAtlasViewOutput>;
 
 /**
  * Only the fields the contract lists. Preferences have their own commands
@@ -136,4 +151,17 @@ export function createProfilePreferencesUpdateHandler(
   service: ProfileService,
 ): CommandHandler<typeof ProfilePreferencesUpdateInput, typeof ProfilePreferencesOutput> {
   return (patch) => withRepositoryErrors(() => ({ preferences: service.updateComfort(patch) }));
+}
+
+export function createProfileAtlasViewGetHandler(
+  service: ProfileService,
+): CommandHandler<typeof ProfileAtlasViewGetInput, typeof ProfileAtlasViewOutput> {
+  return () => ({ views: service.getAtlasViews() });
+}
+
+export function createProfileAtlasViewUpdateHandler(
+  service: ProfileService,
+): CommandHandler<typeof ProfileAtlasViewUpdateInput, typeof ProfileAtlasViewOutput> {
+  return ({ worldId, change }) =>
+    withRepositoryErrors(() => ({ views: service.updateAtlasView(worldId, change) }));
 }

@@ -13,6 +13,8 @@ export const Channels = {
   profileSettingsUpdate: 'profile.settings.update',
   profilePreferencesGet: 'profile.preferences.get',
   profilePreferencesUpdate: 'profile.preferences.update',
+  profileAtlasViewGet: 'profile.atlasView.get',
+  profileAtlasViewUpdate: 'profile.atlasView.update',
   worldCreate: 'world.create',
   worldList: 'world.list',
   worldRename: 'world.rename',

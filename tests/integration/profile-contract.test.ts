@@ -11,6 +11,8 @@ import type { z } from 'zod';
 import { MAX_PROFILES, type ProfileSettings } from '../../src/common/contracts/profile';
 import { APP_ENTRY_URL } from '../../src/main/bootstrap/app-origin';
 import {
+  createProfileAtlasViewGetHandler,
+  createProfileAtlasViewUpdateHandler,
   createProfileCreateHandler,
   createProfileListHandler,
   createProfilePreferencesGetHandler,
@@ -18,6 +20,8 @@ import {
   createProfileRenameHandler,
   createProfileSettingsGetHandler,
   createProfileSettingsUpdateHandler,
+  profileAtlasViewGetCommand,
+  profileAtlasViewUpdateCommand,
   profileCreateCommand,
   profileListCommand,
   profilePreferencesGetCommand,
@@ -75,6 +79,11 @@ const getPreferences = (payload?: unknown) =>
   call(profilePreferencesGetCommand, createProfilePreferencesGetHandler(service), payload);
 const updatePreferences = (payload: unknown) =>
   call(profilePreferencesUpdateCommand, createProfilePreferencesUpdateHandler(service), payload);
+
+const getAtlasViews = (payload?: unknown) =>
+  call(profileAtlasViewGetCommand, createProfileAtlasViewGetHandler(service), payload);
+const updateAtlasView = (payload: unknown) =>
+  call(profileAtlasViewUpdateCommand, createProfileAtlasViewUpdateHandler(service), payload);
 
 async function settingsNow(): Promise<ProfileSettings> {
   const result = await getSettings();
@@ -489,6 +498,96 @@ describe('profile.preferences (M2-14 #79, ADR-0028)', () => {
 
   it('rejects a payload on get', async () => {
     await expect(getPreferences({})).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'invalid_payload' },
+    });
+  });
+});
+
+describe('profile.atlasView (M2-12 #77, ADR-0031)', () => {
+  const worldA = '11111111-1111-4111-8111-111111111111';
+  const worldB = '22222222-2222-4222-8222-222222222222';
+  const projectId = '33333333-3333-4333-8333-333333333333';
+  const defaults = {
+    tab: 'map',
+    collapsed: false,
+    expanded: false,
+    width: 320,
+    pinnedProjectId: null,
+    followSelection: false,
+  };
+
+  it('gives a fresh profile no saved views', async () => {
+    await expect(getAtlasViews()).resolves.toEqual({ ok: true, data: { views: {} } });
+  });
+
+  it('saves changes per world and returns the merged views', async () => {
+    await updateAtlasView({ worldId: worldA, change: { collapsed: true } });
+    await updateAtlasView({ worldId: worldB, change: { width: 480, tab: 'connections' } });
+    const result = await updateAtlasView({
+      worldId: worldA,
+      change: { pinnedProjectId: projectId },
+    });
+    const expected = {
+      [worldB]: { ...defaults, width: 480, tab: 'connections' },
+      [worldA]: { ...defaults, collapsed: true, pinnedProjectId: projectId },
+    };
+    expect(result).toEqual({ ok: true, data: { views: expected } });
+    await expect(getAtlasViews()).resolves.toEqual({ ok: true, data: { views: expected } });
+  });
+
+  it('keeps comfort preferences and leaves the settings revision alone', async () => {
+    await updatePreferences({ buildingLabels: false });
+    const before = await settingsNow();
+    await updateAtlasView({ worldId: worldA, change: { followSelection: true } });
+    const after = await settingsNow();
+    expect(after.revision).toBe(before.revision);
+    const stored = new ProfileSettingsRepository(opened.db).get(opened.profileId);
+    expect(stored?.preferences).toMatchObject({
+      comfort: { buildingLabels: false },
+      atlasViews: { [worldA]: { followSelection: true } },
+    });
+    // And a comfort change keeps the Atlas views.
+    await updatePreferences({ reducedMotion: 'on' });
+    await expect(getAtlasViews()).resolves.toMatchObject({
+      data: { views: { [worldA]: { followSelection: true } } },
+    });
+  });
+
+  it('reads broken stored values as defaults, field by field', async () => {
+    new ProfileSettingsRepository(opened.db).update(opened.profileId, 1, {
+      preferences: { atlasViews: { [worldA]: { tab: 'nope', width: 1, expanded: true } } },
+    });
+    await expect(getAtlasViews()).resolves.toEqual({
+      ok: true,
+      data: { views: { [worldA]: { ...defaults, expanded: true } } },
+    });
+  });
+
+  it('refuses invalid changes without writing anything', async () => {
+    for (const payload of [
+      {},
+      { worldId: worldA },
+      { worldId: worldA, change: {} },
+      { worldId: 'not-a-world', change: { collapsed: true } },
+      { worldId: worldA, change: { width: 100 } },
+      { worldId: worldA, change: { width: 10_000 } },
+      { worldId: worldA, change: { tab: 'graph' } },
+      { worldId: worldA, change: { pinnedProjectId: '../../x' } },
+      { worldId: worldA, change: { layout: { x: 1 } } },
+      { worldId: worldA, change: { collapsed: true }, expectedRevision: 1 },
+    ]) {
+      await expect(updateAtlasView(payload)).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'invalid_payload' },
+      });
+    }
+    const stored = new ProfileSettingsRepository(opened.db).get(opened.profileId);
+    expect(stored?.preferences).toEqual({});
+  });
+
+  it('rejects a payload on get', async () => {
+    await expect(getAtlasViews({})).resolves.toMatchObject({
       ok: false,
       error: { code: 'invalid_payload' },
     });

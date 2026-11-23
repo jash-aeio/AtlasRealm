@@ -20,6 +20,8 @@ import type {
   PlacementRemoveInput,
 } from './placement';
 import type {
+  ProfileAtlasViewOutput,
+  ProfileAtlasViewUpdateInput,
   ProfileCreateInput,
   ProfileCreateOutput,
   ProfileListOutput,
@@ -85,6 +87,13 @@ export interface AtlasApi {
       readonly update: (
         input: ProfilePreferencesUpdateInput,
       ) => Promise<IpcResult<ProfilePreferencesOutput>>;
+    };
+    /** Realm Atlas display preferences per world (ADR-0031): merged, the last one wins. */
+    readonly atlasView: {
+      readonly get: () => Promise<IpcResult<ProfileAtlasViewOutput>>;
+      readonly update: (
+        input: ProfileAtlasViewUpdateInput,
+      ) => Promise<IpcResult<ProfileAtlasViewOutput>>;
     };
   };
   /** Worlds of the active profile. */

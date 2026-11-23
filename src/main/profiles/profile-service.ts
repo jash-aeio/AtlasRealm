@@ -10,6 +10,13 @@ import { dirname } from 'node:path';
 
 import { MAX_PROFILES } from '../../common/contracts/profile';
 import {
+  applyAtlasViewChange,
+  type AtlasViewChange,
+  type AtlasViews,
+  parseAtlasViews,
+  withAtlasViews,
+} from '../../common/preferences/atlas-view';
+import {
   applyComfortPatch,
   type ComfortPatch,
   type ComfortPreferences,
@@ -218,6 +225,22 @@ export class ProfileService {
       (current) => withComfort(current, applyComfortPatch(parseComfortPreferences(current), patch)),
     );
     return parseComfortPreferences(saved.preferences);
+  }
+
+  /** The active profile's Realm Atlas views per world; broken stored values read as defaults. */
+  getAtlasViews(): AtlasViews {
+    return parseAtlasViews(this.getSettings().preferences);
+  }
+
+  /** Merges one change to one world's Atlas view (ADR-0031: no revision, like ADR-0028). */
+  updateAtlasView(worldId: string, change: AtlasViewChange): AtlasViews {
+    const { profileId, db } = this.active.current();
+    const saved = new ProfileSettingsRepository(db, this.now).updatePreferences(
+      profileId,
+      (current) =>
+        withAtlasViews(current, applyAtlasViewChange(parseAtlasViews(current), worldId, change)),
+    );
+    return parseAtlasViews(saved.preferences);
   }
 
   private settingsOf(repository: ProfileSettingsRepository, profileId: ProfileId): ProfileSettings {

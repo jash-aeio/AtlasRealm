@@ -7,7 +7,9 @@
 // with the defaults (no avatar, the system timezone).
 import { z } from 'zod';
 
+import { AtlasViewChange, AtlasViews } from '../preferences/atlas-view';
 import { ComfortPatch, ComfortPreferences } from '../preferences/comfort';
+import { WorldId } from './world';
 import { DisplayName, Revision, Timestamp } from './display-name';
 
 /** At most this many local profiles, so `profile.list` stays bounded without paging. */
@@ -148,3 +150,23 @@ export type ProfilePreferencesUpdateInput = z.infer<typeof ProfilePreferencesUpd
 
 export const ProfilePreferencesOutput = z.strictObject({ preferences: ComfortPreferences });
 export type ProfilePreferencesOutput = z.infer<typeof ProfilePreferencesOutput>;
+
+// ---- profile.atlasView.get / profile.atlasView.update -----------------------------------
+
+/**
+ * Realm Atlas display preferences of the active profile, per world (M2-12 #77, ADR-0031).
+ * Stored next to the comfort preferences and handled the same way: no revision, each change is
+ * merged and the last write wins. A pinned project ID is only a display choice; nothing reads
+ * it to decide access.
+ */
+export const ProfileAtlasViewGetInput = z.undefined();
+export type ProfileAtlasViewGetInput = z.infer<typeof ProfileAtlasViewGetInput>;
+
+export const ProfileAtlasViewUpdateInput = z.strictObject({
+  worldId: WorldId,
+  change: AtlasViewChange,
+});
+export type ProfileAtlasViewUpdateInput = z.infer<typeof ProfileAtlasViewUpdateInput>;
+
+export const ProfileAtlasViewOutput = z.strictObject({ views: AtlasViews });
+export type ProfileAtlasViewOutput = z.infer<typeof ProfileAtlasViewOutput>;

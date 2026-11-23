@@ -32,6 +32,10 @@ const api: AtlasApi = {
       get: () => ipcRenderer.invoke(Channels.profilePreferencesGet),
       update: (input) => ipcRenderer.invoke(Channels.profilePreferencesUpdate, input),
     },
+    atlasView: {
+      get: () => ipcRenderer.invoke(Channels.profileAtlasViewGet),
+      update: (input) => ipcRenderer.invoke(Channels.profileAtlasViewUpdate, input),
+    },
   },
   world: {
     create: (input) => ipcRenderer.invoke(Channels.worldCreate, input),
