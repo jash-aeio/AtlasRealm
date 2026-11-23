@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
 
 import { createWorldScene, type WorldScene } from './grid-scene';
+import { cameraCentredOn, type Viewport } from './world-camera';
 import {
   centeredCamera,
   pickTile,
@@ -51,6 +52,8 @@ interface WorldSceneOptions {
   readonly onUserCamera?: (camera: Camera, width: number, height: number) => void;
   /** The starting camera for a canvas of this size, or null for the centred default (M2-14). */
   readonly initialCamera?: (width: number, height: number) => Camera | null;
+  /** Called with the camera and canvas size after every camera or size change (M2-12). */
+  readonly onViewport?: (viewport: Viewport) => void;
 }
 
 export function useWorldScene({
@@ -59,6 +62,7 @@ export function useWorldScene({
   onCamera,
   onUserCamera,
   initialCamera,
+  onViewport,
 }: WorldSceneOptions) {
   const hostRef = useRef<HTMLDivElement>(null);
   // Pixi's canvas goes in its own element that React never renders children into.
@@ -71,22 +75,36 @@ export function useWorldScene({
   const [hover, setHover] = useState<GridPoint | null>(null);
   const [zoom, setZoom] = useState(INITIAL_ZOOM);
   // The scene is created asynchronously, so keep the latest callbacks and map where it can read them.
-  const latest = useRef({ map, onReady, onCamera, onUserCamera, initialCamera });
-  latest.current = { map, onReady, onCamera, onUserCamera, initialCamera };
+  const latest = useRef({ map, onReady, onCamera, onUserCamera, initialCamera, onViewport });
+  latest.current = { map, onReady, onCamera, onUserCamera, initialCamera, onViewport };
 
-  const applyCamera = useCallback((camera: Camera) => {
-    cameraRef.current = camera;
-    const scene = sceneRef.current;
-    scene?.setCamera(camera);
-    // Written straight to the DOM (no React render per pointer move): the E2E tests read the
-    // real camera from here instead of assuming where the map is.
-    if (hostRef.current !== null) {
-      hostRef.current.dataset['camera'] =
-        `${String(camera.panX)},${String(camera.panY)},${String(camera.zoom)}`;
-    }
-    setZoom(camera.zoom);
-    if (scene !== null) latest.current.onCamera?.(scene);
+  const reportViewport = useCallback(() => {
+    const host = hostRef.current;
+    if (host === null || sceneRef.current === null) return;
+    latest.current.onViewport?.({
+      camera: cameraRef.current,
+      width: host.clientWidth,
+      height: host.clientHeight,
+    });
   }, []);
+
+  const applyCamera = useCallback(
+    (camera: Camera) => {
+      cameraRef.current = camera;
+      const scene = sceneRef.current;
+      scene?.setCamera(camera);
+      // Written straight to the DOM (no React render per pointer move): the E2E tests read the
+      // real camera from here instead of assuming where the map is.
+      if (hostRef.current !== null) {
+        hostRef.current.dataset['camera'] =
+          `${String(camera.panX)},${String(camera.panY)},${String(camera.zoom)}`;
+      }
+      setZoom(camera.zoom);
+      if (scene !== null) latest.current.onCamera?.(scene);
+      reportViewport();
+    },
+    [reportViewport],
+  );
 
   /** A camera change the user made: applied, then reported for saving. */
   const applyUserCamera = useCallback(
@@ -152,6 +170,7 @@ export function useWorldScene({
         observer = new ResizeObserver(() => {
           created.resize(host.clientWidth, host.clientHeight);
           latest.current.onCamera?.(created);
+          reportViewport();
         });
         observer.observe(host);
         setStatus({ state: 'ready', renderer: created.rendererName });
@@ -173,7 +192,7 @@ export function useWorldScene({
       }
       sceneRef.current = null;
     };
-  }, [applyCamera]);
+  }, [applyCamera, reportViewport]);
 
   // React's onWheel listener is passive, so it can't stop the page scrolling; add our own.
   useEffect(() => {
@@ -205,6 +224,21 @@ export function useWorldScene({
     if (host === null) return;
     applyUserCamera(centeredCamera(host.clientWidth, host.clientHeight, INITIAL_ZOOM, map));
   }
+
+  /**
+   * Puts a world point in the middle of the canvas at the current zoom. Only on request ("Go
+   * to", or follow-selection the user switched on), so it counts as a user move and is saved.
+   */
+  const centerOn = useCallback(
+    (point: Point) => {
+      const host = hostRef.current;
+      if (host === null || sceneRef.current === null) return;
+      applyUserCamera(
+        cameraCentredOn(point, cameraRef.current.zoom, host.clientWidth, host.clientHeight),
+      );
+    },
+    [applyUserCamera],
+  );
 
   /**
    * Moves the camera for the app, not the user (a saved view that arrived after the scene
@@ -298,6 +332,7 @@ export function useWorldScene({
     },
     resetView,
     restoreCamera,
+    centerOn,
     worldPointOf,
     tileOf,
     hostHandlers,
