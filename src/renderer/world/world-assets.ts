@@ -61,6 +61,20 @@ export function buildingSprites(): WorldSprite[] {
     .map((asset) => worldSprite(asset.id));
 }
 
+/** A building appearance as the library lists it (M2-9): its sprite and whether it's placeholder art. */
+export interface BuildingAppearance {
+  readonly sprite: WorldSprite;
+  /** True for engineering placeholders, which the UI must label as such. */
+  readonly placeholder: boolean;
+}
+
+/** Every bundled building appearance, with its placeholder flag from the manifest. */
+export function buildingAppearances(): BuildingAppearance[] {
+  return loadManifest()
+    .assets.filter((asset) => asset.kind === 'building')
+    .map((asset) => ({ sprite: worldSprite(asset.id), placeholder: asset.placeholder }));
+}
+
 /** ART_BIBLE palette swatches the world's drawn shapes use (scripts/generate-placeholder-art.ts). */
 export const WORLD_COLOURS = {
   background: 0x1d1f26, // ink

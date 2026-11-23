@@ -8,6 +8,8 @@
 // map is visible; the tool then holds focus until it closes.
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
+import type { LibraryTabId } from '../library/library-tabs';
+import { LibraryPanel } from '../library/LibraryPanel';
 import { PlaceholderAvatar } from '../onboarding/PlaceholderAvatar';
 import { ProjectDetails } from '../projects/ProjectDetails';
 import { ProjectsPanel } from '../projects/ProjectsPanel';
@@ -76,6 +78,8 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // The project list stays one glance away: it is open when the screen loads.
   const [panel, setPanel] = useState<OpenPanel | null>({ id: 'projects', focus: false });
+  /** The library tab last shown, so reopening the library returns to it (M2-9). */
+  const [libraryTab, setLibraryTab] = useState<LibraryTabId>('projects');
   const opener = useRef<HTMLElement | null>(null);
   const restoreFocusTo = useRef<HTMLElement | null>(null);
 
@@ -211,18 +215,25 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
 
   function panelContent(id: PanelId) {
     if (world === undefined) return null;
+    // The sidebar's Projects panel and the library's Projects tab show the same list.
+    const projectList = (
+      <ProjectsPanel
+        key={world.id}
+        world={world}
+        placedIds={placedIds}
+        onProjectsChanged={projectsChanged}
+        changeToken={inspectorChanges}
+        placementActions={placementActions}
+        onOpenProject={openProject}
+      />
+    );
+    if (id === 'library') {
+      return <LibraryPanel tab={libraryTab} onTabChange={setLibraryTab} projects={projectList} />;
+    }
     if (id === 'projects') {
       return (
         <>
-          <ProjectsPanel
-            key={world.id}
-            world={world}
-            placedIds={placedIds}
-            onProjectsChanged={projectsChanged}
-            changeToken={inspectorChanges}
-            placementActions={placementActions}
-            onOpenProject={openProject}
-          />
+          {projectList}
           <p className="muted">
             Everything here works offline. AI work will need a model connection later; nothing asks
             for one yet.

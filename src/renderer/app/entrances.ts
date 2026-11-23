@@ -1,5 +1,6 @@
 // The sidebar entrances of the main screen (UI_SPEC §6.1), plus the bottom bar's Library.
-// Only Projects and Settings are built; the others open a panel that says so (no fake content).
+// Projects, Settings and the Library (M2-9) are built; the others open a panel that says so (no
+// fake content).
 
 export type EntranceId =
   'projects' | 'agents' | 'skills' | 'tools' | 'automations' | 'activity' | 'settings';
@@ -45,12 +46,6 @@ export const NOT_BUILT: Readonly<
   activity: {
     planned: 'Not built yet (planned for M3+)',
     purpose: 'A history of runs, approvals and outputs.',
-  },
-  library: {
-    planned: 'Not built yet (planned later in M2)',
-    purpose:
-      'Browse projects, agents, skills, tools, workflows and building appearances, and pick a ' +
-      'project to place in the world.',
   },
 };
 
