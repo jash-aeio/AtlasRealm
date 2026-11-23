@@ -221,6 +221,7 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
             onProjectsChanged={projectsChanged}
             changeToken={inspectorChanges}
             placementActions={placementActions}
+            onOpenProject={openProject}
           />
           <p className="muted">
             Everything here works offline. AI work will need a model connection later; nothing asks

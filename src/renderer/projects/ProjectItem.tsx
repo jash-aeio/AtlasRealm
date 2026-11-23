@@ -43,6 +43,8 @@ interface ProjectItemProps {
   readonly placed?: boolean;
   /** Place, auto-place and remove its building. Without it the row shows no map actions. */
   readonly placementActions?: PlacementActions;
+  /** Shows the project's details (M2-9): the list equivalent of double-clicking its building. */
+  readonly onOpen?: (projectId: string) => void;
 }
 
 /** The template's name when it is still available, else its stored ID and version. */
@@ -69,6 +71,7 @@ export function ProjectItem({
   fallbackFocus,
   placed,
   placementActions,
+  onOpen,
 }: ProjectItemProps) {
   const headingId = `project-${project.id}`;
   const renameButton = useRef<HTMLButtonElement>(null);
@@ -173,6 +176,16 @@ export function ProjectItem({
       )}
 
       <div className="project-actions" role="group" aria-label={`Actions for ${project.name}`}>
+        {onOpen !== undefined && (
+          <button
+            type="button"
+            onClick={() => {
+              onOpen(project.id);
+            }}
+          >
+            Open
+          </button>
+        )}
         {editable && (
           <>
             <button

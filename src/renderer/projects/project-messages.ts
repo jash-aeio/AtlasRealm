@@ -11,13 +11,27 @@ import {
   type ProjectStatus,
 } from '../../common/contracts/project';
 import { commandProblem } from '../onboarding/form-messages';
-import type { LifecycleAction } from './project-list';
+import type { LifecycleAction, PlacementFilter } from './project-list';
 
 /** Filter buttons. */
 export const FILTER_LABELS: Record<ProjectStatus, string> = {
   active: 'Active',
   archived: 'Archived',
   trashed: 'Trash',
+};
+
+/** The "On map" filter buttons (M2-9). */
+export const PLACEMENT_FILTER_LABELS: Record<PlacementFilter, string> = {
+  all: 'All',
+  placed: 'Placed',
+  unplaced: 'Not placed',
+};
+
+/** The words the summary adds for the "On map" filter, as in "3 active projects not placed". */
+export const PLACEMENT_FILTER_PHRASES: Record<PlacementFilter, string> = {
+  all: '',
+  placed: ' on the map',
+  unplaced: ' not placed',
 };
 
 /** The word used in sentences such as "Showing 3 archived projects". */
