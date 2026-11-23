@@ -120,6 +120,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   if (opened.db.isOpen) opened.db.close();
   rmSync(userData, { recursive: true, force: true });
 });
@@ -272,8 +273,14 @@ describe('placement.create', () => {
 
 describe('placement.list', () => {
   it("lists this world's buildings oldest first, with each project's status", async () => {
+    // Give each building its own creation time. Placed back to back, both can land in the same
+    // millisecond, and the tie-break (random UUID) then decides the order (flaky in CI).
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-23T10:00:00.000Z'));
     const a = await placed(newProject('A'), 0, 0);
+    vi.setSystemTime(new Date('2026-11-23T10:00:01.000Z'));
     const b = await placed(newProject('B'), 4, 0);
+    vi.useRealTimers();
     const elsewhere = new WorldRepository(opened.db).create({
       name: 'Elsewhere',
       themeId: 'meadow',

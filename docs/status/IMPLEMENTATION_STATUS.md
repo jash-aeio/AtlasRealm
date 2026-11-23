@@ -2,7 +2,7 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-23 · **Branch:** feat/76-project-links (M2-11, main @ 2b97bb0, main checkout)
+**Last updated:** 2026-11-23 · **Branch:** docs/adr-0030-react-flow-v13 (main @ eda2331, main checkout)
 
 ## Current milestone
 **M2 — Isometric world, placement, hotbar, library and Atlas shell** (⏳ planned 2026-11-20: 21 issues, see `docs/pm/milestones/M2.md`). IMP-1 moved into M3.
@@ -61,7 +61,7 @@
   - Lifecycle: a `ResizeObserver` on the container resizes the canvas. Unmounting destroys the Pixi app, and an init that finishes after unmount destroys itself.
 
 - **M0-5 Realm Atlas selection-sharing spike (#8):** a "Realm Atlas" panel sits in the upper right of a new workspace grid, next to the world. Everything in it is **M0 mock data**, labelled "M0 spike · mock data".
-  - `@xyflow/react` 12.12.1 (exact pin, MIT). Its CSS is bundled into our stylesheet, and it adds no runtime `<style>` tags, so the CSP is unchanged.
+  - `@xyflow/react` 13.0.2 (exact pin, MIT; was 12.12.1 until Dependabot PR #55, see ADR-0030). Its CSS is bundled into our stylesheet, and it adds no runtime `<style>` tags, so the CSP is unchanged.
   - Shared selection (`src/renderer/state/`): a tiny external store (`store.ts` + `useStore` on `useSyncExternalStore`, no new dependency). `selection.ts` holds the current mock graph and the selected entity ID plus its source (`atlas` or `world`). Unknown IDs are refused, and swapping graphs drops a selection that no longer exists. Nothing is persisted.
   - Mock data (`spike-graph.ts`): 8 mock projects, each with an ID, a grid tile and a cosmetic graph position, plus a deterministic stress graph (150 nodes / 300 edges by default).
   - Connections graph (`src/renderer/atlas/ConnectionsGraph.tsx`): **controlled** selection. The store sets `selected`, and React Flow's "select" changes (from a click, or Enter/Space on a focused node) go to the store. Clicking the pane clears the selection. Dragging, connecting and deleting are off. Edge labels show up to 30 links.
@@ -216,7 +216,7 @@
   - Shortcut layer (`src/renderer/app/shortcuts.ts`): one `keydown` listener on `window`. It ignores keys from `input`/`textarea`/`select`/`contenteditable`, while a modal `<dialog>` is open, during IME composition, on key repeat, with the Windows key, and when another handler already used the key. Modifiers must match exactly, and the newest shortcut for a key wins. Components register keys with `useShortcut(key, run)` (`ShortcutLayer.tsx`).
   - `E` toggles the library (a placeholder until M2-9 #74). Escape closes the drawer, then the open panel. Closing only unmounts the view, and focus returns to what opened it (or to the entrance button if that element is gone). Escape inside a text field stays with the field: the create form uses it to cancel its draft.
   - Developer spikes moved below the shell, still collapsed and labelled as M0 mock data.
-- **M2-11 project links (#76, branch `feat/76-project-links`, ADR-0029):** typed, descriptive links between projects of one world, plus the bounded query that will feed the Atlas Connections tab. No UI yet (M2-13 #78).
+- **M2-11 project links (#76, merged as 39400be, ADR-0029):** typed, descriptive links between projects of one world, plus the bounded query that will feed the Atlas Connections tab. No UI yet (M2-13 #78).
   - Schema v6: `project_relations` (migration 6). Composite FKs `(source_project_id, world_id)` and `(target_project_id, world_id)` → `projects (id, world_id)`, RESTRICT. CHECKs: no self-link; types `depends_on`/`supports`/`references`; origin `user` only; a user link is `confirmed`. Unique `(source, target, type)`. Every type is directed: the source → target order is the direction (A→B and B→A are different links; no direction column).
   - IPC (Zod, router, preload `window.atlas.relation` / `window.atlas.graph`):
     - `relation.create`: refuses a self-link (contract and service), a duplicate (`already_exists`), forged, other-world and other-profile IDs (`not_found`), and trashed ends (`invalid_transition`). Archived ends are allowed.
@@ -585,6 +585,7 @@
 - `userData/profiles-index.json` (M1-2, not in SQLite): `{ schemaVersion: 1, profiles: [{ id, displayName }], lastUsedProfileId }`. Profile folders: `profiles/<default | uuid>/`.
 
 ## Decisions
+- [ADR-0030](../adr/0030-react-flow-v13.md) (Dependabot PR #55, merged as 918a758): `@xyflow/react` 12.12.1 → 13.0.2. `onNodesChange` now receives a `NodeChangeset` object (we read `getByType('select')`), and `colorMode` became `forceColorMode`; the CSS file and CSP are unchanged
 - [ADR-0029](../adr/0029-project-links-in-project-relations.md) (M2-11 #76): project links live in a dedicated `project_relations` table (composite FKs keep both ends in one world), not a general `graph_edges`; the source → target order is the direction (A→B ≠ B→A, no direction column); links of a trashed project are kept but hidden from `graph.worldConnections` and its counts; `relation.remove` takes an expected revision; deterministic 150-node / 300-edge cut with omitted counts
 - M2-9 (user choices via AskUserQuestion, no ADR, recorded in `docs/sessions/2026-11-23-library-panel.md`): "Hide world view" is a session-only toggle, not a saved setting; Placed / Not placed is a second "On map" filter group that combines with the status filter and loads every page while on.
 - [ADR-0028](../adr/0028-comfort-preferences-and-building-labels.md) (M2-14 #79): comfort preferences have their own `profile.preferences.get/update`, stored under `comfort` in `preferences_json` and merged without a revision (last write wins), so camera saves never make settings forms conflict; one camera per world (view centre + zoom, max 64, least recently saved dropped); building name labels stay a fixed size on screen and hide below 0.35×; `placement.list` reports `projectName`
@@ -618,7 +619,7 @@
 
 ## Next task
 - M2 is planned (2026-11-20): 15 new issues #66–#80 plus the follow-ups #56–#60 and #62. See `docs/pm/milestones/M2.md` and `docs/pm/DEPENDENCIES.md` (Task level: M2).
-- Lanes: **A** M2-1 #66, M2-2 #67, M2-3 #68 and M2-4 #69 (67aa27e) merged; M2-11 #76 (project links, ADR-0029) in review. **B** M2-5 #70 merged (a421ca6); M2-6 #71 merged (1c78f07); M2-7 #72 merged (be81468); M2-8 #73 merged (54870bf); M2-14 #79 merged (19c09e9). **C** M2-9 #74 (library) merged (2b97bb0); next in lane C: M2-10 #75 (hotbar UI). M2-15 #80 waits on the rest. #62 (profile security notice in `SettingsView.tsx`) is unblocked by #70.
+- Lanes: **A** M2-1 #66, M2-2 #67, M2-3 #68 and M2-4 #69 (67aa27e) merged; M2-11 #76 (project links, ADR-0029) merged (39400be). **B** M2-5 #70 merged (a421ca6); M2-6 #71 merged (1c78f07); M2-7 #72 merged (be81468); M2-8 #73 merged (54870bf); M2-14 #79 merged (19c09e9). **C** M2-9 #74 (library) merged (2b97bb0); next in lane C: M2-10 #75 (hotbar UI). M2-15 #80 waits on the rest. #62 (profile security notice in `SettingsView.tsx`) is unblocked by #70.
 - Parallel lanes must each use their own git worktree from the start (MULTI_AGENT_GUIDE). On 2026-11-22 #69 and #70 shared one checkout and a commit landed on the wrong branch; see `docs/sessions/2026-11-22-hotbar-commands.md`.
 - For M2-10: replace the `.hotbar-slot` list. The library (M2-9) is built: a "Pin to hotbar" action fits as another optional prop on `ProjectItem` (like `onOpen`), so it shows in both the sidebar list and the library. E2E that look for a "world view" button must scope to `details.developer-spikes`, since the main screen has its own toggle. #56's worker-boundary follow-up is #82 (M4).
 - For M2-10 (#75): use `hotbar.list` (with `projectStatus`) and show an archived/trashed pin as such. On `slot_occupied`, show the occupant and ask before retrying with `replace: { expectedTargetId }`. #70 already draws ten placeholder `.hotbar-slot`s and provides `useShortcut(key, run)` in `ShortcutLayer.tsx` for the `1`–`0` keys.
@@ -627,6 +628,7 @@
   - Show `omittedNodes` and `omittedEdges`. Draw arrowheads from source to target, and style archived nodes differently.
   - `relation.remove` needs the edge's `revision`.
   - `limit_reached` means the world has 5000 links.
+  - React Flow is v13 (ADR-0030): change handlers get `NodeChangeset` / `EdgeChangeset` objects, not arrays, and the reactflow.dev examples may still show v12 signatures.
 - Comfort (#79, ADR-0028): new cosmetic per-profile preferences join `ComfortPatch` in `src/common/preferences/comfort.ts` and the renderer store `src/renderer/world/comfort.ts`. Any animation (M8 easing, the Atlas force layout) must check `useReducedMotion(comfort)` first. Camera code: only user moves go through `onUserCamera`; app moves use `restoreCamera`. #62 also edits `SettingsView.tsx` (the Comfort section sits at the end).
 - New placement entry points must go through `createPlacementTool` (it reports changes to the undo history, `placement-history.ts`). A future rotate action should report a `moved` change; entries already store rotation.
 - For later world tasks: `WorldView` draws from the per-world `createWorldPlacements` store (call `refresh()` after a change) and selects through `createProjectSelection` (both created in `MainScreen.tsx`). Use `layoutBuildings`/`pickBuilding` in `buildings.ts` and the `placement-rules` checks for previews; `useWorldScene` gives `tileOf(event)` and `worldPointOf(event)`. E2E: read the real camera from `data-camera` on `world-view-host` (see `tests/e2e/world.spec.ts`).
