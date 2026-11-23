@@ -40,6 +40,15 @@ body {
   color: #f08a7e;
 }
 
+/* Reduced motion (M2-14, UI_SPEC §6.6): set on the root by useMotionAttribute. */
+:root[data-motion='reduced'] *,
+:root[data-motion='reduced'] *::before,
+:root[data-motion='reduced'] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+
 /* World view (M0-4 spike). */
 .world {
   margin-top: 1rem;
@@ -751,4 +760,26 @@ kbd {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+/* Comfort settings (M2-14). */
+.comfort fieldset {
+  border: 1px solid #3a3d48;
+  border-radius: 6px;
+}
+
+.comfort-choice {
+  display: block;
+  margin: 0.4rem 0;
+}
+
+.world-view-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.world-labels-toggle {
+  white-space: nowrap;
 }

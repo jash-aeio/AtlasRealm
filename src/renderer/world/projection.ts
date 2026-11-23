@@ -7,6 +7,7 @@
 //
 // Pure functions with no DOM or Pixi imports, so they're unit-tested in plain Node and
 // the renderer can never drift from what the tests check.
+import { ZOOM_MAX, ZOOM_MIN } from '../../common/preferences/comfort';
 
 export interface Point {
   readonly x: number;
@@ -46,9 +47,8 @@ export const DEFAULT_TILE: TileSize = { width: 64, height: 32 };
 /** UI_SPEC §17.1: recommended starting map. */
 export const DEFAULT_MAP: MapSize = { columns: 64, rows: 64 };
 
-/** UI_SPEC §6.2: zoom stays "within defined bounds". */
-export const ZOOM_MIN = 0.25;
-export const ZOOM_MAX = 4;
+/** UI_SPEC §6.2: zoom stays "within defined bounds". Shared with saved cameras (M2-14). */
+export { ZOOM_MAX, ZOOM_MIN };
 
 // Floating-point division can turn an exact tile edge (1.0) into 0.9999999999. Nudging by
 // a tiny amount before flooring keeps the edge convention exact: an edge belongs to the

@@ -11,6 +11,8 @@ export const Channels = {
   profileSwitch: 'profile.switch',
   profileSettingsGet: 'profile.settings.get',
   profileSettingsUpdate: 'profile.settings.update',
+  profilePreferencesGet: 'profile.preferences.get',
+  profilePreferencesUpdate: 'profile.preferences.update',
   worldCreate: 'world.create',
   worldList: 'world.list',
   worldRename: 'world.rename',

@@ -7,7 +7,7 @@
 // drives its preview instead and letting go of the left button commits, so a click places and a
 // drag moves; every change goes through the tool's placement commands. The camera moves only
 // when the user pans, zooms or resets, never because something was selected or placed.
-import { useEffect, useMemo, useRef, type PointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type PointerEvent } from 'react';
 
 import type { PlacementSummary } from '../../common/contracts/placement';
 import type { WorldSummary } from '../../common/contracts/world';
@@ -16,6 +16,7 @@ import { footprintRect } from '../../common/world/placement-rules';
 import { useShortcut } from '../app/ShortcutLayer';
 import type { ProjectSelection } from '../state/selection';
 import { useStore } from '../state/use-store';
+import { cameraToSaved, savedToCamera, type Comfort } from './comfort';
 import {
   layoutBuildings,
   pickBuilding,
@@ -28,7 +29,7 @@ import type { PlacementHistory } from './placement-history';
 import { PlacementHistoryControls } from './PlacementHistoryControls';
 import { previewOf, type PlacementTool } from './placement-tool';
 import { PlacementToolBar } from './PlacementToolBar';
-import { DEFAULT_TILE, type MapSize } from './projection';
+import { DEFAULT_TILE, type Camera, type MapSize } from './projection';
 import { useWorldScene } from './use-world-scene';
 import { buildingSprites } from './world-assets';
 import type { WorldPlacements } from './world-placements';
@@ -44,6 +45,8 @@ interface WorldViewProps {
   readonly history: PlacementHistory;
   /** Double-click on a project's building: show that project's details. */
   readonly onOpenProject: (projectId: string) => void;
+  /** Comfort preferences (M2-14): the name label toggle and the saved camera. */
+  readonly comfort: Comfort;
 }
 
 /** Bundled building art by appearance ID. Read once: the manifest is part of the build. */
@@ -57,6 +60,7 @@ function toPlaced(placement: PlacementSummary): PlacedBuilding {
   return {
     placementId: placement.id,
     projectId: placement.target.type === 'project' ? placement.target.id : null,
+    name: placement.projectName,
     archived: placement.projectStatus === 'archived',
     appearanceId: placement.appearanceId,
     tileX: placement.tileX,
@@ -67,11 +71,13 @@ function toPlaced(placement: PlacementSummary): PlacedBuilding {
 }
 
 /**
- * How many buildings survive culling, written straight to the DOM for tests and the
- * performance measurement (no React render per camera move).
+ * How many buildings and name labels survive culling, written straight to the DOM for tests
+ * and the performance measurement (no React render per camera move).
  */
 function reportDrawn(element: HTMLElement | null, scene: WorldScene): void {
-  if (element !== null) element.dataset['drawnBuildings'] = String(scene.drawnBuildingCount());
+  if (element === null) return;
+  element.dataset['drawnBuildings'] = String(scene.drawnBuildingCount());
+  element.dataset['drawnLabels'] = String(scene.drawnLabelCount());
 }
 
 function plural(count: number, one: string, many: string): string {
@@ -85,6 +91,7 @@ export function WorldView({
   tool,
   history,
   onOpenProject,
+  comfort,
 }: WorldViewProps) {
   const map = useMemo<MapSize>(
     () => ({ columns: world.gridWidth, rows: world.gridHeight }),
@@ -100,6 +107,8 @@ export function WorldView({
     selectedProjectId === null
       ? null
       : (buildings.find((b) => b.projectId === selectedProjectId) ?? null);
+  const comfortState = useStore(comfort.store);
+  const showLabels = comfortState.preferences.buildingLabels;
   const toolState = useStore(tool.store);
   const historyState = useStore(history.store);
   const toolActive = toolState.mode.kind !== 'idle';
@@ -125,26 +134,63 @@ export function WorldView({
   const buildingsRef = useRef<readonly WorldBuilding[]>(buildings);
   const selectedRef = useRef<string | null>(selectedBuilding?.placementId ?? null);
   const previewRef = useRef<ScenePlacementPreview | null>(scenePreview);
+  const labelsRef = useRef(showLabels);
   /** A left press that started on the map while the tool was open: its release commits. */
   const toolPressRef = useRef(false);
   /** The click that follows a tool release must not also select or clear the selection. */
   const swallowClickRef = useRef(false);
 
   const sectionRef = useRef<HTMLElement>(null);
+  /** Set once the user pans or zooms: a saved view that arrives later must not jump over it. */
+  const userMovedRef = useRef(false);
+
+  /** This world's saved camera for a canvas of this size, kept on the map (M2-14). */
+  const worldId = world.id;
+  const savedCameraFor = useCallback(
+    (width: number, height: number): Camera | null => {
+      const saved = comfort.store.get().preferences.cameras[worldId];
+      return saved === undefined ? null : savedToCamera(saved, width, height, map);
+    },
+    [comfort, worldId, map],
+  );
 
   const view = useWorldScene({
     map,
+    initialCamera: savedCameraFor,
+    onUserCamera(camera, width, height) {
+      userMovedRef.current = true;
+      comfort.saveCamera(worldId, cameraToSaved(camera, width, height));
+    },
     onReady(scene) {
       scene.setBuildings(buildingsRef.current);
       scene.setSelectedBuilding(selectedRef.current);
       scene.setPlacementPreview(previewRef.current);
+      scene.setLabels(labelsRef.current);
       reportDrawn(sectionRef.current, scene);
     },
     onCamera(scene) {
       reportDrawn(sectionRef.current, scene);
     },
   });
-  const { sceneRef, hostRef, status, hover } = view;
+  const { sceneRef, hostRef, status, hover, ready, restoreCamera } = view;
+
+  // The preferences are read at startup alongside the scene. If they arrive after the scene
+  // started, open the saved view then, unless the user has already moved the camera.
+  const comfortStatus = comfortState.status;
+  useEffect(() => {
+    if (comfortStatus === 'ready' && ready && !userMovedRef.current) restoreCamera(savedCameraFor);
+  }, [comfortStatus, ready, restoreCamera, savedCameraFor]);
+
+  // Leaving this world (switching worlds, closing the window): save a waiting camera now
+  // rather than after the debounce. On close it is best effort: the window may be gone first.
+  useEffect(() => {
+    const flush = () => void comfort.flushCamera();
+    window.addEventListener('pagehide', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, [comfort]);
 
   // Store → Pixi. The scene never reads a store itself; it's only told what to draw.
   useEffect(() => {
@@ -160,6 +206,14 @@ export function WorldView({
     selectedRef.current = selectedPlacementId;
     sceneRef.current?.setSelectedBuilding(selectedPlacementId);
   }, [selectedPlacementId, sceneRef]);
+
+  useEffect(() => {
+    labelsRef.current = showLabels;
+    const scene = sceneRef.current;
+    if (scene === null) return;
+    scene.setLabels(showLabels);
+    reportDrawn(sectionRef.current, scene);
+  }, [showLabels, sceneRef]);
 
   useEffect(() => {
     previewRef.current = scenePreview;
@@ -259,8 +313,18 @@ export function WorldView({
       data-renderer={view.renderer ?? undefined}
       data-buildings={state.status === 'ready' ? String(buildings.length) : undefined}
       data-selected-placement={selectedPlacementId ?? undefined}
+      data-labels={showLabels ? 'on' : 'off'}
     >
-      <WorldToolbar heading={world.name} headingId="world-view-heading" world={view} />
+      <WorldToolbar heading={world.name} headingId="world-view-heading" world={view}>
+        <label className="world-labels-toggle">
+          <input
+            type="checkbox"
+            checked={showLabels}
+            onChange={(event) => void comfort.setBuildingLabels(event.target.checked)}
+          />
+          Labels
+        </label>
+      </WorldToolbar>
       <PlacementHistoryControls
         history={history}
         state={historyState}
@@ -330,7 +394,7 @@ export function WorldView({
           ? toolActive
             ? 'Move the pointer over the map to choose a spot.'
             : 'Hover the map to see a tile. Click a building to select its project.'
-          : `Tile ${String(hover.gx)}, ${String(hover.gy)}${hoveredBuilding === null ? '' : ' · building'}`}
+          : `Tile ${String(hover.gx)}, ${String(hover.gy)}${hoveredBuilding === null ? '' : ` · ${hoveredBuilding.name ?? 'building'}`}`}
       </p>
       {state.status === 'ready' && buildings.length === 0 && (
         <p className="muted" data-testid="world-view-empty">

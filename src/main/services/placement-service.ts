@@ -239,15 +239,14 @@ export class PlacementService {
   }
 
   private summary(placement: Placement, projects: ProjectRepository): PlacementSummary {
-    const projectStatus =
-      placement.target.type === 'project'
-        ? (projects.get(placement.target.id)?.status ?? null)
-        : null;
+    const project =
+      placement.target.type === 'project' ? projects.get(placement.target.id) : undefined;
     return {
       id: placement.id,
       worldId: placement.worldId,
       target: placement.target,
-      projectStatus,
+      projectStatus: project?.status ?? null,
+      projectName: project?.name ?? null,
       appearanceId: placement.appearanceId,
       footprint: this.appearances.footprintOf(placement.appearanceId),
       tileX: placement.tileX,

@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { TileRect } from '../../src/common/world/placement-rules';
 import {
+  buildingLabel,
   compareDepth,
   depthKey,
   hitsBuilding,
   isOnScreen,
+  LABEL_MAX_CHARS,
   layoutBuildings,
   MISSING_ART_HEIGHT,
   pickBuilding,
@@ -22,6 +24,7 @@ function placed(id: string, tileX: number, tileY: number, size = 2): PlacedBuild
   return {
     placementId: id,
     projectId: `project-${id}`,
+    name: `Project ${id}`,
     archived: false,
     appearanceId: 'placeholder.building.2x2',
     tileX,
@@ -197,5 +200,23 @@ describe('hit testing', () => {
     const beside = { x: back.pivot.x - 40, y: back.pivot.y - 2 };
     expect(hitsBuilding(back, beside)).toBe(false);
     expect(pickBuilding(buildings, { x: 5000, y: 5000 })).toBeNull();
+  });
+});
+
+describe('buildingLabel (M2-14)', () => {
+  it('shows a short name as it is', () => {
+    expect(buildingLabel('Launch plan')).toBe('Launch plan');
+    expect(buildingLabel('x'.repeat(LABEL_MAX_CHARS))).toBe('x'.repeat(LABEL_MAX_CHARS));
+  });
+
+  it('cuts a long name to the limit with an ellipsis', () => {
+    const label = buildingLabel('y'.repeat(80));
+    expect(Array.from(label)).toHaveLength(LABEL_MAX_CHARS);
+    expect(label.endsWith('…')).toBe(true);
+  });
+
+  it('never splits a character made of two UTF-16 units', () => {
+    const label = buildingLabel('🏰'.repeat(40));
+    expect(label).toBe(`${'🏰'.repeat(LABEL_MAX_CHARS - 1)}…`);
   });
 });

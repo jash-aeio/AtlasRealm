@@ -135,6 +135,7 @@ describe('placement.create', () => {
           worldId: world.id,
           target: { type: 'project', id: project.id },
           projectStatus: 'active',
+          projectName: 'Launch plan',
           appearanceId: 'placeholder.building.2x2',
           footprint: { columns: 2, rows: 2 },
           tileX: 3,

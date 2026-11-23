@@ -19,6 +19,7 @@ import {
   type GridPoint,
   type Point,
 } from '../../src/renderer/world/projection';
+import { mapWorldBounds } from '../../src/renderer/world/comfort';
 import { finishOnboarding, openDeveloperSpikes } from './support/onboarding';
 
 // The world on the main screen (M2-6 #71; renderer since M0-4), inside the built app under the
@@ -686,7 +687,7 @@ test.describe('100 buildings', () => {
     await page.mouse.down({ button: 'middle' });
     for (let i = 0; i < 40; i++) await page.mouse.move(cx + i * 5, cy + i * 2);
     await page.mouse.up({ button: 'middle' });
-    // Contains: over a building the line adds " · building".
+    // Contains: over a building the line adds " · <project name>".
     await expect(page.getByTestId('world-view-hover')).toContainText(
       await expectedHover(page, { x: cx + 195, y: cy + 78 }),
     );
@@ -769,5 +770,185 @@ test.describe('world view with no graphics at all', () => {
       'No active projects in this world yet.',
     );
     await expect(page.getByRole('button', { name: 'New project' })).toBeEnabled();
+  });
+});
+// Comfort (M2-14 #79, UI_SPEC §6.6): name labels, the saved camera and reduced motion. The
+// saved values are read back through the real preferences command, never assumed.
+test.describe('comfort', () => {
+  let launched: Launched;
+  test.beforeAll(async () => {
+    launched = await launch();
+    await createProjects(launched.page, [{ name: 'Harbour', tile: { gx: 31, gy: 31 } }]);
+    await reloadWorld(launched.page, 1);
+  });
+  test.afterAll(async () => {
+    await launched.close();
+  });
+
+  /** The saved comfort preferences (this world's camera only), via profile.preferences.get. */
+  async function savedComfort(page: Page) {
+    return page.evaluate(async () => {
+      const worlds = await window.atlas.world.list();
+      const result = await window.atlas.profile.preferences.get();
+      if (!worlds.ok || !result.ok) throw new Error('could not read preferences');
+      const worldId = worlds.data.worlds[0]?.id ?? '';
+      const { reducedMotion, buildingLabels, cameras } = result.data.preferences;
+      return { reducedMotion, buildingLabels, camera: cameras[worldId] };
+    });
+  }
+
+  /** The world point in the middle of the view, through the real camera. */
+  async function viewCentre(page: Page): Promise<Point> {
+    // The app's canvas size is the host's clientWidth/Height (inside its border).
+    const size = await host(page).evaluate((element) => ({
+      width: element.clientWidth,
+      height: element.clientHeight,
+    }));
+    return screenToWorld({ x: size.width / 2, y: size.height / 2 }, await camera(page));
+  }
+
+  async function openSettings(page: Page) {
+    await page.getByRole('button', { name: 'Settings' }).click();
+    return page.getByTestId('entrance-panel');
+  }
+
+  async function closePanel(page: Page) {
+    await page.getByTestId('entrance-panel').getByRole('button', { name: 'Back to world' }).click();
+  }
+
+  test('a building shows its name label, kept readable and hidden when far out', async () => {
+    const { page } = launched;
+    await resetView(page);
+    await expect(worldView(page)).toHaveAttribute('data-labels', 'on');
+    await expect(worldView(page)).toHaveAttribute('data-drawn-labels', '1');
+    // The hover line names the project too (the canvas itself is hidden from screen readers).
+    const point = await windowPointOf(page, { gx: 32, gy: 32 });
+    await page.mouse.move(point.x, point.y);
+    await expect(page.getByTestId('world-view-hover')).toContainText('Harbour');
+    await page.mouse.move(0, 0);
+    // Zoomed out to 0.4× (above the 0.35× cut-off) the label still shows; at 0.32× it doesn't.
+    const zoomOut = worldView(page).getByRole('button', {
+      name: 'Zoom out',
+      exact: true,
+    });
+    await zoomOut.click();
+    await expect.poll(async () => (await camera(page)).zoom).toBeCloseTo(0.4, 6);
+    await expect(worldView(page)).toHaveAttribute('data-drawn-labels', '1');
+    await zoomOut.click();
+    await expect.poll(async () => (await camera(page)).zoom).toBeCloseTo(0.32, 6);
+    await expect(worldView(page)).toHaveAttribute('data-drawn-labels', '0');
+    await resetView(page);
+    await expect(worldView(page)).toHaveAttribute('data-drawn-labels', '1');
+  });
+
+  test('reload keeps the camera and the label setting', async () => {
+    const { page } = launched;
+    await resetView(page);
+    // Move the camera: zoom in twice, then middle-drag.
+    const zoomIn = worldView(page).getByRole('button', {
+      name: 'Zoom in',
+      exact: true,
+    });
+    await zoomIn.click();
+    await zoomIn.click();
+    const box = await hostBox(page);
+    const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down({ button: 'middle' });
+    await page.mouse.move(start.x - 90, start.y - 40);
+    await page.mouse.up({ button: 'middle' });
+    await page.mouse.move(0, 0);
+    const moved = await camera(page);
+    const centre = await viewCentre(page);
+    expect(moved.zoom).toBeCloseTo(0.78125, 6);
+
+    // Labels off from the world toolbar.
+    await worldView(page).getByRole('checkbox', { name: 'Labels' }).uncheck();
+    await expect(worldView(page)).toHaveAttribute('data-labels', 'off');
+    await expect(worldView(page)).toHaveAttribute('data-drawn-labels', '0');
+
+    // Both are really saved (the camera after its debounce) before the reload.
+    await expect
+      .poll(async () => savedComfort(page))
+      .toMatchObject({ buildingLabels: false, camera: expect.anything() });
+    const saved = (await savedComfort(page)).camera;
+    expect(saved?.zoom).toBeCloseTo(moved.zoom, 6);
+    expect(saved?.centerX).toBeCloseTo(centre.x, 1);
+    expect(saved?.centerY).toBeCloseTo(centre.y, 1);
+
+    await reloadWorld(page, 1);
+    await expect.poll(async () => (await camera(page)).zoom).toBeCloseTo(moved.zoom, 6);
+    const restored = await viewCentre(page);
+    expect(restored.x).toBeCloseTo(centre.x, 1);
+    expect(restored.y).toBeCloseTo(centre.y, 1);
+    await expect(worldView(page)).toHaveAttribute('data-labels', 'off');
+    await expect(worldView(page)).toHaveAttribute('data-drawn-labels', '0');
+
+    // Settings shows the same setting and turns labels back on.
+    const panel = await openSettings(page);
+    const checkbox = panel.getByRole('checkbox', {
+      name: 'Show building labels',
+    });
+    await expect(checkbox).not.toBeChecked();
+    await checkbox.check();
+    await closePanel(page);
+    await expect(worldView(page)).toHaveAttribute('data-labels', 'on');
+    await expect.poll(async () => (await savedComfort(page)).buildingLabels).toBe(true);
+    await resetView(page);
+  });
+
+  test('a saved camera off the map opens clamped to the map edge', async () => {
+    const { page } = launched;
+    // Let the previous test's Reset view finish saving first: last write wins (ADR-0028), so
+    // a save still waiting on its debounce would replace the camera written below.
+    await expect.poll(async () => (await savedComfort(page)).camera?.zoom).toBe(0.5);
+    await page.evaluate(async () => {
+      const list = await window.atlas.world.list();
+      if (!list.ok) throw new Error(list.error.code);
+      const worldId = list.data.worlds[0]?.id ?? '';
+      const result = await window.atlas.profile.preferences.update({
+        camera: {
+          worldId,
+          camera: { centerX: 90_000, centerY: -90_000, zoom: 1 },
+        },
+      });
+      if (!result.ok) throw new Error(result.error.code);
+    });
+    await reloadWorld(page, 1);
+    await expect.poll(async () => (await camera(page)).zoom).toBe(1);
+    const bounds = mapWorldBounds(DEFAULT_MAP);
+    const centre = await viewCentre(page);
+    expect(centre.x).toBeCloseTo(bounds.right, 1);
+    expect(centre.y).toBeCloseTo(bounds.top, 1);
+    await resetView(page);
+  });
+
+  test('reduced motion follows the OS by default; Settings overrides it and it is saved', async () => {
+    const { page } = launched;
+    const root = page.locator('html');
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await expect(root).toHaveAttribute('data-motion', 'full');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect(root).toHaveAttribute('data-motion', 'reduced');
+
+    const panel = await openSettings(page);
+    await expect(panel.getByTestId('os-motion')).toContainText('reduced');
+    await panel.getByRole('radio', { name: 'Full motion' }).check();
+    await expect(root).toHaveAttribute('data-motion', 'full');
+    await expect.poll(async () => (await savedComfort(page)).reducedMotion).toBe('off');
+
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await panel.getByRole('radio', { name: 'Reduce motion' }).check();
+    await expect(root).toHaveAttribute('data-motion', 'reduced');
+    await expect.poll(async () => (await savedComfort(page)).reducedMotion).toBe('on');
+
+    // Saved per profile: still on after a reload, while the OS asks for full motion.
+    await page.reload();
+    await showWorld(page);
+    await expect(root).toHaveAttribute('data-motion', 'reduced');
+    const again = await openSettings(page);
+    await again.getByRole('radio', { name: /Follow the Windows setting/ }).check();
+    await expect(root).toHaveAttribute('data-motion', 'full');
+    await closePanel(page);
   });
 });

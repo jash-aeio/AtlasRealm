@@ -1,5 +1,7 @@
 // The HTML around a world canvas, shared by WorldView and the spike WorldCanvas: the heading
 // with zoom controls (the non-wheel way to zoom, UI_SPEC §6.6) and the "unavailable" messages.
+import type { ReactNode } from 'react';
+
 import type { WorldStatus } from './use-world-scene';
 
 /** The world message shown instead of the canvas. Also used by WorldErrorBoundary. */
@@ -32,22 +34,27 @@ interface WorldToolbarProps {
     readonly zoomOut: () => void;
     readonly resetView: () => void;
   };
+  /** Extra view controls after the zoom buttons, such as the labels toggle (M2-14). */
+  readonly children?: ReactNode;
 }
 
-export function WorldToolbar({ heading, headingId, world }: WorldToolbarProps) {
+export function WorldToolbar({ heading, headingId, world, children }: WorldToolbarProps) {
   return (
     <div className="world-toolbar">
       <h2 id={headingId}>{heading}</h2>
-      <div role="group" aria-label="Zoom">
-        <button type="button" disabled={!world.ready} onClick={world.zoomOut}>
-          Zoom out
-        </button>{' '}
-        <button type="button" disabled={!world.ready} onClick={world.zoomIn}>
-          Zoom in
-        </button>{' '}
-        <button type="button" disabled={!world.ready} onClick={world.resetView}>
-          Reset view
-        </button>
+      <div className="world-view-controls">
+        <div role="group" aria-label="Zoom">
+          <button type="button" disabled={!world.ready} onClick={world.zoomOut}>
+            Zoom out
+          </button>{' '}
+          <button type="button" disabled={!world.ready} onClick={world.zoomIn}>
+            Zoom in
+          </button>{' '}
+          <button type="button" disabled={!world.ready} onClick={world.resetView}>
+            Reset view
+          </button>
+        </div>
+        {children}
       </div>
     </div>
   );

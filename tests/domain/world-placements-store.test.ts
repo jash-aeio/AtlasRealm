@@ -13,6 +13,7 @@ function placement(id: string, target: PlacementSummary['target']): PlacementSum
     worldId: WORLD,
     target,
     projectStatus: target.type === 'project' ? 'active' : null,
+    projectName: target.type === 'project' ? `Project ${target.id}` : null,
     appearanceId: 'placeholder.building.2x2',
     footprint: { columns: 2, rows: 2 },
     tileX: 0,

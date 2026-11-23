@@ -172,3 +172,7 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Texture atlas** | Many small sprites packed into one image with a map of where each sits, so the GPU loads and draws them faster | art bible §34.5, M8 |
 | **WCAG AA contrast** | The common accessibility standard for readable text: at least 4.5:1 contrast between text and background (3:1 for large text) | UI_SPEC §6.6, M8 |
 | **Usability session** | Watching someone do a few real tasks in the app and noting where they get stuck. The findings become fixes or issues | M8 exit (ADR-0027) |
+| **Debounce** | Waiting until something has stopped changing for a moment before acting on it. A camera drag becomes one save after 500 ms of stillness instead of 60 saves a second | `comfort.ts`, lesson 033 |
+| **Last write wins** | A concurrency rule where the newest save simply replaces what is stored, with no revision check. Safe only when the newest value is always the right one, like a camera position | ADR-0028, lesson 033 |
+| **Comfort preferences** | Per-profile settings that make the app easier to use without changing any data: reduced motion, building labels and the saved camera per world | `src/common/preferences/comfort.ts`, UI_SPEC §6.6 |
+| **Reduced motion** | A mode that turns off easing and decorative animation. Follows the operating system's `prefers-reduced-motion` setting unless the profile overrides it | `use-reduced-motion.ts`, UI_SPEC §6.6 |

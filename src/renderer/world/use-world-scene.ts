@@ -44,9 +44,22 @@ interface WorldSceneOptions {
   readonly onReady: (scene: WorldScene) => void;
   /** Called after every camera change (pan, zoom, reset). */
   readonly onCamera?: (scene: WorldScene) => void;
+  /**
+   * Called only when the user moved the camera (wheel, middle-drag, the zoom and reset
+   * buttons), with the canvas size: never for the starting view or a restore (M2-14).
+   */
+  readonly onUserCamera?: (camera: Camera, width: number, height: number) => void;
+  /** The starting camera for a canvas of this size, or null for the centred default (M2-14). */
+  readonly initialCamera?: (width: number, height: number) => Camera | null;
 }
 
-export function useWorldScene({ map, onReady, onCamera }: WorldSceneOptions) {
+export function useWorldScene({
+  map,
+  onReady,
+  onCamera,
+  onUserCamera,
+  initialCamera,
+}: WorldSceneOptions) {
   const hostRef = useRef<HTMLDivElement>(null);
   // Pixi's canvas goes in its own element that React never renders children into.
   const mountRef = useRef<HTMLDivElement>(null);
@@ -58,8 +71,8 @@ export function useWorldScene({ map, onReady, onCamera }: WorldSceneOptions) {
   const [hover, setHover] = useState<GridPoint | null>(null);
   const [zoom, setZoom] = useState(INITIAL_ZOOM);
   // The scene is created asynchronously, so keep the latest callbacks and map where it can read them.
-  const latest = useRef({ map, onReady, onCamera });
-  latest.current = { map, onReady, onCamera };
+  const latest = useRef({ map, onReady, onCamera, onUserCamera, initialCamera });
+  latest.current = { map, onReady, onCamera, onUserCamera, initialCamera };
 
   const applyCamera = useCallback((camera: Camera) => {
     cameraRef.current = camera;
@@ -74,6 +87,16 @@ export function useWorldScene({ map, onReady, onCamera }: WorldSceneOptions) {
     setZoom(camera.zoom);
     if (scene !== null) latest.current.onCamera?.(scene);
   }, []);
+
+  /** A camera change the user made: applied, then reported for saving. */
+  const applyUserCamera = useCallback(
+    (camera: Camera) => {
+      applyCamera(camera);
+      const host = hostRef.current;
+      if (host !== null) latest.current.onUserCamera?.(camera, host.clientWidth, host.clientHeight);
+    },
+    [applyCamera],
+  );
 
   const applyHover = useCallback((tile: GridPoint | null) => {
     if (sameTile(hoverRef.current, tile)) return;
@@ -120,7 +143,10 @@ export function useWorldScene({ map, onReady, onCamera }: WorldSceneOptions) {
         created.canvas.addEventListener('webglcontextrestored', onContextRestored);
         mount.appendChild(created.canvas);
         latest.current.onReady(created);
-        applyCamera(centeredCamera(host.clientWidth, host.clientHeight, INITIAL_ZOOM, startMap));
+        applyCamera(
+          latest.current.initialCamera?.(host.clientWidth, host.clientHeight) ??
+            centeredCamera(host.clientWidth, host.clientHeight, INITIAL_ZOOM, startMap),
+        );
         // The container can change size without a window resize (panels, layout), so watch
         // the element itself rather than relying on window 'resize' events.
         observer = new ResizeObserver(() => {
@@ -157,18 +183,18 @@ export function useWorldScene({ map, onReady, onCamera }: WorldSceneOptions) {
       if (sceneRef.current === null) return;
       event.preventDefault();
       const factor = event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
-      applyCamera(zoomAt(cameraRef.current, localPoint(event, host), factor));
+      applyUserCamera(zoomAt(cameraRef.current, localPoint(event, host), factor));
     };
     host.addEventListener('wheel', onWheel, { passive: false });
     return () => {
       host.removeEventListener('wheel', onWheel);
     };
-  }, [applyCamera]);
+  }, [applyUserCamera]);
 
   function zoomAroundCentre(factor: number) {
     const host = hostRef.current;
     if (host === null) return;
-    applyCamera(
+    applyUserCamera(
       zoomAt(cameraRef.current, { x: host.clientWidth / 2, y: host.clientHeight / 2 }, factor),
     );
   }
@@ -177,8 +203,23 @@ export function useWorldScene({ map, onReady, onCamera }: WorldSceneOptions) {
   function resetView() {
     const host = hostRef.current;
     if (host === null) return;
-    applyCamera(centeredCamera(host.clientWidth, host.clientHeight, INITIAL_ZOOM, map));
+    applyUserCamera(centeredCamera(host.clientWidth, host.clientHeight, INITIAL_ZOOM, map));
   }
+
+  /**
+   * Moves the camera for the app, not the user (a saved view that arrived after the scene
+   * started). Takes the canvas size, so the caller can work out the camera for it. Not reported
+   * through onUserCamera. Does nothing before the scene exists.
+   */
+  const restoreCamera = useCallback(
+    (cameraFor: (width: number, height: number) => Camera | null) => {
+      const host = hostRef.current;
+      if (host === null || sceneRef.current === null) return;
+      const camera = cameraFor(host.clientWidth, host.clientHeight);
+      if (camera !== null) applyCamera(camera);
+    },
+    [applyCamera],
+  );
 
   /** The world point under a pointer event, or null before the scene exists. */
   function worldPointOf(event: { clientX: number; clientY: number }): Point | null {
@@ -209,7 +250,7 @@ export function useWorldScene({ map, onReady, onCamera }: WorldSceneOptions) {
       if (from !== null && (event.buttons & MIDDLE_BUTTON) === 0) stopPan();
       else if (from !== null) {
         const camera = cameraRef.current;
-        applyCamera({
+        applyUserCamera({
           ...camera,
           panX: camera.panX + point.x - from.x,
           panY: camera.panY + point.y - from.y,
@@ -256,6 +297,7 @@ export function useWorldScene({ map, onReady, onCamera }: WorldSceneOptions) {
       zoomAroundCentre(1 / ZOOM_STEP);
     },
     resetView,
+    restoreCamera,
     worldPointOf,
     tileOf,
     hostHandlers,

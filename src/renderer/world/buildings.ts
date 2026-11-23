@@ -40,6 +40,8 @@ export interface PlacedBuilding {
   readonly placementId: string;
   /** The project it represents, or null for a service structure. */
   readonly projectId: string | null;
+  /** The project's name for its label (M2-14), or null for a service structure. */
+  readonly name: string | null;
   readonly archived: boolean;
   readonly appearanceId: string;
   readonly tileX: number;
@@ -60,6 +62,20 @@ export interface WorldBuilding extends PlacedBuilding {
   /** Everything it draws, in world pixels. Used for culling and hit tests. */
   readonly bounds: Box;
   readonly depth: number;
+}
+
+/** Longer names are cut short on the label, so neighbouring labels overlap less. */
+export const LABEL_MAX_CHARS = 32;
+
+/**
+ * The text on a building's name label: the name, cut to LABEL_MAX_CHARS with an ellipsis.
+ * Cuts by code point (Array.from), so an emoji or other astral character is never split.
+ */
+export function buildingLabel(name: string): string {
+  const chars = Array.from(name);
+  return chars.length <= LABEL_MAX_CHARS
+    ? name
+    : `${chars.slice(0, LABEL_MAX_CHARS - 1).join('')}…`;
 }
 
 /** How tall the "Missing art" block stands above its footprint, in world pixels. */

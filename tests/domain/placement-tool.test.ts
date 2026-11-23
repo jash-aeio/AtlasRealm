@@ -32,6 +32,7 @@ function summary(id: string, projectId: string, tileX: number, tileY: number): P
     worldId: WORLD.id,
     target: { type: 'project', id: projectId },
     projectStatus: 'active',
+    projectName: `Project ${projectId}`,
     appearanceId: 'placeholder.building.2x2',
     footprint: TWO,
     tileX,

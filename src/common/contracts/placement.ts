@@ -46,6 +46,12 @@ export const PlacementSummary = z.strictObject({
    * (user decision 2026-11-21). null for a service structure.
    */
   projectStatus: ProjectStatus.nullable(),
+  /**
+   * The project's name, for the building's label (M2-14 #79). null for a service structure.
+   * A plain bounded string on output with the same cap as ProjectSummary.name, so one row with
+   * unusual stored text can't fail the whole list.
+   */
+  projectName: z.string().max(400).nullable(),
   // Plain bounded string on output: one row with unusual stored text must not fail the list.
   appearanceId: z.string().max(100),
   /**
