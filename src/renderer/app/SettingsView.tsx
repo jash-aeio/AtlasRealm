@@ -8,6 +8,7 @@ import { avatarColourLabel } from '../onboarding/avatar';
 import { AvatarChooser } from '../onboarding/AvatarChooser';
 import { commandProblem } from '../onboarding/form-messages';
 import { NameForm, ProfilePicker } from '../onboarding/ProfilePicker';
+import { ProfilePrivacyNote } from '../onboarding/ProfilePrivacyNote';
 import type { Session, SessionData } from '../state/session';
 import { useStore } from '../state/use-store';
 import type { Comfort } from '../world/comfort';
@@ -23,10 +24,16 @@ interface SettingsViewProps {
 
 export function SettingsView({ session, data, world, comfort }: SettingsViewProps) {
   const colour = data.settings.avatarColour;
+  const privacyNoteId = useId();
   return (
     <div className="settings">
-      <section className="panel" aria-labelledby="settings-profiles">
+      <section
+        className="panel"
+        aria-labelledby="settings-profiles"
+        aria-describedby={privacyNoteId}
+      >
         <h3 id="settings-profiles">Profiles</h3>
+        <ProfilePrivacyNote id={privacyNoteId} />
         <ProfilePicker
           profiles={data.profiles}
           onRename={session.renameProfile}
