@@ -144,6 +144,22 @@ describe('world.list', () => {
     expect(all.ok && all.data.worlds.map((w) => w.name)).toEqual(['Home', 'Work']);
   });
 
+  it('still lists a world whose stored name breaks the newer input rules (#60, ADR-0033)', async () => {
+    const world = await createWorld('Home');
+    // A name saved before #60 tightened the rules: a variation selector run and a Hangul filler.
+    const older = `Home${String.fromCodePoint(0x2764, 0xfe0f, 0xfe0f, 0x3164)}`;
+    opened.db.prepare('UPDATE worlds SET name = ? WHERE id = ?').run(older, world.id);
+
+    await expect(list()).resolves.toMatchObject({
+      ok: true,
+      data: { worlds: [{ id: world.id, name: older }] },
+    });
+    // Input stays strict: the same name can't be typed in again.
+    await expect(
+      rename({ worldId: world.id, expectedRevision: world.revision, name: older }),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'invalid_payload' } });
+  });
+
   it.each([
     ['extra key', { includeArchived: true, profileId: 'default' }],
     ['wrong type', { includeArchived: 'yes' }],

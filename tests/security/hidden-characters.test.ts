@@ -3,6 +3,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { DisplayName } from '../../src/common/contracts/display-name';
+import {
+  ProfileCreateInput,
+  ProfileSettings,
+  ProfileSummary,
+} from '../../src/common/contracts/profile';
 import { ProjectGoal } from '../../src/common/contracts/project';
 import { hasHiddenCharacters } from '../../src/common/text/hidden-characters';
 import {
@@ -82,6 +87,32 @@ describe('contracts (Zod)', () => {
 
   it.each(ALLOWED)('ProjectGoal accepts %s', (_label, text) => {
     expect(ProjectGoal.parse(`Line one\n${text}`)).toBe(`Line one\n${text}`);
+  });
+});
+
+describe('output schemas stay lenient (ADR-0033)', () => {
+  const older = `Work${cp(0xfe0f, 0xfe0f, 0x3164)}`;
+
+  it('ProfileSummary and ProfileSettings return a name saved before #60', () => {
+    expect(
+      ProfileSummary.parse({ id: 'default', displayName: older, isActive: true }).displayName,
+    ).toBe(older);
+    expect(
+      ProfileSettings.parse({
+        profileId: 'default',
+        displayName: older,
+        avatarPreset: null,
+        avatarColour: null,
+        timezone: 'UTC',
+        createdAt: '2026-11-24T10:00:00.000Z',
+        updatedAt: '2026-11-24T10:00:00.000Z',
+        revision: 1,
+      }).displayName,
+    ).toBe(older);
+  });
+
+  it('input schemas for the same name stay strict', () => {
+    expect(ProfileCreateInput.safeParse({ displayName: older }).success).toBe(false);
   });
 });
 

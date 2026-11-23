@@ -345,6 +345,14 @@ describe('graph.worldConnections', () => {
     });
   });
 
+  it('still answers when a stored project name breaks the newer input rules (#60, ADR-0033)', async () => {
+    const project = newProject('A');
+    // A name saved before #60: one variation selector after another.
+    const older = `A${String.fromCodePoint(0xfe0f, 0xfe0f)}`;
+    session.opened.db.prepare('UPDATE projects SET name = ? WHERE id = ?').run(older, project.id);
+    expect((await graphOf()).nodes.map((n) => n.name)).toEqual([older]);
+  });
+
   it('hides a trashed project and its links from nodes, edges and counts, and restore brings them back', async () => {
     const a = newProject('A');
     const b = newProject('B');

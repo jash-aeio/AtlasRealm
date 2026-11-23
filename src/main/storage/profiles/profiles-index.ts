@@ -9,16 +9,20 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { z } from 'zod';
 
-import { normalizeName } from '../repositories/repository-support';
+import { normalizeStoredName } from '../repositories/repository-support';
 import { ProfileIdSchema } from './profile-id';
 
 export const PROFILES_INDEX_FILE = 'profiles-index.json';
 export const PROFILES_INDEX_SCHEMA_VERSION = 1;
 
-/** Same rules as every other display name (trimmed, 1–80 chars, no control characters). */
+/**
+ * The rules a stored display name had to meet (trimmed, 1–80 chars, no control characters).
+ * Not the stricter input rule: a name saved before #60 must not make the index unreadable,
+ * which would block startup (ADR-0033). New names are checked on input (contract, repository).
+ */
 function isCleanName(value: string): boolean {
   try {
-    return normalizeName(value, 'Profile name') === value;
+    return normalizeStoredName(value, 'Profile name') === value;
   } catch {
     return false;
   }
