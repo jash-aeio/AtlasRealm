@@ -28,6 +28,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ### Fixed
 - The world-view test for hover, zoom and pan no longer fails at random (#71): it now reads where the camera really is instead of assuming it.
+- The packaged "works offline" test now really checks where the app loads its files from (#57). Since M0-7 it had been checking an empty list, because Chromium doesn't record the first load of an `app://` file. It now records every request over a reload, requires the page's own files to be in the list, and proves with a blocked outside image that it would notice one.
 - Projects in an archived world can no longer be changed (#59): renaming, editing the goal, archiving, restoring, trashing and restoring from the trash are all refused with "This world is archived. Restore it before changing its projects.", and nothing is changed. You can still open and list those projects. There is no button to archive a world yet, so this is a safety rule for later screens rather than something you will see today.
 
 ### Security
