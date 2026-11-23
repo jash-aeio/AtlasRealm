@@ -32,6 +32,24 @@ export interface ProjectRelation {
   readonly revision: number;
 }
 
+/** A visible (not trashed) project as the graph sees it. */
+export interface ConnectionNode {
+  readonly projectId: string;
+  readonly name: string;
+  readonly status: 'active' | 'archived';
+  readonly placed: boolean;
+  /** Links among visible projects touching this one, counted before any truncation. */
+  readonly linkCount: number;
+}
+
+export interface WorldConnections {
+  readonly nodes: readonly ConnectionNode[];
+  readonly edges: readonly ProjectRelation[];
+  /** Visible projects and links in the whole world, before truncation. */
+  readonly totalNodes: number;
+  readonly totalEdges: number;
+}
+
 function oneOf<T extends string>(row: Row, column: string, allowed: readonly T[]): T {
   const value = text(row, column);
   if (!(allowed as readonly string[]).includes(value)) {
@@ -140,6 +158,86 @@ export class ProjectRelationRepository {
       });
     if (row === undefined) throw new Error('INSERT … RETURNING returned no row.');
     return toRelation(row);
+  }
+
+  /**
+   * The world's visible projects and the links among them, bounded (ADR-0029, §30.6).
+   * "Visible" means not trashed: trashed projects and every link touching one are left out of
+   * the rows *and* the totals. Unplaced projects are included (§30.1). Nodes are ordered
+   * active first, most links first, oldest, then ID, and the first `maxNodes` kept; edges are
+   * kept only when both ends were, oldest then ID, the first `maxEdges`. Names never order.
+   */
+  connections(
+    worldId: string,
+    limits: { readonly maxNodes: number; readonly maxEdges: number },
+  ): WorldConnections {
+    // Shared by all three queries: the visible projects and the links between two of them.
+    const visible = `
+      WITH visible AS (
+        SELECT id FROM projects WHERE world_id = :world_id AND status <> 'trashed'
+      ),
+      live AS (
+        SELECT r.* FROM project_relations r
+        JOIN visible s ON s.id = r.source_project_id
+        JOIN visible t ON t.id = r.target_project_id
+        WHERE r.world_id = :world_id
+      )`;
+    const params = { world_id: worldId };
+
+    const nodeRows = this.db
+      .prepare(
+        `${visible},
+         degree AS (
+           SELECT project_id, count(*) AS n FROM (
+             SELECT source_project_id AS project_id FROM live
+             UNION ALL
+             SELECT target_project_id FROM live
+           ) GROUP BY project_id
+         )
+         SELECT p.id, p.name, p.status, coalesce(d.n, 0) AS link_count,
+                EXISTS (SELECT 1 FROM building_placements b WHERE b.project_id = p.id) AS placed
+         FROM projects p
+         JOIN visible v ON v.id = p.id
+         LEFT JOIN degree d ON d.project_id = p.id
+         ORDER BY (p.status = 'active') DESC, link_count DESC, p.created_at, p.id
+         LIMIT :max_nodes`,
+      )
+      .all({ ...params, max_nodes: limits.maxNodes });
+    const nodes = nodeRows.map((row): ConnectionNode => ({
+      projectId: text(row, 'id'),
+      name: text(row, 'name'),
+      status: oneOf(row, 'status', ['active', 'archived'] as const),
+      placed: integer(row, 'placed') === 1,
+      linkCount: integer(row, 'link_count'),
+    }));
+
+    const totals = this.db
+      .prepare(
+        `${visible}
+         SELECT (SELECT count(*) FROM visible) AS nodes, (SELECT count(*) FROM live) AS edges`,
+      )
+      .get(params);
+    if (totals === undefined) throw new Error('Count query returned no row.');
+
+    const kept = JSON.stringify(nodes.map((node) => node.projectId));
+    const edges = this.db
+      .prepare(
+        `${visible}
+         SELECT * FROM live
+         WHERE source_project_id IN (SELECT value FROM json_each(:kept))
+           AND target_project_id IN (SELECT value FROM json_each(:kept))
+         ORDER BY created_at, id
+         LIMIT :max_edges`,
+      )
+      .all({ ...params, kept, max_edges: limits.maxEdges })
+      .map(toRelation);
+
+    return {
+      nodes,
+      edges,
+      totalNodes: integer(totals, 'nodes'),
+      totalEdges: integer(totals, 'edges'),
+    };
   }
 
   /**

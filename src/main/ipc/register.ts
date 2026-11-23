@@ -6,6 +6,7 @@ import type { z } from 'zod';
 import { type ActiveProfile, refuseWhileSwitching } from '../profiles/active-profile';
 import { ProfileService } from '../profiles/profile-service';
 import type { WorkerBridge } from '../runtime-bridge/worker-bridge';
+import { GraphService } from '../services/graph-service';
 import { HotbarService } from '../services/hotbar-service';
 import { PlacementService } from '../services/placement-service';
 import { ProfileSession } from '../services/profile-session';
@@ -24,6 +25,7 @@ import {
   placementMoveCommand,
   placementRemoveCommand,
 } from './commands/placement';
+import { createGraphWorldConnectionsHandler, graphWorldConnectionsCommand } from './commands/graph';
 import {
   createHotbarAssignHandler,
   createHotbarClearHandler,
@@ -52,6 +54,12 @@ import {
   projectTrashCommand,
   projectUpdateGoalCommand,
 } from './commands/project';
+import {
+  createRelationCreateHandler,
+  createRelationRemoveHandler,
+  relationCreateCommand,
+  relationRemoveCommand,
+} from './commands/relation';
 import {
   createWorkerCheckHandler,
   createWorkerStatusHandler,
@@ -106,6 +114,7 @@ export function registerIpcHandlers(
   // Footprints come from the bundled manifest, parsed once here; a broken one fails startup.
   const placements = new PlacementService(activeProfile, projects, BuildingAppearances.bundled());
   const hotbar = new HotbarService(activeProfile, projects);
+  const graph = new GraphService(activeProfile, projects);
   const session = new ProfileSession({ active: activeProfile, worker, reloadRenderer });
 
   // Every command is refused while a profile switch is under way. Handlers that are already
@@ -159,4 +168,7 @@ export function registerIpcHandlers(
   handle(hotbarListCommand, createHotbarListHandler(hotbar));
   handle(hotbarAssignCommand, createHotbarAssignHandler(hotbar));
   handle(hotbarClearCommand, createHotbarClearHandler(hotbar));
+  handle(relationCreateCommand, createRelationCreateHandler(graph));
+  handle(relationRemoveCommand, createRelationRemoveHandler(graph));
+  handle(graphWorldConnectionsCommand, createGraphWorldConnectionsHandler(graph));
 }
