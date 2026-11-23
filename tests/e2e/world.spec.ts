@@ -454,7 +454,9 @@ test.describe('world view with graphics available', () => {
     // own context stays alive the whole time, so it is part of the baseline.
     const { page } = launched;
     await openDeveloperSpikes(page);
-    const toggle = page.getByRole('button', { name: /world view/ });
+    const toggle = page
+      .locator('details.developer-spikes')
+      .getByRole('button', { name: /world view/ });
     const canvases = page.locator('[data-testid="world-canvas-host"] canvas');
     for (let i = 0; i < 20; i++) {
       await toggle.click(); // hide
@@ -479,9 +481,9 @@ test.describe('world view with graphics available', () => {
     // Show, then hide a microtask later while Pixi's async init is still running.
     // A late-finishing init must destroy its own app (and its WebGL context).
     const hiddenWhileLoading = await page.evaluate(async () => {
-      const button = Array.from(document.querySelectorAll('button')).find((b) =>
-        b.textContent.includes('world view'),
-      );
+      const button = Array.from(
+        document.querySelectorAll<HTMLButtonElement>('details.developer-spikes button'),
+      ).find((b) => b.textContent.includes('world view'));
       if (button === undefined) throw new Error('toggle not found');
       const nextTask = () => new Promise((resolve) => setTimeout(resolve, 0));
       let raced = 0;

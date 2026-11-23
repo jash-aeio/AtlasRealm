@@ -423,7 +423,7 @@ test.describe('main screen layout and keyboard shortcuts', () => {
     await expect(entrance('Settings')).toBeFocused();
   });
 
-  test('E toggles the library placeholder, but never while typing in a field', async () => {
+  test('E toggles the library, but never while typing in a field', async () => {
     await entrance('Projects').click();
     await page.getByRole('button', { name: 'New project' }).click();
     const nameField = page.getByRole('form', { name: 'New project' }).getByLabel('Project name');
@@ -437,13 +437,11 @@ test.describe('main screen layout and keyboard shortcuts', () => {
     await expect(page.getByRole('form', { name: 'New project' })).toHaveCount(0);
     await expect(page.getByTestId('projects-summary')).toBeVisible();
 
-    // Outside a field, E opens the library placeholder and E again closes it.
+    // Outside a field, E opens the library and E again closes it.
     await entrance('Projects').focus();
     await page.keyboard.press('e');
     await expect(panel().getByRole('heading', { name: 'Library' })).toBeFocused();
-    await expect(panel().getByTestId('not-built')).toHaveText(
-      'Not built yet (planned later in M2)',
-    );
+    await expect(panel().getByRole('tab', { name: 'Projects', selected: true })).toBeVisible();
     await expect(libraryButton()).toHaveAttribute('aria-pressed', 'true');
     await page.keyboard.press('e');
     await expect(panel()).toHaveCount(0);

@@ -398,6 +398,14 @@ button.primary {
   background: #2f4a32;
 }
 
+/* Shown instead of the canvas while "Hide world view" is on (M2-9). */
+.world-hidden {
+  padding: 1rem;
+  background: #1d1f26;
+  height: 100%;
+  box-sizing: border-box;
+}
+
 /* The product world fills the world area; panels open over it. */
 .world-product {
   display: flex;
@@ -629,6 +637,7 @@ kbd {
 
 .projects-filters {
   display: flex;
+  align-items: center;
   gap: 0.25rem;
 }
 
@@ -782,4 +791,39 @@ kbd {
 
 .world-labels-toggle {
   white-space: nowrap;
+}
+
+/* The library (M2-9): tabs over one panel. */
+.library-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid #3a3d48;
+}
+
+.library-tabs [aria-selected='true'] {
+  outline: 2px solid #8fb4f0;
+}
+
+.library-panel:focus-visible {
+  outline: 2px solid #8fb4f0;
+  outline-offset: 2px;
+}
+
+.appearance-list {
+  margin: 0.5rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.appearance-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0;
+}
+
+.appearance-item h4 {
+  margin: 0 0 0.25rem;
 }
