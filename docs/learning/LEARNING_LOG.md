@@ -41,6 +41,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 035 | [Bounded graph queries](lessons/035-bounded-graph-queries.md) | M2 | directed links, composite foreign keys, deterministic truncation with omitted counts, hiding trashed rows from counts, resource caps, ticking test clock |
 | 036 | [A minimap derived from saved data](lessons/036-derived-minimap-svg-viewbox.md) | M2 | derived views, SVG viewBox in world pixels, non-scaling strokes, camera viewport as the inverse transform, layout guarantees vs overlays, window splitter |
 | 037 | [Deterministic graph layout and accessible graphs](lessons/037-deterministic-layout-accessible-graphs.md) | M2 | ring layout, polar coordinates, stable order, meaning not by colour alone, list equivalent of a canvas, session-only display state |
+| 038 | [React keys and remounting](lessons/038-react-keys-and-remounting.md) | M2 | reconciliation, reuse vs mount, `key` to reset a subtree, autoFocus only on mount, index keys |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map
