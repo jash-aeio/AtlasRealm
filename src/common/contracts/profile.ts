@@ -7,6 +7,7 @@
 // with the defaults (no avatar, the system timezone).
 import { z } from 'zod';
 
+import { ComfortPatch, ComfortPreferences } from '../preferences/comfort';
 import { DisplayName, Revision, Timestamp } from './display-name';
 
 /** At most this many local profiles, so `profile.list` stays bounded without paging. */
@@ -130,3 +131,20 @@ export const ProfileSwitchOutput = z.strictObject({
   reloading: z.literal(true),
 });
 export type ProfileSwitchOutput = z.infer<typeof ProfileSwitchOutput>;
+
+// ---- profile.preferences.get / profile.preferences.update -------------------------------
+
+/**
+ * Comfort preferences of the active profile (M2-14 #79, ADR-0028). Unlike the settings above,
+ * an update takes no revision and doesn't bump the settings revision: each change is merged
+ * into the stored preferences and the last write wins. They are cosmetic, and the camera is
+ * saved often, so a revision would only make the avatar and name forms report conflicts.
+ */
+export const ProfilePreferencesGetInput = z.undefined();
+export type ProfilePreferencesGetInput = z.infer<typeof ProfilePreferencesGetInput>;
+
+export const ProfilePreferencesUpdateInput = ComfortPatch;
+export type ProfilePreferencesUpdateInput = z.infer<typeof ProfilePreferencesUpdateInput>;
+
+export const ProfilePreferencesOutput = z.strictObject({ preferences: ComfortPreferences });
+export type ProfilePreferencesOutput = z.infer<typeof ProfilePreferencesOutput>;

@@ -13,9 +13,23 @@
 import type { z } from 'zod';
 
 import type { Channel } from '../../common/contracts/channels';
-import type { IpcError, IpcErrorCode, IpcResult } from '../../common/contracts/ipc-result';
+import type {
+  HotbarSlotConflict,
+  IpcError,
+  IpcErrorCode,
+  IpcResult,
+  PlacementRefusal,
+} from '../../common/contracts/ipc-result';
+import { HotbarSlotConflictDetails } from '../../common/contracts/hotbar';
 import { checkPlainJson, jsonByteLength } from '../../common/contracts/json-size';
 import { isAppOrigin } from '../bootstrap/app-origin';
+
+/**
+ * At most this many blocking building IDs travel with a `placement_blocked` error. A 4×4
+ * footprint can overlap at most 16 buildings; the cap only matters for a damaged world, and is
+ * explicit because error replies skip output validation (#68 security L1).
+ */
+export const MAX_BLOCKING_IDS = 64;
 
 /** Largest accepted payload, measured as UTF-8 JSON. Generous for commands, tiny for abuse. */
 export const MAX_PAYLOAD_BYTES = 64 * 1024;
@@ -42,9 +56,19 @@ export type CommandErrorCode = Extract<
   | 'revision_conflict'
   | 'invalid_transition'
   | 'limit_reached'
+  | 'placement_blocked'
+  | 'slot_occupied'
   | 'profile_switching'
   | 'profile_unavailable'
 >;
+
+/** Extra, code-specific detail a CommandError may carry to the renderer. */
+export interface CommandErrorDetails {
+  /** Only for `placement_blocked`. */
+  readonly placement?: PlacementRefusal;
+  /** Only for `slot_occupied`. */
+  readonly hotbar?: HotbarSlotConflict;
+}
 
 /**
  * Thrown by a handler (or the service it calls) to report an expected failure with a stable
@@ -58,6 +82,7 @@ export class CommandError extends Error {
     message: string,
     /** Only for `revision_conflict`. */
     readonly currentRevision?: number,
+    readonly details: CommandErrorDetails = {},
   ) {
     super(message);
   }
@@ -131,16 +156,37 @@ export function createCommandHandler<I extends z.ZodType, O extends z.ZodType>(
       return { ok: true, data };
     } catch (error) {
       if (error instanceof CommandError) {
-        return error.currentRevision === undefined
-          ? fail(error.code, error.message)
-          : {
-              ok: false,
-              error: {
-                code: error.code,
-                message: error.message,
-                currentRevision: error.currentRevision,
-              },
-            };
+        const { placement } = error.details;
+        // Parsed, not copied: error replies skip the output schema (#69 security L2). A detail
+        // that doesn't fit is a handler bug, reported like any other.
+        const hotbar =
+          error.details.hotbar === undefined
+            ? undefined
+            : HotbarSlotConflictDetails.safeParse(error.details.hotbar);
+        if (hotbar?.success === false) {
+          console.error(`[ipc] ${definition.channel} returned malformed slot_occupied details`);
+          return fail('internal_error', 'Something went wrong. The error was logged.');
+        }
+        return {
+          ok: false,
+          error: {
+            code: error.code,
+            message: error.message,
+            ...(error.currentRevision === undefined
+              ? {}
+              : { currentRevision: error.currentRevision }),
+            // Copied field by field, so nothing else a service attached can leak across.
+            ...(placement === undefined
+              ? {}
+              : {
+                  placement: {
+                    reason: placement.reason,
+                    blockingIds: placement.blockingIds.slice(0, MAX_BLOCKING_IDS),
+                  },
+                }),
+            ...(hotbar === undefined ? {} : { hotbar: hotbar.data }),
+          },
+        };
       }
       // Details stay in the main process. Never log the payload: later commands may carry
       // user content or secrets.

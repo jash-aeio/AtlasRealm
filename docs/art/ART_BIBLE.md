@@ -98,6 +98,8 @@ Changed by [ADR-0013](../adr/0013-art-technical-contract.md). The user confirmed
 
 ### 34.4 Minimal production batch
 
+**Schedule (ADR-0027):** M5 takes a small vertical slice through the whole pipeline to prove it; the full batch below is produced and integrated in M8 (UI/UX polish and art integration).
+
 Prioritize a coherent useful slice rather than hundreds of decorative variants:
 
 1. Terrain: grass, path/stone, water/edge transitions, selection and invalid-placement indicators.

@@ -1,14 +1,26 @@
-// The Pixi side of the world view: builds and draws the placeholder grid.
+// The Pixi side of the world view: draws the ground grid, the saved buildings (M2-6) and the M0
+// spike markers.
 //
-// This module knows nothing about React or project data (ADR-0002: Pixi is a pure view).
-// WorldCanvas owns its lifecycle and feeds it camera and hover changes.
+// This module knows nothing about React, IPC or project data (ADR-0002: Pixi is a pure view).
+// useWorldScene owns its lifecycle and feeds it camera, hover and the buildings to draw, already
+// laid out and depth-sorted by buildings.ts.
 
 // Must load before any renderer is created. Pixi normally generates shader/uniform code with
 // `new Function()`, which our CSP forbids. Despite its name, this module swaps in prebuilt
 // code so `unsafe-eval` is NOT needed.
 import 'pixi.js/unsafe-eval';
 
-import { Application, Container, Graphics, ImageSource, Sprite, Texture } from 'pixi.js';
+import { Application, Container, Graphics, ImageSource, Sprite, Text, Texture } from 'pixi.js';
+
+import type { TileRect } from '../../common/world/placement-rules';
+import {
+  buildingLabel,
+  footprintCorners,
+  isOnScreen,
+  MISSING_ART_HEIGHT,
+  type Box,
+  type WorldBuilding,
+} from './buildings';
 
 import {
   DEFAULT_MAP,
@@ -20,7 +32,13 @@ import {
   type Point,
   type TileSize,
 } from './projection';
-import { WORLD_COLOURS, WORLD_SPRITES, worldSprite, type WorldSprite } from './world-assets';
+import {
+  buildingSprites,
+  WORLD_COLOURS,
+  WORLD_SPRITES,
+  worldSprite,
+  type WorldSprite,
+} from './world-assets';
 
 /** ADR-0011: WebGL first, then Canvas2D. WebGPU is excluded until tested on real machines. */
 export const RENDERER_PREFERENCE = ['webgl', 'canvas'] as const;
@@ -36,6 +54,26 @@ const MARKER_LINE = WORLD_COLOURS.markerLine;
 /** Markers are half-size diamonds centred in their tile, so the selection shows around them. */
 const MARKER_SCALE = 0.5;
 
+/**
+ * Name labels stay this size on screen at every zoom (user decision 2026-11-23, ADR-0028) and
+ * are hidden below LABEL_MIN_ZOOM, where the map is an overview and labels would pile up.
+ */
+export const LABEL_MIN_ZOOM = 0.35;
+/** World pixels a status sign ("Archived", "Missing art") takes, so a name label sits above it. */
+const STATUS_SIGN_HEIGHT = 22;
+
+/** The placement tool's preview (M2-7): which tiles, whether it fits, and its text label. */
+export interface ScenePlacementPreview {
+  readonly rect: TileRect;
+  readonly fits: boolean;
+  /** Shown on a sign above the preview, so the colour never stands alone (UI_SPEC §6.5). */
+  readonly label: string;
+  /** The building art to show faded on the spot, or null for tiles only. */
+  readonly appearanceId: string | null;
+  /** A building being moved: drawn faded at its saved spot meanwhile. */
+  readonly fadedPlacementId: string | null;
+}
+
 export interface WorldScene {
   /** The renderer Pixi actually picked ('webgl' or 'canvas'). */
   readonly rendererName: string;
@@ -46,6 +84,18 @@ export interface WorldScene {
   setMarkers(tiles: readonly GridPoint[]): void;
   /** Highlights the selected entity's tile, or nothing. */
   setSelected(tile: GridPoint | null): void;
+  /** The saved buildings, back to front (buildings.ts). Replaces any previous buildings. */
+  setBuildings(buildings: readonly WorldBuilding[]): void;
+  /** Outlines the footprint of the building with this placement ID, or nothing. */
+  setSelectedBuilding(placementId: string | null): void;
+  /** Shows the placement tool's preview, or nothing. */
+  setPlacementPreview(preview: ScenePlacementPreview | null): void;
+  /** Shows or hides the buildings' name labels (M2-14, UI_SPEC §6.6). On by default. */
+  setLabels(show: boolean): void;
+  /** How many name labels are drawn right now (shown to tests). */
+  readonly drawnLabelCount: () => number;
+  /** How many buildings are drawn after culling (shown to tests and the dev measurement). */
+  readonly drawnBuildingCount: () => number;
   resize(width: number, height: number): void;
   destroy(): void;
 }
@@ -130,6 +180,121 @@ function drawMarkers(markers: Graphics, tiles: readonly GridPoint[], tile: TileS
   markers.fill({ color: MARKER_FILL }).stroke({ width: 1, color: MARKER_LINE, pixelLine: true });
 }
 
+/** Screen pixels around the view where buildings stay drawn, so panning never shows a gap. */
+const CULL_MARGIN = 64;
+/** Room above a building for its sign, in world pixels (part of the culling box). */
+const SIGN_ROOM = 28;
+/** An archived project's building is faded and greyed, and also carries an "Archived" sign. */
+const ARCHIVED_TINT = WORLD_COLOURS.stoneLight;
+const ARCHIVED_ALPHA = 0.6;
+/** A building being moved stays visible at its saved spot, faded, until the move is saved. */
+const MOVING_ALPHA = 0.35;
+/** The building art drawn on the preview spot. A blocked spot is also tinted red. */
+const GHOST_ALPHA = 0.6;
+const GHOST_BLOCKED_TINT = 0xff8a80;
+
+/**
+ * A small text sign above a building. Text is always paired with any colour change (UI_SPEC
+ * §6.5), so an archived or broken building never relies on colour alone.
+ */
+function drawSign(text: string, x: number, bottom: number): Container {
+  const sign = new Container();
+  const label = new Text({
+    text,
+    style: { fontFamily: 'system-ui, sans-serif', fontSize: 13, fill: WORLD_COLOURS.parchment },
+    anchor: { x: 0.5, y: 1 },
+  });
+  const padX = 5;
+  const padY = 2;
+  const background = new Graphics()
+    .roundRect(
+      -label.width / 2 - padX,
+      -label.height - padY * 2,
+      label.width + padX * 2,
+      label.height + padY * 2,
+      3,
+    )
+    .fill({ color: WORLD_COLOURS.ink, alpha: 0.85 });
+  label.position.set(0, -padY);
+  sign.addChild(background, label);
+  sign.position.set(x, bottom);
+  return sign;
+}
+
+/**
+ * Lost art (ADR-0025): a plain stone block on the stored footprint, so the building still shows
+ * where it stands and stays selectable.
+ */
+function drawMissingArt(building: WorldBuilding, tile: TileSize): Graphics {
+  const { north, east, south, west } = footprintCorners(building.rect, tile);
+  const up = (point: Point): Point => ({ x: point.x, y: point.y - MISSING_ART_HEIGHT });
+  const block = new Graphics();
+  block.poly([west, south, up(south), up(west)]).fill({ color: WORLD_COLOURS.stone });
+  block.poly([south, east, up(east), up(south)]).fill({ color: WORLD_COLOURS.stoneDark });
+  block.poly([up(north), up(east), up(south), up(west)]).fill({ color: WORLD_COLOURS.stoneLight });
+  block
+    .poly([west, south, east, up(east), up(north), up(west)])
+    .stroke({ width: 1, color: WORLD_COLOURS.ink, pixelLine: true });
+  return block;
+}
+
+/** One building: its sprite (or the missing-art block) plus a sign when it needs one. */
+function drawBuilding(
+  building: WorldBuilding,
+  textures: ReadonlyMap<string, { art: WorldSprite; texture: Texture }>,
+  tile: TileSize,
+): Container {
+  const node = new Container();
+  node.label = `building:${building.placementId}`;
+  const loaded = building.art === null ? undefined : textures.get(building.appearanceId);
+  if (loaded === undefined) {
+    node.addChild(drawMissingArt(building, tile));
+  } else {
+    const sprite = new Sprite(loaded.texture);
+    sprite.anchor.set(
+      loaded.art.pivot.x / loaded.art.width,
+      loaded.art.pivot.y / loaded.art.height,
+    );
+    sprite.position.set(building.pivot.x, building.pivot.y);
+    if (building.archived) {
+      sprite.tint = ARCHIVED_TINT;
+      sprite.alpha = ARCHIVED_ALPHA;
+    }
+    node.addChild(sprite);
+  }
+  const sign = statusSign(building, loaded !== undefined);
+  if (sign !== null) node.addChild(drawSign(sign, building.pivot.x, building.bounds.top - 2));
+  return node;
+}
+
+/** The status sign a building carries, if any. Status signs are always shown. */
+function statusSign(building: WorldBuilding, hasArt: boolean): string | null {
+  return !hasArt ? 'Missing art' : building.archived ? 'Archived' : null;
+}
+
+/**
+ * Where a building's name label stands: above the building, and above its status sign if it
+ * has one. The label's origin is its bottom middle, so scaling it by 1 / zoom keeps it the same
+ * size on screen and still standing just above the building.
+ */
+function nameLabelPosition(building: WorldBuilding, hasArt: boolean): Point {
+  const above = statusSign(building, hasArt) === null ? 0 : STATUS_SIGN_HEIGHT;
+  return { x: building.pivot.x, y: building.bounds.top - 2 - above };
+}
+
+/** The selected building's footprint outline, drawn above the buildings so it always shows. */
+function drawBuildingOutline(outline: Graphics, building: WorldBuilding | null, tile: TileSize) {
+  outline.clear();
+  if (building === null) return;
+  const { north, east, south, west } = footprintCorners(building.rect, tile);
+  outline
+    .poly([north, east, south, west])
+    .fill({ color: WORLD_COLOURS.selection, alpha: 0.2 })
+    .stroke({ width: 3, color: WORLD_COLOURS.selection })
+    .poly([north, east, south, west])
+    .stroke({ width: 1, color: WORLD_COLOURS.selectionEdge, pixelLine: true });
+}
+
 /**
  * Creates the Pixi application and draws the grid. Rejects if no allowed renderer works;
  * the caller shows a message instead of the canvas.
@@ -146,6 +311,10 @@ export async function createWorldScene(
   // Load the art first: if a bundled file is missing there is no app to clean up yet.
   const selectionArt = worldSprite(WORLD_SPRITES.selection);
   const selectionImage = await loadImage(selectionArt.url);
+  const invalidArt = worldSprite(WORLD_SPRITES.invalid);
+  const invalidImage = await loadImage(invalidArt.url);
+  const buildingArt = buildingSprites();
+  const buildingImages = await Promise.all(buildingArt.map((art) => loadImage(art.url)));
 
   const app = new Application();
   try {
@@ -171,17 +340,211 @@ export async function createWorldScene(
     throw error;
   }
 
-  const world = new Container();
+  // A render group: panning and zooming move the whole map, so Pixi updates one matrix instead
+  // of recomputing every building and label inside it. Measured with 100 buildings and software
+  // rendering (as on CI), it made every frame quicker.
+  const world = new Container({ isRenderGroup: true });
   const hover = drawHover(tile);
   const selected = createPivotSprite(selectionArt, selectionImage);
   selected.visible = false;
   const markers = new Graphics();
-  // Back to front: ground, selection, markers, hover outline.
-  world.addChild(drawGround(map, tile), selected, markers, hover);
+  const buildingLayer = new Container();
+  const buildingOutline = new Graphics();
+  const labelLayer = new Container();
+  const previewLayer = new Container();
+  // Back to front: ground, spike selection, spike markers, buildings, building selection,
+  // name labels (above every building, so one never hides behind another), placement
+  // preview, hover outline.
+  world.addChild(
+    drawGround(map, tile),
+    selected,
+    markers,
+    buildingLayer,
+    buildingOutline,
+    labelLayer,
+    previewLayer,
+    hover,
+  );
+  const imageTexture = (image: HTMLImageElement) =>
+    new Texture({ source: new ImageSource({ resource: image, scaleMode: 'nearest' }) });
+  const fitsTexture = imageTexture(selectionImage);
+  const blockedTexture = imageTexture(invalidImage);
   app.stage.addChild(world);
+
+  // One texture per appearance, shared by every building that uses it.
+  const textures = new Map<string, { art: WorldSprite; texture: Texture }>();
+  buildingArt.forEach((art, index) => {
+    const image = buildingImages[index];
+    if (image === undefined) return;
+    const source = new ImageSource({ resource: image, scaleMode: 'nearest' });
+    textures.set(art.id, { art, texture: new Texture({ source }) });
+  });
+
+  // Name labels are drawn once into a small texture each and shown as sprites. Sprites batch
+  // like the building art; a live Text plus its background shape per label are about 200 extra
+  // objects to draw every frame, which made software-rendered frames (CI) about 45% slower
+  // with 100 buildings. Labels stay one size on screen, so the texture is drawn at exactly the
+  // screen's resolution and stays sharp. One texture per label text, kept while it is in use.
+  const labelTextures = new Map<string, Texture>();
+  const labelTexture = (text: string): Texture => {
+    const cached = labelTextures.get(text);
+    if (cached !== undefined) return cached;
+    const sign = drawSign(text, 0, 0);
+    const texture = app.renderer.generateTexture({
+      target: sign,
+      resolution: window.devicePixelRatio,
+      antialias: true,
+    });
+    sign.destroy({ children: true, context: true });
+    labelTextures.set(text, texture);
+    return texture;
+  };
+  /** A building's name label, or null for a building without a name (a service structure). */
+  const drawNameLabel = (building: WorldBuilding, hasArt: boolean): Sprite | null => {
+    if (building.name === null) return null;
+    const label = new Sprite(labelTexture(buildingLabel(building.name)));
+    // The sign is drawn upwards from (0, 0), so its bottom middle is the anchor.
+    label.anchor.set(0.5, 1);
+    const at = nameLabelPosition(building, hasArt);
+    label.position.set(at.x, at.y);
+    return label;
+  };
+  /** Frees the textures of label texts no longer shown. */
+  const dropUnusedLabelTextures = (inUse: ReadonlySet<string>) => {
+    for (const [text, texture] of labelTextures) {
+      if (inUse.has(text)) continue;
+      texture.destroy(true);
+      labelTextures.delete(text);
+    }
+  };
+
+  let camera: Camera = { panX: 0, panY: 0, zoom: 1 };
+  let viewWidth = Math.max(1, width);
+  let viewHeight = Math.max(1, height);
+  let buildings: readonly WorldBuilding[] = [];
+  let buildingNodes: Container[] = [];
+  /** One per building, in the same order; null for a building without a name. */
+  let labelNodes: (Sprite | null)[] = [];
+  let showLabels = true;
+  let drawnLabels = 0;
+  /** The zoom the labels are scaled for; null when they need scaling (new labels). */
+  let labelZoom: number | null = null;
+  let selectedPlacementId: string | null = null;
+  let fadedPlacementId: string | null = null;
+  let drawn = 0;
+
+  /** The moving building is drawn faded; every other one at its normal strength. */
+  const applyFade = () => {
+    buildings.forEach((building, index) => {
+      const node = buildingNodes[index];
+      if (node !== undefined)
+        node.alpha = building.placementId === fadedPlacementId ? MOVING_ALPHA : 1;
+    });
+  };
+
+  /** Redraws the preview from scratch: at most 16 tile markers, a ghost and a sign. */
+  const drawPreview = (preview: ScenePlacementPreview | null) => {
+    for (const node of previewLayer.removeChildren())
+      node.destroy({ children: true, context: true });
+    if (preview === null) return;
+    const { rect } = preview;
+    const art = preview.fits ? selectionArt : invalidArt;
+    for (let dy = 0; dy < rect.rows; dy++) {
+      for (let dx = 0; dx < rect.columns; dx++) {
+        const marker = new Sprite(preview.fits ? fitsTexture : blockedTexture);
+        marker.anchor.set(art.pivot.x / art.width, art.pivot.y / art.height);
+        const at = pivotPosition(art, { gx: rect.x + dx, gy: rect.y + dy }, tile);
+        marker.position.set(at.x, at.y);
+        previewLayer.addChild(marker);
+      }
+    }
+    const corners = footprintCorners(rect, tile);
+    let top = corners.north.y;
+    const loaded = preview.appearanceId === null ? undefined : textures.get(preview.appearanceId);
+    if (loaded !== undefined) {
+      const ghost = new Sprite(loaded.texture);
+      ghost.anchor.set(
+        loaded.art.pivot.x / loaded.art.width,
+        loaded.art.pivot.y / loaded.art.height,
+      );
+      ghost.position.set(corners.south.x, corners.south.y);
+      ghost.alpha = GHOST_ALPHA;
+      if (!preview.fits) ghost.tint = GHOST_BLOCKED_TINT;
+      previewLayer.addChild(ghost);
+      top = Math.min(top, corners.south.y - loaded.art.pivot.y);
+    }
+    previewLayer.addChild(drawSign(preview.label, corners.south.x, top - 2));
+  };
+
+  /** Hides buildings outside the view (UI_SPEC §17.4: cull offscreen sprites). */
+  const cull = () => {
+    drawn = 0;
+    buildings.forEach((building, index) => {
+      const node = buildingNodes[index];
+      if (node === undefined) return;
+      const box: Box = { ...building.bounds, top: building.bounds.top - SIGN_ROOM };
+      node.visible = isOnScreen(box, camera, viewWidth, viewHeight, CULL_MARGIN);
+      if (node.visible) drawn++;
+    });
+    updateLabels();
+  };
+
+  /** Labels follow their building's culling, the toggle and the zoom; sized for the screen. */
+  /** One label per building, from the cached textures; frees textures no longer shown. */
+  function buildLabels() {
+    for (const node of labelLayer.removeChildren()) node.destroy();
+    labelNodes = buildings.map((building) =>
+      drawNameLabel(building, building.art !== null && textures.has(building.appearanceId)),
+    );
+    const labels = labelNodes.filter((label) => label !== null);
+    if (labels.length > 0) labelLayer.addChild(...labels);
+    dropUnusedLabelTextures(
+      new Set(
+        buildings.flatMap((building) =>
+          building.name === null ? [] : [buildingLabel(building.name)],
+        ),
+      ),
+    );
+    labelZoom = null;
+  }
+
+  function updateLabels() {
+    drawnLabels = 0;
+    const zoomedIn = camera.zoom >= LABEL_MIN_ZOOM;
+    // Runs on every pan, so it only touches what changed: the scale only when the zoom changed,
+    // and visibility only when it flips.
+    const rescale = labelZoom !== camera.zoom;
+    labelZoom = camera.zoom;
+    labelNodes.forEach((label, index) => {
+      if (label === null) return;
+      const visible = showLabels && zoomedIn && buildingNodes[index]?.visible === true;
+      if (label.visible !== visible) label.visible = visible;
+      if (rescale) label.scale.set(1 / camera.zoom);
+      if (visible) drawnLabels++;
+    });
+  }
+
+  const outlineSelected = () => {
+    const building = buildings.find((b) => b.placementId === selectedPlacementId) ?? null;
+    drawBuildingOutline(buildingOutline, building, tile);
+  };
 
   let frame: number | null = null;
   let destroyed = false;
+
+  // Label textures were drawn on the GPU, so a lost graphics context takes their pixels with
+  // it. Once the context is back (and Pixi has restored its own state), draw them again.
+  const onContextRestored = () => {
+    requestAnimationFrame(() => {
+      if (destroyed) return;
+      for (const node of labelLayer.removeChildren()) node.destroy();
+      dropUnusedLabelTextures(new Set());
+      buildLabels();
+      updateLabels();
+      requestRender();
+    });
+  };
+  app.canvas.addEventListener('webglcontextrestored', onContextRestored);
   const requestRender = () => {
     if (frame !== null || destroyed) return;
     frame = requestAnimationFrame(() => {
@@ -193,9 +556,11 @@ export async function createWorldScene(
   return {
     rendererName: app.renderer.name,
     canvas: app.canvas,
-    setCamera(camera) {
-      world.position.set(camera.panX, camera.panY);
-      world.scale.set(camera.zoom);
+    setCamera(next) {
+      camera = next;
+      world.position.set(next.panX, next.panY);
+      world.scale.set(next.zoom);
+      cull();
       requestRender();
     },
     setHover(target) {
@@ -218,14 +583,53 @@ export async function createWorldScene(
       }
       requestRender();
     },
+    setBuildings(next) {
+      // Rebuilt from scratch: at most a few hundred nodes, and only when the saved list changes.
+      // Shared textures survive; each Graphics frees the shapes it built (context: true).
+      for (const node of buildingLayer.removeChildren())
+        node.destroy({ children: true, context: true });
+      buildings = next;
+      buildingNodes = next.map((building) => drawBuilding(building, textures, tile));
+      if (buildingNodes.length > 0) buildingLayer.addChild(...buildingNodes);
+      buildLabels();
+      applyFade();
+      outlineSelected();
+      cull();
+      requestRender();
+    },
+    setSelectedBuilding(placementId) {
+      selectedPlacementId = placementId;
+      outlineSelected();
+      requestRender();
+    },
+    setPlacementPreview(preview) {
+      fadedPlacementId = preview?.fadedPlacementId ?? null;
+      applyFade();
+      drawPreview(preview);
+      requestRender();
+    },
+    setLabels(show) {
+      showLabels = show;
+      updateLabels();
+      requestRender();
+    },
+    drawnBuildingCount: () => drawn,
+    drawnLabelCount: () => drawnLabels,
     resize(newWidth, newHeight) {
-      app.renderer.resize(Math.max(1, newWidth), Math.max(1, newHeight));
+      viewWidth = Math.max(1, newWidth);
+      viewHeight = Math.max(1, newHeight);
+      app.renderer.resize(viewWidth, viewHeight);
+      cull();
       requestRender();
     },
     destroy() {
       if (destroyed) return;
       destroyed = true;
       if (frame !== null) cancelAnimationFrame(frame);
+      app.canvas.removeEventListener('webglcontextrestored', onContextRestored);
+      // Label textures are shared by text: free each once here, not again through its sprites.
+      for (const node of labelLayer.removeChildren()) node.destroy();
+      dropUnusedLabelTextures(new Set());
       // removeView takes the canvas out of the DOM; releasing children/textures frees GPU memory.
       app.destroy({ removeView: true }, { children: true, texture: true, textureSource: true });
     },

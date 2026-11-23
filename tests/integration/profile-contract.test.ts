@@ -13,11 +13,15 @@ import { APP_ENTRY_URL } from '../../src/main/bootstrap/app-origin';
 import {
   createProfileCreateHandler,
   createProfileListHandler,
+  createProfilePreferencesGetHandler,
+  createProfilePreferencesUpdateHandler,
   createProfileRenameHandler,
   createProfileSettingsGetHandler,
   createProfileSettingsUpdateHandler,
   profileCreateCommand,
   profileListCommand,
+  profilePreferencesGetCommand,
+  profilePreferencesUpdateCommand,
   profileRenameCommand,
   profileSettingsGetCommand,
   profileSettingsUpdateCommand,
@@ -66,6 +70,11 @@ const getSettings = (payload?: unknown) =>
   call(profileSettingsGetCommand, createProfileSettingsGetHandler(service), payload);
 const updateSettings = (payload: unknown) =>
   call(profileSettingsUpdateCommand, createProfileSettingsUpdateHandler(service), payload);
+
+const getPreferences = (payload?: unknown) =>
+  call(profilePreferencesGetCommand, createProfilePreferencesGetHandler(service), payload);
+const updatePreferences = (payload: unknown) =>
+  call(profilePreferencesUpdateCommand, createProfilePreferencesUpdateHandler(service), payload);
 
 async function settingsNow(): Promise<ProfileSettings> {
   const result = await getSettings();
@@ -403,5 +412,85 @@ describe('profile.settings.get', () => {
       existsSync(profilePaths(userData, toProfileId(result.data.profile.id)).databaseFile),
     ).toBe(true);
     expect((await settingsNow()).profileId).toBe(opened.profileId);
+  });
+});
+
+describe('profile.preferences (M2-14 #79, ADR-0028)', () => {
+  const worldId = '11111111-1111-4111-8111-111111111111';
+  const camera = { centerX: 128, centerY: 512.5, zoom: 0.8 };
+
+  it('gives a fresh profile the default comfort preferences', async () => {
+    await expect(getPreferences()).resolves.toEqual({
+      ok: true,
+      data: { preferences: { reducedMotion: 'system', buildingLabels: true, cameras: {} } },
+    });
+  });
+
+  it('saves each change and returns the merged result', async () => {
+    await updatePreferences({ reducedMotion: 'on' });
+    await updatePreferences({ camera: { worldId, camera } });
+    const result = await updatePreferences({ buildingLabels: false });
+    const expected = { reducedMotion: 'on', buildingLabels: false, cameras: { [worldId]: camera } };
+    expect(result).toEqual({ ok: true, data: { preferences: expected } });
+    await expect(getPreferences()).resolves.toEqual({ ok: true, data: { preferences: expected } });
+  });
+
+  it('leaves the settings revision alone, so settings forms never conflict', async () => {
+    const before = await settingsNow();
+    await updatePreferences({ camera: { worldId, camera } });
+    await updatePreferences({ buildingLabels: false });
+    const after = await settingsNow();
+    expect(after.revision).toBe(before.revision);
+    expect(after.updatedAt).toBe(before.updatedAt);
+    // A form holding the revision from before still saves.
+    const saved = await updateSettings({ expectedRevision: before.revision, timezone: 'UTC' });
+    expect(saved.ok).toBe(true);
+  });
+
+  it('keeps preference keys it does not know about', async () => {
+    new ProfileSettingsRepository(opened.db).update(opened.profileId, 1, {
+      preferences: { futureThing: { kept: true } },
+    });
+    await updatePreferences({ reducedMotion: 'off' });
+    const stored = new ProfileSettingsRepository(opened.db).get(opened.profileId);
+    expect(stored?.preferences).toMatchObject({
+      futureThing: { kept: true },
+      comfort: { reducedMotion: 'off' },
+    });
+  });
+
+  it('reads broken stored values as defaults, field by field', async () => {
+    new ProfileSettingsRepository(opened.db).update(opened.profileId, 1, {
+      preferences: { comfort: { reducedMotion: 'loud', buildingLabels: false, cameras: [1] } },
+    });
+    await expect(getPreferences()).resolves.toEqual({
+      ok: true,
+      data: { preferences: { reducedMotion: 'system', buildingLabels: false, cameras: {} } },
+    });
+  });
+
+  it('refuses invalid changes without writing anything', async () => {
+    for (const payload of [
+      {},
+      { reducedMotion: 'loud' },
+      { buildingLabels: 'yes' },
+      { camera: { worldId: 'not-a-world', camera } },
+      { camera: { worldId, camera: { ...camera, zoom: 40 } } },
+      { expectedRevision: 1, buildingLabels: false },
+    ]) {
+      await expect(updatePreferences(payload)).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'invalid_payload' },
+      });
+    }
+    const stored = new ProfileSettingsRepository(opened.db).get(opened.profileId);
+    expect(stored?.preferences).toEqual({});
+  });
+
+  it('rejects a payload on get', async () => {
+    await expect(getPreferences({})).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'invalid_payload' },
+    });
   });
 });

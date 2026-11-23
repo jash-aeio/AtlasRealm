@@ -40,6 +40,15 @@ body {
   color: #f08a7e;
 }
 
+/* Reduced motion (M2-14, UI_SPEC §6.6): set on the root by useMotionAttribute. */
+:root[data-motion='reduced'] *,
+:root[data-motion='reduced'] *::before,
+:root[data-motion='reduced'] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+
 /* World view (M0-4 spike). */
 .world {
   margin-top: 1rem;
@@ -315,14 +324,270 @@ button.primary {
   border-radius: 3px;
 }
 
-/* Main screen (M1-9). */
-.main-header {
+/* Main screen layout (M2-5 #70, UI_SPEC §6.1): top bar, sidebar | world | Atlas column, bottom
+   bar. The shell fills the window; panels and the side column scroll on their own. Palette
+   swatches from ART_BIBLE ("warm storybook village"). */
+.app[data-screen='main'] {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.shell {
+  display: grid;
+  grid-template:
+    'top top top' auto
+    'side world right' minmax(0, 1fr)
+    'bottom bottom bottom' auto
+    / 11rem minmax(0, 1fr) 20rem;
+  height: 100vh;
+  background: #1d1f26;
+}
+
+.shell-top {
+  grid-area: top;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid #3a3d48;
+}
+
+.top-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 1rem;
-  padding-bottom: 0.75rem;
+}
+
+.brand {
+  margin: 0;
+  color: #efe2bf;
+  font-size: 1.15rem;
+}
+
+.sidebar {
+  grid-area: side;
+  overflow-y: auto;
+  padding: 0.75rem 0.5rem;
+  border-right: 1px solid #3a3d48;
+}
+
+.sidebar ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sidebar button {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+}
+
+/* The open entrance is marked by a border as well as colour (never colour alone). */
+.sidebar button[aria-current='true'] {
+  border-left: 4px solid #f2c14e;
+  font-weight: 600;
+}
+
+.world-area {
+  grid-area: world;
+  position: relative;
+  overflow: hidden;
+  background: #2f4a32;
+}
+
+/* Shown instead of the canvas while "Hide world view" is on (M2-9). */
+.world-hidden {
+  padding: 1rem;
+  background: #1d1f26;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* The product world fills the world area; panels open over it. */
+.world-product {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+}
+
+.world-product .world-canvas {
+  flex: 1;
+  height: auto;
+  min-height: 160px;
+}
+
+/* The placement tool's bar (M2-7): what is placed, where, whether it fits, and its buttons. */
+.placement-tool {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #f2c14e;
+  border-radius: 6px;
+  background: #23252d;
+}
+
+.placement-tool p {
+  margin: 0 0 0.35rem;
+}
+
+.placement-tool-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.placement-message {
+  margin: 0.5rem 0 0;
+}
+
+.placement-history {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* Panels open over the world, so the world keeps its size behind them. */
+.entrance-panel {
+  position: absolute;
+  inset: 0.75rem auto 0.75rem 0.75rem;
+  box-sizing: border-box;
+  width: min(48rem, calc(100% - 1.5rem));
+  overflow-y: auto;
+  padding: 0 1rem 1rem;
+  border: 1px solid #3a3d48;
+  border-radius: 6px;
+  background: #1b1d24;
+}
+
+.entrance-panel-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
   border-bottom: 1px solid #3a3d48;
+  background: #1b1d24;
+}
+
+.entrance-panel-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.not-built {
+  color: #f2c14e;
+}
+
+.side-column {
+  grid-area: right;
+  overflow-y: auto;
+  padding: 0.75rem;
+  border-left: 1px solid #3a3d48;
+}
+
+.side-card {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid #3a3d48;
+  border-radius: 6px;
+}
+
+.side-card h2 {
+  margin: 0;
+  color: #efe2bf;
+  font-size: 1rem;
+}
+
+.side-card p {
+  margin: 0.4rem 0 0;
+}
+
+.drawer-toggle {
+  display: none;
+}
+
+.bottom-bar {
+  grid-area: bottom;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  border-top: 1px solid #3a3d48;
+}
+
+.hotbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.hotbar-slots {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hotbar-slot {
+  display: grid;
+  place-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px dashed #46505e;
+  border-radius: 4px;
+  color: #9a978e;
+  font-size: 0.85rem;
+}
+
+kbd {
+  padding: 0 0.3rem;
+  border: 1px solid #7d8794;
+  border-radius: 3px;
+  font-size: 0.8em;
+}
+
+/* Narrow windows: the Atlas + inspector column becomes a drawer over the world. */
+@media (max-width: 60rem) {
+  .shell {
+    grid-template:
+      'top top' auto
+      'side world' minmax(0, 1fr)
+      'bottom bottom' auto
+      / 9rem minmax(0, 1fr);
+  }
+
+  .drawer-toggle {
+    display: inline-block;
+  }
+
+  .side-column:not([data-open='true']) {
+    display: none;
+  }
+
+  .side-column[data-open='true'] {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    box-sizing: border-box;
+    width: min(20rem, 90vw);
+    background: #1b1d24;
+    box-shadow: -4px 0 12px rgb(0 0 0 / 50%);
+  }
 }
 
 .world-picker {
@@ -347,7 +612,7 @@ button.primary {
 }
 
 .developer-spikes {
-  margin-top: 3rem;
+  margin: 1rem;
   padding: 0.5rem 1rem;
   border: 1px dashed #3a3d48;
   border-radius: 6px;
@@ -372,6 +637,7 @@ button.primary {
 
 .projects-filters {
   display: flex;
+  align-items: center;
   gap: 0.25rem;
 }
 
@@ -474,4 +740,90 @@ button.primary {
 .template-details .block {
   display: block;
   margin-top: 0.2rem;
+}
+
+/* Inspector and project details (M2-6): short facts as a two-column list. */
+.inspector-name {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+.inspector-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.25rem 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.inspector-facts dt {
+  color: #a9adb8;
+}
+
+.inspector-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.inspector-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Comfort settings (M2-14). */
+.comfort fieldset {
+  border: 1px solid #3a3d48;
+  border-radius: 6px;
+}
+
+.comfort-choice {
+  display: block;
+  margin: 0.4rem 0;
+}
+
+.world-view-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.world-labels-toggle {
+  white-space: nowrap;
+}
+
+/* The library (M2-9): tabs over one panel. */
+.library-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid #3a3d48;
+}
+
+.library-tabs [aria-selected='true'] {
+  outline: 2px solid #8fb4f0;
+}
+
+.library-panel:focus-visible {
+  outline: 2px solid #8fb4f0;
+  outline-offset: 2px;
+}
+
+.appearance-list {
+  margin: 0.5rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.appearance-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0;
+}
+
+.appearance-item h4 {
+  margin: 0 0 0.25rem;
 }

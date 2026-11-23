@@ -1,5 +1,6 @@
 // The conventional project list for one world (M1-10 #37, UI_SPEC §6.3 / §6.6): filters,
-// search, paging, and every M1 project action, with no canvas needed. A project shows here
+// search, paging, and every M1 project action, with no canvas needed. M2-9 (#74) adds the
+// "On map" filter and an Open button; the sidebar Projects panel and the library both show it. A project shows here
 // whether or not anything in the world represents it (PRODUCT_RULES §3.1).
 //
 // The parent gives this component `key={world.id}`, so another world gets a fresh list.
@@ -8,23 +9,49 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { ProjectStatus } from '../../common/contracts/project';
 import type { WorldSummary } from '../../common/contracts/world';
 import { useStore } from '../state/use-store';
+import type { PlacementActions } from '../world/placement-tool';
 import { CreateProjectForm } from './CreateProjectForm';
 import { ProjectItem, type ActionMessage } from './ProjectItem';
 import {
   createProjectList,
+  narrowed,
   searchIncomplete,
   visibleProjects,
+  type PlacementFilter,
   type ProjectListState,
 } from './project-list';
-import { FILTER_ADJECTIVES, FILTER_LABELS } from './project-messages';
+import {
+  FILTER_ADJECTIVES,
+  FILTER_LABELS,
+  PLACEMENT_FILTER_LABELS,
+  PLACEMENT_FILTER_PHRASES,
+} from './project-messages';
 
 interface ProjectsPanelProps {
   readonly world: WorldSummary;
+  /** Projects with a building in the world, for the "Not placed" tag; null while unknown. */
+  readonly placedIds?: ReadonlySet<string> | null;
+  /** Called after any project action here, since archiving or trashing removes a building. */
+  readonly onProjectsChanged?: () => void;
+  /** Bumped by the parent when a project changed elsewhere (the inspector); reloads the list. */
+  readonly changeToken?: number;
+  /** Map actions for each project (M2-7). */
+  readonly placementActions?: PlacementActions;
+  /** Shows a project's details; each row gets an Open button when this is given (M2-9). */
+  readonly onOpenProject?: (projectId: string) => void;
 }
 
 const FILTERS: readonly ProjectStatus[] = ['active', 'archived', 'trashed'];
+const PLACEMENT_FILTERS: readonly PlacementFilter[] = ['all', 'placed', 'unplaced'];
 
-export function ProjectsPanel({ world }: ProjectsPanelProps) {
+export function ProjectsPanel({
+  world,
+  placedIds = null,
+  onProjectsChanged,
+  changeToken = 0,
+  placementActions,
+  onOpenProject,
+}: ProjectsPanelProps) {
   const searchId = useId();
   const formId = useId();
   const newButton = useRef<HTMLButtonElement>(null);
@@ -39,14 +66,28 @@ export function ProjectsPanel({ world }: ProjectsPanelProps) {
     void list.start();
   }, [list]);
 
+  // A change made elsewhere: read the list again. Skipped on mount (start() reads it).
+  const seenToken = useRef(changeToken);
+  useEffect(() => {
+    if (seenToken.current === changeToken) return;
+    seenToken.current = changeToken;
+    void list.refresh();
+  }, [changeToken, list]);
+
+  /** Every action reports here, so the world reloads its buildings too. */
+  function report(next: ActionMessage) {
+    setMessage(next);
+    onProjectsChanged?.();
+  }
+
   function closeForm() {
     setCreating(false);
     // Put keyboard focus back where the user started (UI_SPEC §6.6).
     newButton.current?.focus();
   }
 
-  const shown = visibleProjects(state);
-  const searching = state.query.trim() !== '';
+  const shown = visibleProjects(state, placedIds);
+  const searching = narrowed(state);
 
   return (
     <section className="projects" aria-labelledby="projects-heading">
@@ -74,7 +115,7 @@ export function ProjectsPanel({ world }: ProjectsPanelProps) {
           list={list}
           templates={state.templates}
           onCreated={(name) => {
-            setMessage({ ok: true, text: `Created “${name}”.` });
+            report({ ok: true, text: `Created “${name}”.` });
             closeForm();
           }}
           onCancel={closeForm}
@@ -103,6 +144,21 @@ export function ProjectsPanel({ world }: ProjectsPanelProps) {
             </button>
           ))}
         </div>
+        <div role="group" aria-label="On map" className="projects-filters">
+          <span className="muted" aria-hidden="true">
+            On map:
+          </span>
+          {PLACEMENT_FILTERS.map((placement) => (
+            <button
+              key={placement}
+              type="button"
+              aria-pressed={state.placement === placement}
+              onClick={() => void list.setPlacement(placement)}
+            >
+              {PLACEMENT_FILTER_LABELS[placement]}
+            </button>
+          ))}
+        </div>
         <div className="projects-search">
           <label htmlFor={searchId}>Search projects</label>
           <input
@@ -127,7 +183,7 @@ export function ProjectsPanel({ world }: ProjectsPanelProps) {
 
       {/* One polite summary instead of announcing every row (UI_SPEC §6.6). */}
       <p role="status" className="muted" data-testid="projects-summary">
-        {summaryText(state, shown.length)}
+        {summaryText(state, shown.length, placedIds !== null)}
       </p>
 
       {state.status === 'error' && state.error !== null && (
@@ -149,8 +205,11 @@ export function ProjectsPanel({ world }: ProjectsPanelProps) {
               project={project}
               templates={state.templates}
               list={list}
-              onMessage={setMessage}
+              onMessage={report}
               fallbackFocus={() => heading.current?.focus()}
+              placed={placedIds === null ? undefined : placedIds.has(project.id)}
+              {...(placementActions === undefined ? {} : { placementActions })}
+              {...(onOpenProject === undefined ? {} : { onOpen: onOpenProject })}
             />
           ))}
         </ul>
@@ -175,15 +234,23 @@ export function ProjectsPanel({ world }: ProjectsPanelProps) {
   );
 }
 
-function summaryText(state: ProjectListState, shownCount: number): string {
+function summaryText(state: ProjectListState, shownCount: number, mapKnown: boolean): string {
   const label = FILTER_ADJECTIVES[state.filter];
   if (state.status === 'loading') return `Loading ${label} projects…`;
   if (state.status === 'error') return '';
   const query = state.query.trim();
-  if (query !== '') {
+  const onMap = PLACEMENT_FILTER_PHRASES[state.placement];
+  if (narrowed(state)) {
     if (searchIncomplete(state)) return 'Searching all projects…';
-    if (shownCount === 0) return `No ${label} projects match “${query}”.`;
-    return `${String(shownCount)} ${label} ${shownCount === 1 ? 'project matches' : 'projects match'} “${query}”.`;
+    if (state.placement !== 'all' && !mapKnown) return 'Checking which projects are on the map…';
+    const nouns = shownCount === 1 ? 'project' : 'projects';
+    if (query === '') {
+      if (shownCount === 0) return `No ${label} projects${onMap}.`;
+      return `Showing ${String(shownCount)} ${label} ${nouns}${onMap}.`;
+    }
+    if (shownCount === 0) return `No ${label} projects${onMap} match “${query}”.`;
+    const verb = shownCount === 1 ? 'matches' : 'match';
+    return `${String(shownCount)} ${label} ${nouns}${onMap} ${verb} “${query}”.`;
   }
   if (shownCount === 0) {
     if (state.filter === 'active') return 'No active projects in this world yet.';

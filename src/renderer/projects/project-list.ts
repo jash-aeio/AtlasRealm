@@ -11,6 +11,9 @@
 // the remaining pages of the current filter (at most 1000 projects per world, so a bounded
 // number of calls) and filters them by name and goal.
 //
+// The "On map" filter (M2-9 #74) works the same way: placements live in another store, so the
+// list loads every page of the status and `visibleProjects` keeps the placed or unplaced ones.
+//
 // Pure TypeScript with no React or DOM imports: the API is passed in, so it's unit-tested
 // with a fake.
 import type { AtlasApi } from '../../common/contracts/atlas-api';
@@ -46,8 +49,13 @@ export type TemplatesState =
   | { readonly status: 'error'; readonly error: IpcError }
   | { readonly status: 'ready'; readonly templates: readonly TemplateSummary[] };
 
+/** Whether a building represents the project: everything, only placed, or only unplaced. */
+export type PlacementFilter = 'all' | 'placed' | 'unplaced';
+
 export interface ProjectListState {
   readonly filter: ProjectStatus;
+  /** The "On map" filter; combines with `filter` (for example archived and not placed). */
+  readonly placement: PlacementFilter;
   /** The search text as typed. Empty means no search. */
   readonly query: string;
   /** `loading` only for the first page of a filter; later pages set `loadingMore`. */
@@ -89,6 +97,8 @@ export interface ProjectList {
   readonly setFilter: (filter: ProjectStatus) => Promise<void>;
   /** Sets the search text; a non-empty search loads every remaining page of the filter. */
   readonly setQuery: (query: string) => Promise<void>;
+  /** Sets the "On map" filter; anything but 'all' loads every remaining page, like a search. */
+  readonly setPlacement: (placement: PlacementFilter) => Promise<void>;
   readonly loadMore: () => Promise<void>;
   /** Reads the current filter again, keeping at least as many projects as are shown now. */
   readonly refresh: (notice?: string | null) => Promise<void>;
@@ -110,25 +120,42 @@ export interface ProjectList {
 /** Hard stop on page reads in one load, in case a cursor chain never ends. */
 const MAX_PAGE_READS = Math.ceil(MAX_PROJECTS_PER_WORLD / PROJECT_PAGE_SIZE_MAX) + 2;
 
-/** The projects that match the search (all loaded ones when there is no search). */
-export function visibleProjects(state: ProjectListState): readonly ProjectSummary[] {
+/** True when the search or the "On map" filter narrows the list, so every page is needed. */
+export function narrowed(state: Pick<ProjectListState, 'query' | 'placement'>): boolean {
+  return state.query.trim() !== '' || state.placement !== 'all';
+}
+
+/**
+ * The projects that match the search and the "On map" filter (all loaded ones when neither is
+ * set). `placedIds` holds the projects with a building; while it is unknown (null) a map filter
+ * matches nothing rather than guessing.
+ */
+export function visibleProjects(
+  state: ProjectListState,
+  placedIds: ReadonlySet<string> | null = null,
+): readonly ProjectSummary[] {
   const needle = state.query.trim().toLocaleLowerCase();
-  if (needle === '') return state.projects;
+  const { placement } = state;
+  if (needle === '' && placement === 'all') return state.projects;
+  if (placement !== 'all' && placedIds === null) return [];
   return state.projects.filter(
     (project) =>
-      project.name.toLocaleLowerCase().includes(needle) ||
-      project.goal.toLocaleLowerCase().includes(needle),
+      (needle === '' ||
+        project.name.toLocaleLowerCase().includes(needle) ||
+        project.goal.toLocaleLowerCase().includes(needle)) &&
+      (placement === 'all' || placedIds?.has(project.id) === (placement === 'placed')),
   );
 }
 
-/** True while a search is active but not every project of the filter has been read yet. */
+/** True while the list is narrowed but not every project of the filter has been read yet. */
 export function searchIncomplete(state: ProjectListState): boolean {
-  return state.query.trim() !== '' && state.nextCursor !== null;
+  return narrowed(state) && state.nextCursor !== null;
 }
 
 export function createProjectList(api: ProjectListApi, worldId: string): ProjectList {
   const store = createStore<ProjectListState>({
     filter: 'active',
+    placement: 'all',
     query: '',
     status: 'loading',
     projects: [],
@@ -200,14 +227,15 @@ export function createProjectList(api: ProjectListApi, worldId: string): Project
       loadingMore: false,
       error: null,
     });
-    const searching = store.get().query.trim() !== '';
-    const pages = await readPages(filter, undefined, searching ? Infinity : atLeast);
+    const pages = await readPages(filter, undefined, narrowed(store.get()) ? Infinity : atLeast);
     if (ticket !== latestLoad) return;
     if (!pages.ok) {
       patch({ status: 'error', projects: [], nextCursor: null, error: pages.error, notice });
       return;
     }
     patch({ status: 'ready', projects: pages.projects, nextCursor: pages.next, notice });
+    // A search or map filter set while this read was running needs the remaining pages too.
+    if (pages.next !== null && narrowed(store.get())) await appendPages(true);
   }
 
   /** Appends pages after the current cursor (one page, or all of them while searching). */
@@ -291,7 +319,11 @@ export function createProjectList(api: ProjectListApi, worldId: string): Project
     setFilter: (filter) => load(filter, PROJECT_PAGE_SIZE_DEFAULT, null),
     async setQuery(query) {
       patch({ query });
-      if (query.trim() !== '') await appendPages(true);
+      if (narrowed(store.get())) await appendPages(true);
+    },
+    async setPlacement(placement) {
+      patch({ placement });
+      if (narrowed(store.get())) await appendPages(true);
     },
     loadMore: () => appendPages(false),
     refresh,

@@ -30,6 +30,15 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 024 | [Guard clauses in a trusted service: check order and failing closed](lessons/024-guard-clauses-and-check-order.md) | M2 | guard clause, check order, fail closed, information leak, synchronous check-then-act |
 | 025 | [Database uniqueness constraints as invariants](lessons/025-database-constraints-as-invariants.md) | M2 | invariant in the schema, UNIQUE / partial unique index, CHECK, composite foreign key, code check + constraint backstop, NULLs in UNIQUE |
 | 026 | [Shared validation: one rule for the preview and the real check](lessons/026-shared-validation-preview-vs-authority.md) | M2 | shared validation, preview vs authoritative check, pure module, discriminated union result, throw for bugs only |
+| 027 | [Trust boundaries for derived data](lessons/027-trust-boundaries-for-derived-data.md) | M2 | trust boundary, derived data from a trusted source, fail closed, one action one transaction, negative control |
+| 028 | [The ABA problem and explicit replacement](lessons/028-aba-problem-and-explicit-replacement.md) | M2 | ABA problem, version markers that repeat, expected target, explicit replacement, refusal with details |
+| 029 | [One keyboard shortcut layer](lessons/029-one-shortcut-layer.md) | M2 | keyboard shortcut layer, event bubbling, editable targets, modal dialogs, focus restoration |
+| 030 | [Drawing order, culling and hit testing](lessons/030-drawing-order-culling-hit-testing.md) | M2 | painter's algorithm, depth key, culling, hit testing, reading the real camera in E2E |
+| 031 | [A tool as a state machine: preview, commit, cancel](lessons/031-tool-state-machine-preview-commit-cancel.md) | M2 | state machine, derived preview, commit on pointer release, pointer capture, local vs authoritative refusal, busy guard, focus return |
+| 032 | [The command pattern and inverse operations (undo/redo)](lessons/032-command-pattern-inverse-operations.md) | M2 | command pattern, inverse operation, undo/redo stacks, version remapping, no forced retries, unknown outcome |
+| 033 | [Debouncing, and choosing a concurrency rule](lessons/033-debouncing-and-last-write-wins.md) | M2 | debounce, flush on exit, last write wins vs optimistic concurrency, replies that must not overwrite local state, reduced motion |
+| 034 | [Accessible tabs: the WAI-ARIA tabs pattern and roving tabindex](lessons/034-aria-tabs-and-roving-tabindex.md) | M2 | tablist/tab/tabpanel roles, aria-selected, roving tabindex, automatic activation, preventDefault vs the shortcut layer, filters that load every page |
+| 035 | [Bounded graph queries](lessons/035-bounded-graph-queries.md) | M2 | directed links, composite foreign keys, deterministic truncation with omitted counts, hiding trashed rows from counts, resource caps, ticking test clock |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map

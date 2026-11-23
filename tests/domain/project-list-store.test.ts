@@ -167,6 +167,73 @@ describe('project list store', () => {
     expect(visibleProjects(projects.store.get())).toHaveLength(230);
   });
 
+  it('the map filter loads every page and keeps placed or unplaced projects', async () => {
+    const rows = Array.from({ length: 120 }, (_, i) => project(i + 1));
+    const placed = new Set([rows[1]?.id ?? '', rows[110]?.id ?? '']);
+    const { api } = fakeApi(rows);
+    const projects = createProjectList(api, WORLD_ID);
+    await projects.start();
+    expect(projects.store.get().projects).toHaveLength(50);
+
+    await projects.setPlacement('placed');
+    const state = projects.store.get();
+    expect(state.placement).toBe('placed');
+    expect(state.projects).toHaveLength(120);
+    expect(searchIncomplete(state)).toBe(false);
+    expect(visibleProjects(state, placed).map((p) => p.name)).toEqual([
+      'Project 002',
+      'Project 111',
+    ]);
+
+    await projects.setPlacement('unplaced');
+    expect(visibleProjects(projects.store.get(), placed)).toHaveLength(118);
+    await projects.setPlacement('all');
+    expect(visibleProjects(projects.store.get(), placed)).toHaveLength(120);
+  });
+
+  it('the map filter combines with the status filter and the search', async () => {
+    const rows = [
+      project(1, 'archived', 'garden'),
+      project(2, 'archived', 'garden'),
+      project(3, 'archived', 'kitchen'),
+      project(4, 'active', 'garden'),
+    ];
+    const placed = new Set([rows[0]?.id ?? '']);
+    const { api } = fakeApi(rows);
+    const projects = createProjectList(api, WORLD_ID);
+    await projects.start();
+    await projects.setPlacement('unplaced');
+    await projects.setFilter('archived');
+    // The map filter survives a status change.
+    expect(projects.store.get().placement).toBe('unplaced');
+    await projects.setQuery('garden');
+    expect(visibleProjects(projects.store.get(), placed).map((p) => p.name)).toEqual([
+      'Project 002',
+    ]);
+  });
+
+  it('while placements are unknown a map filter shows nothing instead of guessing', async () => {
+    const { api } = fakeApi([project(1), project(2)]);
+    const projects = createProjectList(api, WORLD_ID);
+    await projects.start();
+    await projects.setPlacement('unplaced');
+    expect(visibleProjects(projects.store.get(), null)).toEqual([]);
+    await projects.setPlacement('all');
+    expect(visibleProjects(projects.store.get(), null)).toHaveLength(2);
+  });
+
+  it('a map filter chosen during the first read still gets every page', async () => {
+    const rows = Array.from({ length: 120 }, (_, i) => project(i + 1));
+    const { api } = fakeApi(rows);
+    const projects = createProjectList(api, WORLD_ID);
+    const starting = projects.start();
+    await projects.setPlacement('unplaced');
+    await starting;
+    const state = projects.store.get();
+    expect(state.projects).toHaveLength(120);
+    expect(state.nextCursor).toBeNull();
+  });
+
   it('reports a list that could not be read', async () => {
     const { api, list } = fakeApi([]);
     list.mockResolvedValueOnce({

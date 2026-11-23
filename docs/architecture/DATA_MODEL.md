@@ -44,8 +44,8 @@ Secrets are stored through the vault; the database holds opaque references. Prof
 
 | Table | Essential fields and constraints |
 |---|---|
-| `profile_settings` | Local profile ID, display name, avatar config, timezone, preferences |
-| `worlds` | ID, name, theme ID, grid dimensions, camera settings, archived timestamp |
+| `profile_settings` | Local profile ID, display name, avatar config, timezone, preferences (`preferences_json`; comfort values under `comfort`: reduced motion, building labels, saved camera per world, read and merged without a revision. Changed by ADR-0028) |
+| `worlds` | ID, name, theme ID, grid dimensions, archived timestamp (the saved camera lives in profile preferences instead, so it needs no migration. Changed by ADR-0028) |
 | `projects` | ID, world ID, name, goal, template ID/version (namespaced ID such as `builtin.generic`, schema v4, changed by ADR-0020), status, settings revision |
 | `building_placements` | ID, world ID, project ID nullable (composite FK to the project in the same world), service kind nullable, appearance ID, tile position, rotation (0/90/180/270); exactly one target; unique placed project. Schema v5; changed by ADR-0023. The tile is the footprint's north corner and rotation turns in place (ADR-0024) |
 | `hotbar_slots` | World ID, slot 0–9, target type, target as typed columns (project ID with composite FK, or service kind); unique world/slot; each target pinned at most once per world. Schema v5; changed by ADR-0023 |
@@ -79,7 +79,7 @@ Secrets are stored through the vault; the database holds opaque references. Prof
 | `audit_records` | Actor, operation, target, policy decision, approval reference, safe result summary |
 | `usage_reservations` | Run ID, request ID, estimated upper-bound reservation, settlement state |
 | `trash_entries` | Owned entity ID, trash time, retention metadata, restoration information |
-| `project_relations` | World, source/target project IDs, type, user-confirmed state, provenance; descriptive by default |
+| `project_relations` | World, source/target project IDs (composite FKs to the same world's projects; the source → target order is the direction), type (`depends_on`, `supports`, `references`), origin (`user`), confirmation state, revision; no self-links, unique source/target/type; descriptive only, never read by scheduling or permissions. Schema v6; links of a trashed project are kept but hidden. Changed by ADR-0029 |
 | `graph_entities` | Stable entity reference, kind, project scope, source locator, content/index revision, tombstone state |
 | `graph_edges` | Source/target entity IDs, relationship type, origin/evidence, confirmation state, index revision |
 | `graph_view_states` | World/project/profile scope, active view/filter, pinned nodes, collapsed groups, layout coordinates |

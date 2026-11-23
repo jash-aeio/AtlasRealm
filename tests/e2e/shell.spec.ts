@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { openDeveloperSpikes } from './support/onboarding';
+import { finishOnboarding, openDeveloperSpikes } from './support/onboarding';
 
 // Smoke + security probes against the built app (out/). Launched without
 // ELECTRON_RENDERER_URL, so it loads the production index.html and production CSP.
@@ -75,16 +75,33 @@ test('preload exposes only the explicit API', async () => {
     template: Object.keys(window.atlas.template),
     profile: Object.keys(window.atlas.profile),
     profileSettings: Object.keys(window.atlas.profile.settings),
+    profilePreferences: Object.keys(window.atlas.profile.preferences),
     world: Object.keys(window.atlas.world),
     project: Object.keys(window.atlas.project),
+    placement: Object.keys(window.atlas.placement),
+    hotbar: Object.keys(window.atlas.hotbar),
+    relation: Object.keys(window.atlas.relation),
+    graph: Object.keys(window.atlas.graph),
   }));
   expect(shape).toEqual({
-    top: ['app', 'runtime', 'template', 'profile', 'world', 'project'],
+    top: [
+      'app',
+      'runtime',
+      'template',
+      'profile',
+      'world',
+      'project',
+      'placement',
+      'hotbar',
+      'relation',
+      'graph',
+    ],
     app: ['ping', 'launchInfo'],
     runtime: ['workerStatus', 'workerCheck'],
     template: ['list'],
-    profile: ['list', 'create', 'rename', 'switch', 'settings'],
+    profile: ['list', 'create', 'rename', 'switch', 'settings', 'preferences'],
     profileSettings: ['get', 'update'],
+    profilePreferences: ['get', 'update'],
     world: ['create', 'list', 'rename'],
     project: [
       'create',
@@ -97,6 +114,10 @@ test('preload exposes only the explicit API', async () => {
       'trash',
       'restoreFromTrash',
     ],
+    placement: ['list', 'create', 'move', 'remove'],
+    hotbar: ['list', 'assign', 'clear'],
+    relation: ['create', 'remove'],
+    graph: ['worldConnections'],
   });
 });
 
@@ -340,4 +361,170 @@ test('app.launchInfo forwards no renderer payload to the main process', async ()
   // The preload invokes with no payload, so the extra argument never reaches main (whose
   // schema would reject it: see tests/integration/app-launch-info.test.ts).
   expect(result).toMatchObject({ ok: true, data: { launchCount: 1 } });
+});
+// Main screen layout and shortcut layer (M2-5, #70; UI_SPEC §6.1, §6.2, §6.6).
+test.describe('main screen layout and keyboard shortcuts', () => {
+  const panel = () => page.getByTestId('entrance-panel');
+  const entrance = (name: string) =>
+    page.getByRole('navigation', { name: 'Entrances' }).getByRole('button', { name, exact: true });
+  const libraryButton = () => page.locator('.bottom-bar').getByRole('button', { name: /^Library/ });
+
+  test.beforeAll(async () => {
+    // Earlier tests created worlds through the API; reload so the screen shows them.
+    await page.reload();
+    await finishOnboarding(page);
+  });
+
+  test('shows the §6.1 regions, with the project list open at startup', async () => {
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Atlas Realm');
+    await expect(
+      page.getByRole('navigation', { name: 'Entrances' }).getByRole('button'),
+    ).toHaveText([
+      'Projects',
+      'Agents Guild',
+      'Skill Library',
+      'Tool Shops',
+      'Automations',
+      'Activity',
+      'Settings',
+    ]);
+    await expect(page.getByTestId('world-area')).toBeVisible();
+    const side = page.getByRole('complementary', {
+      name: 'Realm Atlas and inspector',
+    });
+    await expect(side.getByRole('heading', { name: 'Realm Atlas' })).toBeVisible();
+    await expect(side.getByRole('heading', { name: 'Inspector' })).toBeVisible();
+    await expect(libraryButton()).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Hotbar' })).toContainText(
+      'Hotbar: not built yet (planned later in M2)',
+    );
+    // M1-10's project list is there without any clicks.
+    await expect(entrance('Projects')).toHaveAttribute('aria-current', 'true');
+    await expect(page.getByTestId('projects-summary')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'New project' })).toBeVisible();
+  });
+
+  for (const name of ['Agents Guild', 'Skill Library', 'Tool Shops', 'Automations', 'Activity']) {
+    test(`${name} opens a "not built yet" panel; Escape closes it and restores focus`, async () => {
+      await entrance(name).click();
+      await expect(panel().getByRole('heading', { name, exact: true })).toBeFocused();
+      await expect(panel().getByTestId('not-built')).toHaveText('Not built yet (planned for M3+)');
+      await page.keyboard.press('Escape');
+      await expect(panel()).toHaveCount(0);
+      await expect(entrance(name)).toBeFocused();
+    });
+  }
+
+  test('"Back to world" closes Settings and returns focus to its entrance', async () => {
+    await entrance('Settings').click();
+    await expect(panel().getByRole('heading', { name: 'Settings' })).toBeFocused();
+    await page.getByRole('button', { name: 'Back to world' }).click();
+    await expect(panel()).toHaveCount(0);
+    await expect(entrance('Settings')).toBeFocused();
+  });
+
+  test('E toggles the library, but never while typing in a field', async () => {
+    await entrance('Projects').click();
+    await page.getByRole('button', { name: 'New project' }).click();
+    const nameField = page.getByRole('form', { name: 'New project' }).getByLabel('Project name');
+    await nameField.fill('');
+    await nameField.press('e');
+    await nameField.press('E');
+    await expect(nameField).toHaveValue('eE');
+    await expect(libraryButton()).toHaveAttribute('aria-pressed', 'false');
+    // Escape in the field belongs to the form (it cancels the draft); the panel stays open.
+    await nameField.press('Escape');
+    await expect(page.getByRole('form', { name: 'New project' })).toHaveCount(0);
+    await expect(page.getByTestId('projects-summary')).toBeVisible();
+
+    // Outside a field, E opens the library and E again closes it.
+    await entrance('Projects').focus();
+    await page.keyboard.press('e');
+    await expect(panel().getByRole('heading', { name: 'Library' })).toBeFocused();
+    await expect(panel().getByRole('tab', { name: 'Projects', selected: true })).toBeVisible();
+    await expect(libraryButton()).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('e');
+    await expect(panel()).toHaveCount(0);
+    // Focus goes back to what had it when E was pressed.
+    await expect(entrance('Projects')).toBeFocused();
+  });
+
+  test('keys are left alone while a confirmation dialog is open', async () => {
+    const worldId = await page.evaluate(async () => {
+      const worlds = await window.atlas.world.list();
+      return worlds.ok ? worlds.data.worlds[0]?.id : undefined;
+    });
+    if (worldId === undefined) throw new Error('no world');
+    const created = await page.evaluate(
+      (id) =>
+        window.atlas.project.create({
+          worldId: id,
+          templateId: 'builtin.generic',
+          templateVersion: '1.0.0',
+          name: 'Shortcut probe',
+          goal: '',
+        }),
+      worldId,
+    );
+    if (!created.ok) throw new Error(`project.create failed: ${created.error.code}`);
+    const projectId = created.data.project.id;
+    // Reopen Projects so the list reads the new project.
+    await entrance('Settings').click();
+    await entrance('Projects').click();
+    const row = page.getByRole('listitem', {
+      name: 'Shortcut probe',
+      exact: true,
+    });
+    await row.getByRole('button', { name: 'Archive', exact: true }).click();
+    const dialog = page.getByRole('dialog', {
+      name: 'Archive “Shortcut probe”?',
+    });
+    await expect(dialog).toBeVisible();
+
+    await page.keyboard.press('e');
+    await expect(libraryButton()).toHaveAttribute('aria-pressed', 'false');
+    // Escape closes only the dialog: the panel behind it stays open and nothing is archived.
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(page.getByTestId('projects-summary')).toBeVisible();
+    await expect(row).toBeVisible();
+    const fetched = await page.evaluate((ids) => window.atlas.project.get(ids), {
+      worldId,
+      projectId,
+    });
+    expect(fetched.ok && fetched.data.project.status).toBe('active');
+  });
+
+  test('narrow windows turn the Atlas column into a drawer', async () => {
+    const side = page.getByRole('complementary', {
+      name: 'Realm Atlas and inspector',
+    });
+    const toggle = page.getByRole('button', {
+      name: 'Atlas & inspector',
+      exact: true,
+    });
+    const original = await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]?.getContentSize(),
+    );
+    const resize = (size: readonly [number, number]) =>
+      app.evaluate(({ BrowserWindow }, [width, height]) => {
+        BrowserWindow.getAllWindows()[0]?.setContentSize(width, height);
+      }, size);
+    try {
+      await resize([800, 700]);
+      await expect(side).toBeHidden();
+      await toggle.click();
+      await expect(side).toBeVisible();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      await expect(side.getByRole('button', { name: 'Close Atlas & inspector' })).toBeFocused();
+      await page.keyboard.press('Escape');
+      await expect(side).toBeHidden();
+      await expect(toggle).toBeFocused();
+    } finally {
+      const [width = 1280, height = 800] = original ?? [];
+      await resize([width, height]);
+    }
+    await expect(side).toBeVisible();
+    await expect(toggle).toBeHidden();
+  });
 });

@@ -28,6 +28,10 @@ const api: AtlasApi = {
       get: () => ipcRenderer.invoke(Channels.profileSettingsGet),
       update: (input) => ipcRenderer.invoke(Channels.profileSettingsUpdate, input),
     },
+    preferences: {
+      get: () => ipcRenderer.invoke(Channels.profilePreferencesGet),
+      update: (input) => ipcRenderer.invoke(Channels.profilePreferencesUpdate, input),
+    },
   },
   world: {
     create: (input) => ipcRenderer.invoke(Channels.worldCreate, input),
@@ -44,6 +48,24 @@ const api: AtlasApi = {
     restore: (input) => ipcRenderer.invoke(Channels.projectRestore, input),
     trash: (input) => ipcRenderer.invoke(Channels.projectTrash, input),
     restoreFromTrash: (input) => ipcRenderer.invoke(Channels.projectRestoreFromTrash, input),
+  },
+  placement: {
+    list: (input) => ipcRenderer.invoke(Channels.placementList, input),
+    create: (input) => ipcRenderer.invoke(Channels.placementCreate, input),
+    move: (input) => ipcRenderer.invoke(Channels.placementMove, input),
+    remove: (input) => ipcRenderer.invoke(Channels.placementRemove, input),
+  },
+  hotbar: {
+    list: (input) => ipcRenderer.invoke(Channels.hotbarList, input),
+    assign: (input) => ipcRenderer.invoke(Channels.hotbarAssign, input),
+    clear: (input) => ipcRenderer.invoke(Channels.hotbarClear, input),
+  },
+  relation: {
+    create: (input) => ipcRenderer.invoke(Channels.relationCreate, input),
+    remove: (input) => ipcRenderer.invoke(Channels.relationRemove, input),
+  },
+  graph: {
+    worldConnections: (input) => ipcRenderer.invoke(Channels.graphWorldConnections, input),
   },
 };
 

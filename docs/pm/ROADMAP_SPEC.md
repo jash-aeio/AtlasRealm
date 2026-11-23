@@ -60,7 +60,7 @@ Milestones are ordered by dependency. Each should end with a working demonstrati
 
 **Depends on:** M4.
 
-**Build:** project tabs plus Connections, human acceptance/revision, Coordinator–Specialist–Reviewer assignments, starter packages, programmed checks, provenance, progress badges, and event-driven agent animations. Add enterable functional cutaway interiors, Interior/Blueprint modes, a supported text/Markdown editor, shared file/station selection, focused graph views, collapsible groups, and typed derived work/file edges. Add a small locally bundled fantasy asset set generated through the optional PixelLab production pipeline or built from placeholders.
+**Build:** project tabs plus Connections, human acceptance/revision, Coordinator–Specialist–Reviewer assignments, starter packages, programmed checks, provenance, progress badges, and event-driven agent animations. Add enterable functional cutaway interiors, Interior/Blueprint modes, a supported text/Markdown editor, shared file/station selection, focused graph views, collapsible groups, and typed derived work/file edges. Prove the art pipeline with a small vertical slice (for example one project building and the user avatar) taken through the PixelLab production workflow (art bible §34.5) into the offline bundle; everything else stays on labelled placeholders. The full asset batch is M8 (ADR-0027).
 
 **Checks:** workflow limits prevent unbounded loops; generated claims and sources are represented honestly; switching projects does not mix context; accepted vs generated outputs differ visibly; actual run state drives animation.
 
@@ -86,9 +86,21 @@ Milestones are ordered by dependency. Each should end with a working demonstrati
 
 **Exit:** a usable recoverable desktop application that can be evaluated with real local projects.
 
-### M8 — Provider breadth and MVP completion
+### M8 — UI/UX polish and art integration
 
-**Depends on:** M7; adapters may be developed earlier when useful.
+> Added 2026-11-23, not in the original spec (ADR-0027). The original M8–M11 are now M9–M12.
+
+**Depends on:** M7. Every screen exists by M6 and packaging is hardened in M7, so polish lands on a UI that is no longer changing shape.
+
+**Build:** an audit of every screen against UI_SPEC §6 (consistent empty, loading and error states; plain labels beside fantasy names; wording), with each finding fixed or logged. A visual system for the React UI: design tokens from the art bible palette, shared panel/frame components, and one status icon set readable without colour. The full art batch from art bible §34.4 (terrain and transitions, project buildings plus Guild/Library/Tool Shop, interior kit and stations, avatar and role characters, status symbols, atmosphere), produced through the PixelLab workflow (§34.5) under an approved per-batch request/credit budget, with placeholders as the fallback. Integration: replace every `placeholder: true` manifest entry, pack atlases, record digests and provenance. Animation polish driven by committed state, with reduced-motion variants. An accessibility pass (keyboard and focus, screen-reader output, UI scaling, WCAG AA text contrast, label readability at practical zoom). Performance measured against §17.4 with the real art.
+
+**Checks:** no unlabelled placeholder art remains in the shipped manifest; every asset has a recorded source, terms and provenance; a packaged build renders all core art offline with no PixelLab connection or account; contrast and keyboard checks pass; generation stayed inside the approved budget with no blind retries after uncertain timeouts; performance numbers are measured on the reference machine, not assumed.
+
+**Exit:** before/after screenshots of the main screen, an interior and the Atlas; a packaged offline build with the full asset set; a short recorded usability session (a few real tasks) whose findings are fixed or logged as issues.
+
+### M9 — Provider breadth and MVP completion
+
+**Depends on:** M8; adapters may be developed earlier when useful.
 
 **Build:** finish Anthropic adapter if incomplete, add OpenAI adapter, shared capability/error/usage contracts, account/billing labels, connection health, model-choice UI, and privacy/data-destination preflight.
 
@@ -96,7 +108,7 @@ Milestones are ordered by dependency. Each should end with a working demonstrati
 
 **Exit:** all section 4.1 behaviors pass, including reviewed project-folder imports, upper-right graph scope, enterable Blueprint interiors, and optional Obsidian O1; provide a truthful provider support matrix and documented known limitations. Subscription sign-in is not a prerequisite for this API/local-model MVP.
 
-### M9 — Curated discovery and declarative imports
+### M10 — Curated discovery and declarative imports
 
 **Depends on:** stable MVP.
 
@@ -106,9 +118,9 @@ Milestones are ordered by dependency. Each should end with a working demonstrati
 
 **Exit:** users can acquire compatible curated resources without treating arbitrary repositories as executable plugins.
 
-### M10 — Controlled integrations and advanced project execution
+### M11 — Controlled integrations and advanced project execution
 
-**Depends on:** M9 and an explicit extension threat model.
+**Depends on:** M10 and an explicit extension threat model.
 
 **Build in separate slices:** one restricted MCP integration, one document/application adapter, optional code runner, supported provider subscription authentication, and one new field-specific workflow at a time. Optional later slices include Obsidian O3 bidirectional editing, static code-dependency parsers, reviewed semantic relationship suggestions, and an in-app PixelLab asset studio after the separate service-use assessment. Development-time PixelLab use does not wait for or imply arbitrary in-app MCP support.
 
@@ -116,7 +128,7 @@ Milestones are ordered by dependency. Each should end with a working demonstrati
 
 **Exit:** expansion is based on demonstrated controls and usefulness, not the number of catalog entries.
 
-### M11 — Team and business deployment
+### M12 — Team and business deployment
 
 **Depends on:** evaluated personal/small-team workflows and a separate product decision.
 

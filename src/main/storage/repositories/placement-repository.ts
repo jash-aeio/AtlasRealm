@@ -12,6 +12,7 @@
 // Changes take the revision the caller last read (see guardedUpdate / guardedDelete).
 import { randomUUID } from 'node:crypto';
 
+import { PLACEMENT_TILE_MAX } from '../../../common/contracts/placement';
 import {
   isPlacementRotation,
   PLACEMENT_ROTATIONS,
@@ -33,7 +34,7 @@ import {
 export { PLACEMENT_ROTATIONS, type PlacementRotation };
 
 /** The largest tile index any world can have (grid max 256). Matches migration 5. */
-export const MAX_TILE = 255;
+export const MAX_TILE = PLACEMENT_TILE_MAX;
 
 export interface Placement {
   readonly id: string;

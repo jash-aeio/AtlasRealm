@@ -20,8 +20,9 @@ flowchart LR
   M5 -. core views .-> M6
   M5 --> M7
   M6 --> M7
-  M7 --> M8((MVP))
-  M8 --> M9 --> M10 --> M11
+  M7 --> M8[M8 UI/UX + art]
+  M8 --> M9((MVP))
+  M9 --> M10 --> M11 --> M12
 ```
 
 **Parallel opportunities between milestones**

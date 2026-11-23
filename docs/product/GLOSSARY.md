@@ -14,6 +14,7 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | Automation | A trigger (schedule) that starts a workflow run |
 | Artifact | A real saved output file, with version history |
 | Realm Atlas | Upper-right panel: Map (where?) and Connections (how related?) |
+| Project link (relation) | A user-made, typed arrow from one project to another in the same world: depends on, supports or references. Descriptive only: it never changes permissions, scheduling or files |
 | Blueprint mode | Simplified structural view of a project interior |
 
 ## Developer terms
@@ -36,6 +37,9 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Hook (Claude Code)** | A script the harness runs automatically on events (before a tool runs, at session start…) | `.claude/hooks/` |
 | **Shared validation** | One pure rule used by both the preview (renderer) and the authoritative check (main), so they give the same answer. Main still runs it again itself, because the renderer is not trusted | `src/common/world/placement-rules.ts`, lesson 026 |
 | **Summed-area table** | A grid where each cell stores the total of everything above and to its left, so the total of any rectangle takes four lookups. Auto-place uses it to test "are these tiles all free?" quickly | `placement-rules.ts` |
+| **Trust boundary** | The line where data crosses from code we don't control (the renderer) into code we do (main). Data crossing it is checked, and anything the main process can look up itself is never taken from the request | `placement-service.ts`, lesson 027 |
+| **Derived data** | A value that follows from other data, like a building's footprint from its art. Look it up from the trusted source instead of accepting it as input | `building-appearances.ts`, ADR-0025 |
+| **Negative control** | Breaking the code on purpose to check that a test really fails, so a passing test means something | lesson 027 |
 | **Idempotent** | Doing it twice has the same effect as doing it once | workflow engine §12.6 |
 | **Installer (NSIS)** | A Setup.exe that copies the app into a folder and adds Start-menu and uninstall entries. NSIS is the installer system electron-builder uses | `electron-builder.yml` |
 | **Invariant** | A rule that must *always* hold (e.g. "removing a building never deletes a project") | `PRODUCT_RULES.md` §3.1 |
@@ -140,6 +144,10 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Derived state** | A value computed from data you already have instead of stored separately, so it can't drift (e.g. "first launch" = "no world yet") | `src/renderer/state/session.ts` |
 | **Empty state** | What a screen shows when there's nothing in it yet; it should say so plainly and point to the next action | `src/renderer/app/MainScreen.tsx` |
 | **Focus management** | Moving keyboard focus on purpose (e.g. to a new step's heading) so keyboard and screen-reader users don't get lost | `src/renderer/onboarding/Onboarding.tsx` |
+| **Keyboard shortcut layer** | One `keydown` listener on the window that decides what a key means, and leaves keys alone while you type in a text field or a dialog is open. Features add keys through it instead of their own listeners | `src/renderer/app/shortcuts.ts`, lesson 029 |
+| **Event bubbling** | A browser event starts at the element where it happened, then travels up through its parents to `window`, so one listener high up can hear events from the whole page | `shortcuts.ts`, lesson 029 |
+| **Focus restoration** | After a panel, dialog or drawer closes, putting keyboard focus back on the control that opened it | `MainScreen.tsx`, `ConfirmDialog.tsx` |
+| **Drawer** | A side panel that slides over the page in narrow windows instead of taking a fixed column | `.side-column` in `app.css` |
 | **Modal dialog** | A box that sits on top of the page and must be answered or closed before the rest of the page works again. The native `<dialog>` element opened with `showModal()` keeps keyboard focus inside it and closes on Escape | `src/renderer/projects/ConfirmDialog.tsx` |
 | **Live region** | A part of the page (`role="status"` or `role="alert"`) whose changes screen readers announce without moving focus. `status` waits politely; `alert` interrupts | `src/renderer/projects/ProjectsPanel.tsx` |
 | **Guard clause** | An early check at the top of a function that throws or returns before anything changes when a rule is broken. With several guards, their order decides which reason the caller hears | `ProjectService.mutable()`, lesson 024 |
@@ -147,3 +155,31 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Partial unique index** | A UNIQUE index that only covers rows matching a WHERE clause, e.g. "a project is pinned at most once per world" checks only rows with a `project_id` | `hotbar_slots_one_per_project` (migration 5), ADR-0023 |
 | **Representation (of a project)** | Something that stands for a project without being it: a building placement or a hotbar slot. Removing one never changes the project | `representation-target.ts`, PRODUCT_RULES §3.1 |
 | **Fixture (database)** | A frozen SQL snapshot of an older database, kept unchanged in the repo so migration tests run against what real users have on disk | `tests/fixtures/db/v4-app.sql` |
+| **Expected target (hotbar)** | The ID of what the caller believes is in a hotbar slot. Replacing or clearing a slot only works if it still holds that target, otherwise `slot_occupied`. Used instead of a revision because a cleared and refilled slot starts at revision 1 again | `hotbar-service.ts`, ADR-0026 |
+| **Silent replacement** | Overwriting something the user had (a hotbar pin) without them choosing to. Forbidden: a filled slot only changes when the request names its current occupant | PRODUCT_RULES §3.1, §22.2 #2, ADR-0026 |
+| **ABA problem** | A stale check passes because the value it compares changed and then came back (A → B → A). Example: a hotbar slot cleared and refilled restarts at revision 1, so an old revision matches the new pin | lesson 028, ADR-0026 |
+| **Depth sort (painter's algorithm)** | Drawing far things first and near things on top. Each building gets a depth key from the centre of its footprint on the ground, with fixed tie-breakers so the order never flickers | `src/renderer/world/buildings.ts`, lesson 030 |
+| **Culling** | Not drawing what is outside the view. Offscreen buildings are hidden so the GPU skips them (UI_SPEC §17.4) | `grid-scene.ts`, lesson 030 |
+| **Hit testing** | Working out what is under the mouse. The front-most building whose outline contains the point wins | `pickBuilding` in `buildings.ts`, lesson 030 |
+| **Inspector** | The card under the Realm Atlas that shows the selected project's summary. It reads the project again from the main process; selecting changes nothing | `ProjectInspector.tsx`, UI_SPEC §6.1 |
+| **State machine** | A fixed list of states and the allowed moves between them. The placement tool is idle, placing or moving, and each input means one thing in each state | `placement-tool.ts`, lesson 031 |
+| **Pointer capture** | Asking the browser to keep sending pointer events to one element until the button is released, even if the pointer leaves it. A drag that ends off the map is still seen | `WorldView.tsx`, lesson 031 |
+| **Placement tool** | The mode for placing, moving or removing a building, with a preview that says whether the spot fits. Every change goes through the placement commands | `placement-tool.ts`, UI_SPEC §17.2 |
+| **Command pattern** | Keeping each change as a small object that knows how to do itself again and how to reverse itself. Undo and redo are built on it | `placement-history.ts`, M2-8 |
+| **Inverse operation** | The change that reverses another: removing what was placed, moving back, placing again what was removed. Undo sends it as an ordinary command, which can still be refused | `placement-history.ts`, M2-8 |
+| **Undo stack / redo stack** | Two lists of changes, newest last. Undo takes from the first and puts on the second; a new change empties the second | `placement-history.ts`, UI_SPEC §17.2 |
+| **Design tokens** | Named values for colours, type sizes and spacing that every UI component reads, so the whole app stays consistent and one change updates it everywhere | M8 (ADR-0027) |
+| **Vertical slice** | A small piece taken through every step of a process end to end (here one building from generation to the packaged offline build), to prove the process works before scaling it up | M5 art pipeline proof, ADR-0027 |
+| **Texture atlas** | Many small sprites packed into one image with a map of where each sits, so the GPU loads and draws them faster | art bible §34.5, M8 |
+| **WCAG AA contrast** | The common accessibility standard for readable text: at least 4.5:1 contrast between text and background (3:1 for large text) | UI_SPEC §6.6, M8 |
+| **Usability session** | Watching someone do a few real tasks in the app and noting where they get stuck. The findings become fixes or issues | M8 exit (ADR-0027) |
+| **Debounce** | Waiting until something has stopped changing for a moment before acting on it. A camera drag becomes one save after 500 ms of stillness instead of 60 saves a second | `comfort.ts`, lesson 033 |
+| **Last write wins** | A concurrency rule where the newest save simply replaces what is stored, with no revision check. Safe only when the newest value is always the right one, like a camera position | ADR-0028, lesson 033 |
+| **Comfort preferences** | Per-profile settings that make the app easier to use without changing any data: reduced motion, building labels and the saved camera per world | `src/common/preferences/comfort.ts`, UI_SPEC §6.6 |
+| **Reduced motion** | A mode that turns off easing and decorative animation. Follows the operating system's `prefers-reduced-motion` setting unless the profile overrides it | `use-reduced-motion.ts`, UI_SPEC §6.6 |
+| **WAI-ARIA tabs pattern** | The standard way to build accessible tabs: a `tablist` holding `tab` buttons, each controlling a `tabpanel`. Screen readers announce "tab 2 of 6, selected", the arrow keys move between tabs, and Home and End jump to the first and last | `src/renderer/library/library-tabs.ts` (M2-9), lesson 034 |
+| **Roving tabindex** | Only the selected item in a group gets `tabindex="0"`; the rest get `-1`. Tab then stops once on the group, and the arrow keys move inside it, so a long row of tabs doesn't cost six Tab presses | `LibraryPanel.tsx` (M2-9), lesson 034 |
+| **Directed edge** | A link with a start and an end, like an arrow. `A depends_on B` and `B depends_on A` are two different links. We store the direction as the source → target order, so it can never disagree with itself | ADR-0029 |
+| **Truncation (bounded query)** | Returning only the first N results by a fixed order, together with how many were left out, so a large world can never freeze the screen and the user always knows something is hidden | `graph.worldConnections`, GRAPH_MODEL §30.6 |
+| **Deterministic ordering** | Sorting by values that don't change on their own (status, link count, creation time, ID) so the same data always gives the same answer. Names aren't used, because a rename would reshuffle the cut | ADR-0029 |
+| **Resource-exhaustion attack (DoS)** | Making an app unusable by feeding it more data or requests than it can handle, instead of stealing anything. A per-world cap on stored links (5000) prevents it for the graph query | ADR-0029, lesson 035 |

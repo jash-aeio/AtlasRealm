@@ -1,12 +1,30 @@
 // The complete API the preload exposes to the renderer as `window.atlas`.
 // Keep it small and explicit: one typed method per command, no generic `invoke`.
 import type { LaunchInfoOutput } from './app-launch-info';
+import type { GraphWorldConnectionsInput, GraphWorldConnectionsOutput } from './graph';
 import type { PingInput, PingOutput } from './app-ping';
+import type {
+  HotbarAssignInput,
+  HotbarClearInput,
+  HotbarListInput,
+  HotbarListOutput,
+  HotbarSlotOutput,
+} from './hotbar';
 import type { IpcResult } from './ipc-result';
+import type {
+  PlacementCreateInput,
+  PlacementListInput,
+  PlacementListOutput,
+  PlacementMoveInput,
+  PlacementOutput,
+  PlacementRemoveInput,
+} from './placement';
 import type {
   ProfileCreateInput,
   ProfileCreateOutput,
   ProfileListOutput,
+  ProfilePreferencesOutput,
+  ProfilePreferencesUpdateInput,
   ProfileRenameInput,
   ProfileSettingsOutput,
   ProfileSettingsUpdateInput,
@@ -25,6 +43,7 @@ import type {
   ProjectUpdateGoalInput,
 } from './project';
 import type { TemplateListOutput } from './project-template';
+import type { RelationCreateInput, RelationOutput, RelationRemoveInput } from './relation';
 import type { WorkerCheckInput, WorkerCheckOutput, WorkerStatusOutput } from './runtime-worker';
 import type {
   WorldCreateInput,
@@ -60,6 +79,13 @@ export interface AtlasApi {
         input: ProfileSettingsUpdateInput,
       ) => Promise<IpcResult<ProfileSettingsOutput>>;
     };
+    /** Comfort preferences (ADR-0028): no revision, each update merges and the last one wins. */
+    readonly preferences: {
+      readonly get: () => Promise<IpcResult<ProfilePreferencesOutput>>;
+      readonly update: (
+        input: ProfilePreferencesUpdateInput,
+      ) => Promise<IpcResult<ProfilePreferencesOutput>>;
+    };
   };
   /** Worlds of the active profile. */
   readonly world: {
@@ -78,5 +104,38 @@ export interface AtlasApi {
     readonly restore: (input: ProjectLifecycleInput) => Promise<IpcResult<ProjectOutput>>;
     readonly trash: (input: ProjectLifecycleInput) => Promise<IpcResult<ProjectLifecycleOutput>>;
     readonly restoreFromTrash: (input: ProjectLifecycleInput) => Promise<IpcResult<ProjectOutput>>;
+  };
+  /**
+   * Buildings in one world (ADR-0025). The handler re-runs the placement rules; a refusal is
+   * `placement_blocked` with the reason. Removing a building never touches its project.
+   */
+  readonly placement: {
+    readonly list: (input: PlacementListInput) => Promise<IpcResult<PlacementListOutput>>;
+    readonly create: (input: PlacementCreateInput) => Promise<IpcResult<PlacementOutput>>;
+    readonly move: (input: PlacementMoveInput) => Promise<IpcResult<PlacementOutput>>;
+    readonly remove: (input: PlacementRemoveInput) => Promise<IpcResult<PlacementOutput>>;
+  };
+  /**
+   * Hotbar shortcuts in one world (ADR-0026). A filled slot only changes when the caller names
+   * its current target; otherwise `slot_occupied` with the occupant. Clearing never touches it.
+   */
+  readonly hotbar: {
+    readonly list: (input: HotbarListInput) => Promise<IpcResult<HotbarListOutput>>;
+    readonly assign: (input: HotbarAssignInput) => Promise<IpcResult<HotbarSlotOutput>>;
+    readonly clear: (input: HotbarClearInput) => Promise<IpcResult<HotbarSlotOutput>>;
+  };
+  /**
+   * User-made links between projects of one world (ADR-0029). Descriptive only: a link never
+   * changes permissions, scheduling or files, and removing one never touches its projects.
+   */
+  readonly relation: {
+    readonly create: (input: RelationCreateInput) => Promise<IpcResult<RelationOutput>>;
+    readonly remove: (input: RelationRemoveInput) => Promise<IpcResult<RelationOutput>>;
+  };
+  /** Realm Atlas graphs: bounded (150 nodes / 300 edges) with explicit omitted counts. */
+  readonly graph: {
+    readonly worldConnections: (
+      input: GraphWorldConnectionsInput,
+    ) => Promise<IpcResult<GraphWorldConnectionsOutput>>;
   };
 }
