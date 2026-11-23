@@ -3,7 +3,7 @@
 > This is the **Markdown mirror** of the GitHub Milestones and [Project board](https://github.com/users/jash-aeio/projects/1). GitHub is the source of truth for issue status. Run `/sync-pm` to refresh this file.
 > Full milestone specs (build, checks, exit criteria): [ROADMAP_SPEC.md](ROADMAP_SPEC.md) · Task-level dependency graphs: [DEPENDENCIES.md](DEPENDENCIES.md)
 
-**Last synced:** 2026-11-23 · **Current milestone:** M2 (🔨 in progress, 13/21 issues closed). M1 closed 2026-11-20 as `v0.2.0-m1`; M0 closed 2026-11-10 as `v0.1.0-m0`.
+**Last synced:** 2026-11-23 · **Current milestone:** M2 (🔨 in progress, 14/21 issues closed). M1 closed 2026-11-20 as `v0.2.0-m1`; M0 closed 2026-11-10 as `v0.1.0-m0`.
 
 ## Progress overview
 
@@ -12,7 +12,7 @@
 | **Setup** | Repo, docs, Claude Code config, GitHub workflow | — | ✅ Done | — | — |
 | **M0** | Foundation and risk spikes: packaged Electron app with SQLite, IPC, Pixi, React Flow | Setup | ✅ Done | 9/9 (#20 moved to M1) | [v0.1.0-m0](https://github.com/jash-aeio/AtlasRealm/releases/tag/v0.1.0-m0) |
 | **M1** | Profiles, worlds, project persistence (list UI, no canvas) | M0 | ✅ Done | 11/11 (#20, #29–#38) | [v0.2.0-m1](https://github.com/jash-aeio/AtlasRealm/releases/tag/v0.2.0-m1) |
-| **M2** | Isometric world, placement, hotbar, library, Atlas shell | M1 | 🔨 In progress | 13/21 closed (#56, #59, #66, #67, #68, #69, #70, #71, #72, #73, #74, #76, #79) (#56–#60, #62, #66–#80) | — |
+| **M2** | Isometric world, placement, hotbar, library, Atlas shell | M1 | 🔨 In progress | 14/21 closed (#56, #59, #66, #67, #68, #69, #70, #71, #72, #73, #74, #76, #77, #79) (#56–#60, #62, #66–#80) | — |
 | **M3** | Bundled resources, permission broker, artifacts, import inspect + commit | M1 (∥ M2) | 📋 Backlog | — (follow-ups #61 already filed) | — |
 | **M4** | Durable runtime, mock + Ollama + Anthropic adapter | M3 | 📋 Backlog | — | — |
 | **⭐ Alpha** | *Checkpoint:* packaged app runs one real workflow → real artifact | M2, M4 | 📋 Backlog | — | — |
@@ -34,4 +34,4 @@ Recorded so the reasons stay visible:
 5. **M8 UI/UX polish and art integration added** on 2026-11-23 ([ADR-0027](../adr/0027-ui-ux-polish-and-art-milestone.md)), so the whole app gets one design, art and accessibility pass before MVP. The original M8–M11 became M9–M12. M5 now only proves the art pipeline with a small slice.
 
 ## Current milestone detail
-M2 is planned: [milestones/M2.md](milestones/M2.md) (goal, decisions, 21 tasks, Checks → tasks). Graph and lanes: [DEPENDENCIES.md](DEPENDENCIES.md#task-level-m2). M2-12 #77 (Atlas shell) is in review. Ready now: M2-10 #75 (hotbar UI), #62 (profile notice) and the parallel-safe follow-ups #57, #58, #60. M2-13 #78 can start once #77 merges; M2-15 #80 comes last. Previous: [milestones/M1.md](milestones/M1.md) (closed 2026-11-20), [milestones/M0.md](milestones/M0.md) (closed).
+M2 is planned: [milestones/M2.md](milestones/M2.md) (goal, decisions, 21 tasks, Checks → tasks). Graph and lanes: [DEPENDENCIES.md](DEPENDENCIES.md#task-level-m2). M2-12 #77 (Atlas shell) merged (fca518a); M2-13 #78 (Connections tab) is in review. Ready now: M2-10 #75 (hotbar UI), #62 (profile notice) and the parallel-safe follow-ups #57, #58, #60. M2-15 #80 comes last. Previous: [milestones/M1.md](milestones/M1.md) (closed 2026-11-20), [milestones/M0.md](milestones/M0.md) (closed).

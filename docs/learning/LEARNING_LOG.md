@@ -40,6 +40,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 034 | [Accessible tabs: the WAI-ARIA tabs pattern and roving tabindex](lessons/034-aria-tabs-and-roving-tabindex.md) | M2 | tablist/tab/tabpanel roles, aria-selected, roving tabindex, automatic activation, preventDefault vs the shortcut layer, filters that load every page |
 | 035 | [Bounded graph queries](lessons/035-bounded-graph-queries.md) | M2 | directed links, composite foreign keys, deterministic truncation with omitted counts, hiding trashed rows from counts, resource caps, ticking test clock |
 | 036 | [A minimap derived from saved data](lessons/036-derived-minimap-svg-viewbox.md) | M2 | derived views, SVG viewBox in world pixels, non-scaling strokes, camera viewport as the inverse transform, layout guarantees vs overlays, window splitter |
+| 037 | [Deterministic graph layout and accessible graphs](lessons/037-deterministic-layout-accessible-graphs.md) | M2 | ring layout, polar coordinates, stable order, meaning not by colour alone, list equivalent of a canvas, session-only display state |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map
