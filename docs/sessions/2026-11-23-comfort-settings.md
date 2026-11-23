@@ -46,5 +46,15 @@ typecheck, lint and format:check pass. Unit/integration 1022/1022. Full E2E 83/8
 
 **Reviews:** invariant-reviewer found no violations. security-auditor approved; L1 is fixed, and L2/L3 are known limitations (see the status doc).
 
+## CI fix (same day)
+The first CI run failed one test: the 100-building sanity bound (p95 frame gap 109 ms, limit 100). CI has no GPU, so it renders in software, and main already sat at 78 ms there. I reproduced it locally with software rendering and used an A/B test (labels on vs off, alternating in one app, to cancel out machine drift) to narrow it down:
+- `BitmapText` instead of `Text`: no better.
+- Text only or the box only: each cost the same as both.
+- Hiding the whole label layer: the cost disappeared.
+- Turning off Pixi's event system: no change.
+- Stopping labels flipping visibility as they were culled: no change.
+
+So the cost was drawing about 200 extra small objects per frame. **Fix:** each label is drawn once into a small texture (cached per text, freed when no longer shown, redrawn after a lost graphics context) and shown as a sprite, which batches like the building art. The world container also became a Pixi render group. The A/B went from +45% to +5–16%. Local full E2E 83/83; the GPU frame time is unchanged (6.9 ms).
+
 ## Open questions
 - None blocking. Later: should labels hide when they overlap? Should deleting a world drop its saved camera? (Worlds can't be deleted yet.)

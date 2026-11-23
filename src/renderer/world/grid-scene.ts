@@ -273,18 +273,13 @@ function statusSign(building: WorldBuilding, hasArt: boolean): string | null {
 }
 
 /**
- * A building's name label, or null for a building without a name (a service structure). Its
- * origin is the bottom middle, so scaling it by 1 / zoom keeps it the same size on screen and
- * still standing just above the building (and above any status sign).
+ * Where a building's name label stands: above the building, and above its status sign if it
+ * has one. The label's origin is its bottom middle, so scaling it by 1 / zoom keeps it the same
+ * size on screen and still standing just above the building.
  */
-function drawNameLabel(building: WorldBuilding, hasArt: boolean): Container | null {
-  if (building.name === null) return null;
-  const label = drawSign(buildingLabel(building.name), 0, 0);
-  const holder = new Container();
-  holder.addChild(label);
+function nameLabelPosition(building: WorldBuilding, hasArt: boolean): Point {
   const above = statusSign(building, hasArt) === null ? 0 : STATUS_SIGN_HEIGHT;
-  holder.position.set(building.pivot.x, building.bounds.top - 2 - above);
-  return holder;
+  return { x: building.pivot.x, y: building.bounds.top - 2 - above };
 }
 
 /** The selected building's footprint outline, drawn above the buildings so it always shows. */
@@ -345,7 +340,10 @@ export async function createWorldScene(
     throw error;
   }
 
-  const world = new Container();
+  // A render group: panning and zooming move the whole map, so Pixi updates one matrix instead
+  // of recomputing every building and label inside it. Measured with 100 buildings and software
+  // rendering (as on CI), it made every frame quicker.
+  const world = new Container({ isRenderGroup: true });
   const hover = drawHover(tile);
   const selected = createPivotSprite(selectionArt, selectionImage);
   selected.visible = false;
@@ -382,15 +380,55 @@ export async function createWorldScene(
     textures.set(art.id, { art, texture: new Texture({ source }) });
   });
 
+  // Name labels are drawn once into a small texture each and shown as sprites. Sprites batch
+  // like the building art; a live Text plus its background shape per label are about 200 extra
+  // objects to draw every frame, which made software-rendered frames (CI) about 45% slower
+  // with 100 buildings. Labels stay one size on screen, so the texture is drawn at exactly the
+  // screen's resolution and stays sharp. One texture per label text, kept while it is in use.
+  const labelTextures = new Map<string, Texture>();
+  const labelTexture = (text: string): Texture => {
+    const cached = labelTextures.get(text);
+    if (cached !== undefined) return cached;
+    const sign = drawSign(text, 0, 0);
+    const texture = app.renderer.generateTexture({
+      target: sign,
+      resolution: window.devicePixelRatio,
+      antialias: true,
+    });
+    sign.destroy({ children: true, context: true });
+    labelTextures.set(text, texture);
+    return texture;
+  };
+  /** A building's name label, or null for a building without a name (a service structure). */
+  const drawNameLabel = (building: WorldBuilding, hasArt: boolean): Sprite | null => {
+    if (building.name === null) return null;
+    const label = new Sprite(labelTexture(buildingLabel(building.name)));
+    // The sign is drawn upwards from (0, 0), so its bottom middle is the anchor.
+    label.anchor.set(0.5, 1);
+    const at = nameLabelPosition(building, hasArt);
+    label.position.set(at.x, at.y);
+    return label;
+  };
+  /** Frees the textures of label texts no longer shown. */
+  const dropUnusedLabelTextures = (inUse: ReadonlySet<string>) => {
+    for (const [text, texture] of labelTextures) {
+      if (inUse.has(text)) continue;
+      texture.destroy(true);
+      labelTextures.delete(text);
+    }
+  };
+
   let camera: Camera = { panX: 0, panY: 0, zoom: 1 };
   let viewWidth = Math.max(1, width);
   let viewHeight = Math.max(1, height);
   let buildings: readonly WorldBuilding[] = [];
   let buildingNodes: Container[] = [];
   /** One per building, in the same order; null for a building without a name. */
-  let labelNodes: (Container | null)[] = [];
+  let labelNodes: (Sprite | null)[] = [];
   let showLabels = true;
   let drawnLabels = 0;
+  /** The zoom the labels are scaled for; null when they need scaling (new labels). */
+  let labelZoom: number | null = null;
   let selectedPlacementId: string | null = null;
   let fadedPlacementId: string | null = null;
   let drawn = 0;
@@ -452,14 +490,37 @@ export async function createWorldScene(
   };
 
   /** Labels follow their building's culling, the toggle and the zoom; sized for the screen. */
+  /** One label per building, from the cached textures; frees textures no longer shown. */
+  function buildLabels() {
+    for (const node of labelLayer.removeChildren()) node.destroy();
+    labelNodes = buildings.map((building) =>
+      drawNameLabel(building, building.art !== null && textures.has(building.appearanceId)),
+    );
+    const labels = labelNodes.filter((label) => label !== null);
+    if (labels.length > 0) labelLayer.addChild(...labels);
+    dropUnusedLabelTextures(
+      new Set(
+        buildings.flatMap((building) =>
+          building.name === null ? [] : [buildingLabel(building.name)],
+        ),
+      ),
+    );
+    labelZoom = null;
+  }
+
   function updateLabels() {
     drawnLabels = 0;
     const zoomedIn = camera.zoom >= LABEL_MIN_ZOOM;
+    // Runs on every pan, so it only touches what changed: the scale only when the zoom changed,
+    // and visibility only when it flips.
+    const rescale = labelZoom !== camera.zoom;
+    labelZoom = camera.zoom;
     labelNodes.forEach((label, index) => {
       if (label === null) return;
-      label.visible = showLabels && zoomedIn && buildingNodes[index]?.visible === true;
-      label.scale.set(1 / camera.zoom);
-      if (label.visible) drawnLabels++;
+      const visible = showLabels && zoomedIn && buildingNodes[index]?.visible === true;
+      if (label.visible !== visible) label.visible = visible;
+      if (rescale) label.scale.set(1 / camera.zoom);
+      if (visible) drawnLabels++;
     });
   }
 
@@ -470,6 +531,20 @@ export async function createWorldScene(
 
   let frame: number | null = null;
   let destroyed = false;
+
+  // Label textures were drawn on the GPU, so a lost graphics context takes their pixels with
+  // it. Once the context is back (and Pixi has restored its own state), draw them again.
+  const onContextRestored = () => {
+    requestAnimationFrame(() => {
+      if (destroyed) return;
+      for (const node of labelLayer.removeChildren()) node.destroy();
+      dropUnusedLabelTextures(new Set());
+      buildLabels();
+      updateLabels();
+      requestRender();
+    });
+  };
+  app.canvas.addEventListener('webglcontextrestored', onContextRestored);
   const requestRender = () => {
     if (frame !== null || destroyed) return;
     frame = requestAnimationFrame(() => {
@@ -511,16 +586,12 @@ export async function createWorldScene(
     setBuildings(next) {
       // Rebuilt from scratch: at most a few hundred nodes, and only when the saved list changes.
       // Shared textures survive; each Graphics frees the shapes it built (context: true).
-      for (const node of [...buildingLayer.removeChildren(), ...labelLayer.removeChildren()])
+      for (const node of buildingLayer.removeChildren())
         node.destroy({ children: true, context: true });
       buildings = next;
       buildingNodes = next.map((building) => drawBuilding(building, textures, tile));
       if (buildingNodes.length > 0) buildingLayer.addChild(...buildingNodes);
-      labelNodes = next.map((building) =>
-        drawNameLabel(building, building.art !== null && textures.has(building.appearanceId)),
-      );
-      const labels = labelNodes.filter((label) => label !== null);
-      if (labels.length > 0) labelLayer.addChild(...labels);
+      buildLabels();
       applyFade();
       outlineSelected();
       cull();
@@ -555,6 +626,10 @@ export async function createWorldScene(
       if (destroyed) return;
       destroyed = true;
       if (frame !== null) cancelAnimationFrame(frame);
+      app.canvas.removeEventListener('webglcontextrestored', onContextRestored);
+      // Label textures are shared by text: free each once here, not again through its sprites.
+      for (const node of labelLayer.removeChildren()) node.destroy();
+      dropUnusedLabelTextures(new Set());
       // removeView takes the canvas out of the DOM; releasing children/textures frees GPU memory.
       app.destroy({ removeView: true }, { children: true, texture: true, textureSource: true });
     },
