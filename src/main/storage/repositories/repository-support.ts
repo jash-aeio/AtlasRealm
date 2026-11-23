@@ -259,8 +259,11 @@ export function guardedUpdate(db: Database, update: GuardedUpdate): Row {
 }
 
 export interface GuardedDelete {
-  /** Representation tables only: product records are never deleted (PRODUCT_RULES §3.1). */
-  readonly table: 'building_placements';
+  /**
+   * Representations and manual links only: product records are never deleted (PRODUCT_RULES
+   * §3.1). Deleting a manual link removes the relation only (GRAPH_MODEL §30.5).
+   */
+  readonly table: 'building_placements' | 'project_relations';
   readonly keyColumn: 'profile_id' | 'id';
   readonly key: string;
   readonly expectedRevision: number;
@@ -270,7 +273,8 @@ export interface GuardedDelete {
  * Deletes a record only if it still has `expectedRevision`, so nobody removes something they
  * haven't seen in its current state. Returns the deleted row. Like guardedUpdate it is one
  * statement and explains a refusal (`not_found` or `revision_conflict`) without writing.
- * Only for representation tables (placements); product records are never deleted.
+ * Only for representation tables (placements) and manual links; product records are never
+ * deleted.
  */
 export function guardedDelete(db: Database, target: GuardedDelete): Row {
   assertRevision(target.expectedRevision);
