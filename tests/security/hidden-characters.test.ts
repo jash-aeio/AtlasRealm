@@ -38,6 +38,14 @@ const REFUSED: [string, string][] = [
   ['the Hangul jungseong filler U+1160', `A${cp(0x1160)}B`],
   ['the halfwidth Hangul filler U+FFA0', `A${cp(0xffa0)}B`],
   ['the combining grapheme joiner U+034F', `A${cp(0x034f)}B`],
+  // Security review of #60, L1: other characters that draw nothing.
+  ['a Mongolian free variation selector (U+180B)', `A${cp(0x180b)}B`],
+  ['the Mongolian vowel separator (U+180E)', `A${cp(0x180e)}B`],
+  ['a Khmer invisible vowel (U+17B4)', `A${cp(0x17b4)}B`],
+  ['a deprecated format character (U+206A)', `A${cp(0x206a)}B`],
+  ['an interlinear annotation mark (U+FFF9)', `A${cp(0xfff9)}B`],
+  ['musical formatting (U+1D173)', `A${cp(0x1d173)}B`],
+  ['musical formatting (U+1D17A)', `A${cp(0x1d17a)}B`],
   // Refused since M1; still refused through the shared module.
   ['a zero-width space', `Ho${cp(0x200b)}me`],
   ['a right-to-left override', `Home${cp(0x202e)}`],

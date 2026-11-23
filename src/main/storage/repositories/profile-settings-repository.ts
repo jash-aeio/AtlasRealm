@@ -12,6 +12,7 @@ import {
   integer,
   LIMITS,
   normalizeName,
+  normalizeStoredName,
   nullableText,
   RepositoryError,
   type Row,
@@ -50,6 +51,21 @@ export interface ProfileSettingsPatch {
   readonly avatarColour?: string | null;
   readonly timezone?: string;
   readonly preferences?: ProfilePreferences;
+}
+
+/**
+ * Which rule a display name must meet. `input` (the default) is for names a person just
+ * typed. `stored` is only for copying a name the profile index already holds, which may have
+ * been saved under older, looser rules (ensureProfileSettings, ADR-0033).
+ */
+export interface NameRuleOption {
+  readonly nameRule?: 'input' | 'stored';
+}
+
+function checkDisplayName(value: string, options: NameRuleOption): string {
+  return options.nameRule === 'stored'
+    ? normalizeStoredName(value, 'Display name')
+    : normalizeName(value, 'Display name');
 }
 
 const PROFILE_ID = PROFILE_ID_PATTERN;
@@ -136,11 +152,11 @@ export class ProfileSettingsRepository {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  create(input: NewProfileSettings): ProfileSettings {
+  create(input: NewProfileSettings, options: NameRuleOption = {}): ProfileSettings {
     const profileId = assertProfileId(input.profileId);
     const values = [
       profileId,
-      normalizeName(input.displayName, 'Display name'),
+      checkDisplayName(input.displayName, options),
       avatarPreset(input.avatarPreset ?? null),
       avatarColour(input.avatarColour ?? null),
       canonicalTimezone(input.timezone),
@@ -204,6 +220,7 @@ export class ProfileSettingsRepository {
     profileId: string,
     expectedRevision: number,
     patch: ProfileSettingsPatch,
+    options: NameRuleOption = {},
   ): ProfileSettings {
     // Column names come from this fixed list, never from the caller.
     const assignments: string[] = [];
@@ -213,7 +230,7 @@ export class ProfileSettingsRepository {
       params[column] = value;
     };
     if (patch.displayName !== undefined) {
-      assign('display_name', normalizeName(patch.displayName, 'Display name'));
+      assign('display_name', checkDisplayName(patch.displayName, options));
     }
     if (patch.avatarPreset !== undefined) assign('avatar_preset', avatarPreset(patch.avatarPreset));
     if (patch.avatarColour !== undefined) assign('avatar_colour', avatarColour(patch.avatarColour));
