@@ -333,16 +333,14 @@ test('collapse, expand, resize and pin are saved per world and shown after a rel
   await expect(atlas()).toHaveAttribute('data-expanded', 'false');
 });
 
-test('the Connections tab is labelled as not built yet; the tabs work by keyboard', async () => {
+test('the tabs work by keyboard; Connections shows the real projects (atlas-connections.spec)', async () => {
   const mapTab = atlas().getByRole('tab', { name: 'Map' });
   await mapTab.focus();
   await page.keyboard.press('ArrowRight');
   const connections = atlas().getByRole('tab', { name: 'Connections' });
   await expect(connections).toHaveAttribute('aria-selected', 'true');
   await expect(connections).toBeFocused();
-  await expect(atlas().getByTestId('atlas-connections')).toContainText(
-    'Not built yet (planned later in M2)',
-  );
+  await expect(atlas().getByTestId('atlas-connections-counts')).toHaveText('4 projects · 0 links');
   await page.keyboard.press('Home');
   await expect(mapTab).toHaveAttribute('aria-selected', 'true');
 });

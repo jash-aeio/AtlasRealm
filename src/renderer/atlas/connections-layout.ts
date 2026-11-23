@@ -41,13 +41,17 @@ export const ORIGIN_LABELS: Record<RelationOrigin, string> = {
 const RING_SPACING = 190;
 const MIN_OUTER_RADIUS = 220;
 /** The inner ring's radius as a share of the outer ring's. */
-const INNER_SHARE = 0.45;
+const INNER_SHARE = 0.55;
+/** Inner nodes stay about a node width from the centre, clear of links across the ring. */
+const MIN_INNER_RADIUS = 160;
 
-/** Points evenly spaced on a circle around (0, 0), starting at the top, clockwise. */
-function ring(count: number, radius: number): Point[] {
-  if (count === 1 && radius === 0) return [{ x: 0, y: 0 }];
+/**
+ * Points evenly spaced on a circle around (0, 0), clockwise, starting at the top turned on by
+ * `offset` radians.
+ */
+function ring(count: number, radius: number, offset = 0): Point[] {
   return Array.from({ length: count }, (_, i) => {
-    const angle = -Math.PI / 2 + (2 * Math.PI * i) / count;
+    const angle = -Math.PI / 2 + offset + (2 * Math.PI * i) / count;
     return { x: Math.round(radius * Math.cos(angle)), y: Math.round(radius * Math.sin(angle)) };
   });
 }
@@ -72,17 +76,19 @@ export function ringLayout(nodes: readonly GraphProjectNode[]): Map<string, Poin
   // With only one group there is one ring; with both, the inner ring must also leave room.
   const outerGroup = placed.length > 0 ? placed : unplaced;
   const innerGroup = placed.length > 0 ? unplaced : [];
-  const innerRadius = innerGroup.length === 0 ? 0 : radiusFor(innerGroup.length, 0);
+  const innerRadius = innerGroup.length === 0 ? 0 : radiusFor(innerGroup.length, MIN_INNER_RADIUS);
   const outerRadius = Math.max(
     radiusFor(outerGroup.length, MIN_OUTER_RADIUS),
     Math.ceil(innerRadius / INNER_SHARE),
   );
-  const inner = innerGroup.length === 1 ? 0 : Math.max(innerRadius, outerRadius * INNER_SHARE);
+  const inner = Math.max(innerRadius, outerRadius * INNER_SHARE);
   ring(outerGroup.length, outerRadius).forEach((point, i) => {
     const node = outerGroup[i];
     if (node !== undefined) positions.set(node.projectId, point);
   });
-  ring(innerGroup.length, inner).forEach((point, i) => {
+  // Turned half an outer step, so inner nodes sit between the outer ones and a link across the
+  // outer ring doesn't run straight through an inner node (or through the centre).
+  ring(innerGroup.length, inner, Math.PI / outerGroup.length).forEach((point, i) => {
     const node = innerGroup[i];
     if (node !== undefined) positions.set(node.projectId, point);
   });

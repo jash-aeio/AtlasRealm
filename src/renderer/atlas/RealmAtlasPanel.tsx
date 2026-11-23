@@ -19,14 +19,17 @@ import {
   type AtlasTab,
   type AtlasViewChange,
 } from '../../common/preferences/atlas-view';
+import { useReducedMotion } from '../app/use-reduced-motion';
 import { STATUS_LABELS } from '../projects/project-messages';
 import { useProject } from '../projects/use-project';
 import type { ProjectSelection } from '../state/selection';
 import { useStore } from '../state/use-store';
+import type { Comfort } from '../world/comfort';
 import type { PlacementTool } from '../world/placement-tool';
 import type { WorldCamera } from '../world/world-camera';
 import { placementOf, type WorldPlacements } from '../world/world-placements';
 import { viewOf, type AtlasViewPreferences } from './atlas-views';
+import { ConnectionsTab } from './ConnectionsTab';
 import { mapBuildings } from './map-geometry';
 import { MapTab } from './MapTab';
 
@@ -40,6 +43,8 @@ interface RealmAtlasPanelProps {
   readonly tool: PlacementTool;
   /** Bumped by the parent after any project change, so the pinned project is read again. */
   readonly version: number;
+  /** Comfort preferences: with reduced motion the Connections graph doesn't animate. */
+  readonly comfort: Comfort;
 }
 
 const TABS: readonly { readonly id: AtlasTab; readonly label: string }[] = [
@@ -61,7 +66,9 @@ export function RealmAtlasPanel({
   views,
   tool,
   version,
+  comfort,
 }: RealmAtlasPanelProps) {
+  const reducedMotion = useReducedMotion(comfort);
   const toolActive = useStore(tool.store).mode.kind !== 'idle';
   const baseId = useId();
   const viewsState = useStore(views.store);
@@ -243,12 +250,13 @@ export function RealmAtlasPanel({
                   cameraMessage={cameraMessage}
                 />
               ) : (
-                <div data-testid="atlas-connections">
-                  <p className="not-built">Not built yet (planned later in M2)</p>
-                  <p className="muted">
-                    How your projects are linked, including projects that have no building.
-                  </p>
-                </div>
+                <ConnectionsTab
+                  world={world}
+                  selectedProjectId={selectedProjectId}
+                  onSelect={selection.select}
+                  version={version}
+                  reducedMotion={reducedMotion}
+                />
               )}
             </div>
             <div className="atlas-pin-actions">

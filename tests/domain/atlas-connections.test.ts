@@ -65,6 +65,23 @@ describe('ringLayout', () => {
     expect(Math.min(...outer)).toBeGreaterThan(Math.max(...inner));
   });
 
+  it('puts inner nodes between outer ones, never on the line across the ring or in the centre', () => {
+    // Two placed projects sit top and bottom; a link between them runs down the middle.
+    for (const innerCount of [1, 2]) {
+      const nodes = [
+        node(1),
+        node(2),
+        ...Array.from({ length: innerCount }, (_, i) => node(i + 10, { placed: false })),
+      ];
+      const layout = ringLayout(nodes);
+      expect(at(layout, id(1)).x).toBe(0);
+      expect(at(layout, id(2)).x).toBe(0);
+      for (const n of nodes.filter((p) => !p.placed)) {
+        expect(Math.abs(at(layout, n.projectId).x)).toBeGreaterThan(120);
+      }
+    }
+  });
+
   it('uses the outer ring when no project has a building', () => {
     const nodes = [node(1, { placed: false }), node(2, { placed: false })];
     const layout = ringLayout(nodes);

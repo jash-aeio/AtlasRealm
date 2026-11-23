@@ -944,3 +944,91 @@ kbd {
 .appearance-item h4 {
   margin: 0 0 0.25rem;
 }
+
+/* Realm Atlas Connections (M2-13 #78). Link types differ by line shape and label, and node
+   status by border and shape, so nothing is told by colour alone (GRAPH_MODEL §30.6). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.atlas-panel[data-expanded='true'] .atlas-graph {
+  height: 480px;
+}
+
+.atlas-graph .atlas-node {
+  font-size: 12px;
+}
+
+.atlas-graph .atlas-node-archived {
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+.atlas-graph .atlas-node-unplaced {
+  border-radius: 999px;
+}
+
+.atlas-edge-supports .react-flow__edge-path,
+.atlas-legend-supports {
+  stroke-dasharray: 8 5;
+}
+
+.atlas-edge-references .react-flow__edge-path,
+.atlas-legend-references {
+  stroke-dasharray: 2 4;
+}
+
+.atlas-legend {
+  font-size: 0.8rem;
+}
+
+.atlas-legend ul {
+  margin: 0.25rem 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.atlas-legend-line line {
+  stroke: currentcolor;
+  stroke-width: 2;
+}
+
+.atlas-legend-line polygon {
+  fill: currentcolor;
+}
+
+.atlas-link-form {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 0.5rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.atlas-link-form h3,
+.atlas-link-form p,
+.atlas-link-form .form-actions {
+  grid-column: 1 / -1;
+  margin: 0.25rem 0;
+}
+
+.atlas-links-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.atlas-links-table th,
+.atlas-links-table td {
+  padding: 0.2rem 0.35rem;
+  text-align: left;
+}
+
+.atlas-links-table td button[aria-pressed='true'] {
+  outline: 2px solid #6bc6f2;
+}
