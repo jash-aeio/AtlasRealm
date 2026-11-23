@@ -79,7 +79,7 @@ Secrets are stored through the vault; the database holds opaque references. Prof
 | `audit_records` | Actor, operation, target, policy decision, approval reference, safe result summary |
 | `usage_reservations` | Run ID, request ID, estimated upper-bound reservation, settlement state |
 | `trash_entries` | Owned entity ID, trash time, retention metadata, restoration information |
-| `project_relations` | World, source/target project IDs, type, user-confirmed state, provenance; descriptive by default |
+| `project_relations` | World, source/target project IDs (composite FKs to the same world's projects; the source → target order is the direction), type (`depends_on`, `supports`, `references`), origin (`user`), confirmation state, revision; no self-links, unique source/target/type; descriptive only, never read by scheduling or permissions. Schema v6; links of a trashed project are kept but hidden. Changed by ADR-0029 |
 | `graph_entities` | Stable entity reference, kind, project scope, source locator, content/index revision, tombstone state |
 | `graph_edges` | Source/target entity IDs, relationship type, origin/evidence, confirmation state, index revision |
 | `graph_view_states` | World/project/profile scope, active view/filter, pinned nodes, collapsed groups, layout coordinates |

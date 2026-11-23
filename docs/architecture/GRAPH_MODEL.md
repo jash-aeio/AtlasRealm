@@ -42,6 +42,8 @@ The MVP builds edges from explicit user links, supported document links, existin
 
 Store edge type, source and target IDs, direction, origin, evidence/source locator, parser or run revision, confirmation state, and timestamps. Initial origins: `user`, `parsed`, `execution`, and `ai_proposed`. Confidence can describe an inference; it is not a substitute for evidence or user approval.
 
+> Project-to-project links (M2-11) are stored in `project_relations`; every type is directed and the source → target order is the direction, so there is no separate direction column. Links of a trashed project are kept but left out of the graph and its counts. Changed by ADR-0029.
+
 Examples:
 
 ```text
