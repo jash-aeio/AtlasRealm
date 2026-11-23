@@ -25,6 +25,12 @@ Nothing needs it, so it was removed.
 - E2E 109/109 (full suite); built `out/renderer/index.html` contains `img-src 'self'`
 - packaged E2E 15/15
 
+## Reviews (during /ship)
+- **security-auditor:** approved, no Critical/High/Medium. Two Low test notes:
+  - L1 fixed: the E2E now also records the `securitypolicyviolation` event and expects exactly `img-src data`, so it proves the CSP did the refusing (not some other load failure). shell.spec 27/27 after the change.
+  - L2 not fixed: the test reads `out/renderer/assets` relative to the working directory. That matches the file's existing assumption (`electron.launch({ args: ['.'] })`), and Playwright always runs from the repo root.
+- **invariant-reviewer:** no violations. It caught a stale "Known limitations" bullet in `IMPLEMENTATION_STATUS.md` that still said `img-src` allows `data:`; now marked fixed.
+
 ## Decisions
 - None new. The user's 2026-11-20 decision ("verify, then remove") was followed. No ADR needed.
 - Routine: the E2E check went into `shell.spec.ts` (outside the issue's "files owned" list) because that's where the other CSP probes live.
