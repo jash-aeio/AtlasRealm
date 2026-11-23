@@ -283,7 +283,9 @@ test('loads the UI and its bundled assets only from app://atlas (works offline)'
     const failed: string[] = [];
     const refused: string[] = [];
     page.on('request', (request) => requested.push(request.url()));
-    page.on('requestfailed', (request) => failed.push(request.url()));
+    page.on('requestfailed', (request) =>
+      failed.push(`${request.url()} (${request.failure()?.errorText ?? 'no reason'})`),
+    );
     page.on('console', (message) => {
       // Chromium's wording has changed over time ("Refused to load …", now "… violates the
       // following Content Security Policy directive"), so match the part both share.
@@ -326,7 +328,8 @@ test('loads the UI and its bundled assets only from app://atlas (works offline)'
       document.body.append(image);
     });
     await expect.poll(() => refused.join('\n')).toContain('https://example.invalid/outside.png');
-    expect(failed).toContain('https://example.invalid/outside.png');
+    // Polled too: the console message and the failed request may arrive in either order.
+    await expect.poll(() => failed).toContain('https://example.invalid/outside.png (csp)');
   } finally {
     await quit(running);
   }
