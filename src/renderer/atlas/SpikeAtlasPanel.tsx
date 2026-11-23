@@ -8,11 +8,11 @@ import { ConnectionsGraph } from './ConnectionsGraph';
 const SOURCE_LABELS = { atlas: 'Connections', world: 'world view' } as const;
 
 /**
- * Realm Atlas placeholder (M0-5 spike, GRAPH_MODEL §30.1): the upper-right panel. Only the
- * Connections tab exists, and it shows MOCK data. Map, resize, pin and real relations come
- * later. Selection lives in the shared store, so the world view sees the same entity.
+ * The M0-5 Realm Atlas spike (GRAPH_MODEL §30.1), kept under Developer spikes since M2-12 (#77)
+ * replaced it on the main screen. Everything in it is MOCK data and says so. It still proves
+ * the shared selection between React Flow and Pixi, and holds the 150 / 300 stress graph.
  */
-export function RealmAtlasPanel({ state = spikeSelection }: { state?: SelectionState }) {
+export function SpikeAtlasPanel({ state = spikeSelection }: { state?: SelectionState }) {
   const graph = useStore(state.graph);
   const selection = useStore(state.selection);
   const selectedId = selection.entityId;
@@ -25,7 +25,7 @@ export function RealmAtlasPanel({ state = spikeSelection }: { state?: SelectionS
   return (
     <aside className="atlas" aria-labelledby="atlas-heading" data-testid="atlas">
       <div className="atlas-header">
-        <h2 id="atlas-heading">Realm Atlas</h2>
+        <h2 id="atlas-heading">Realm Atlas spike</h2>
         <span className="tag">M0 spike · mock data</span>
       </div>
 

@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import type { LaunchInfoOutput } from '../../common/contracts/app-launch-info';
 import type { PingOutput } from '../../common/contracts/app-ping';
 import type { IpcResult } from '../../common/contracts/ipc-result';
-import { RealmAtlasPanel } from '../atlas/RealmAtlasPanel';
+import { SpikeAtlasPanel } from '../atlas/SpikeAtlasPanel';
 import { WorldCanvas } from '../world/WorldCanvas';
 import { WorldErrorBoundary } from '../world/WorldErrorBoundary';
 import { WorkerPanel } from './WorkerPanel';
@@ -65,7 +65,7 @@ function SpikePanels() {
             </WorldErrorBoundary>
           )}
         </div>
-        <RealmAtlasPanel />
+        <SpikeAtlasPanel />
       </div>
 
       <section className="panel" aria-labelledby="storage-heading">
