@@ -10,10 +10,10 @@ forms, with a keyboard list that shows source, relation, target and origin (GRAP
 ## Decisions (user, via AskUserQuestion)
 - **Layout:** our own deterministic ring layout, no layout library. Placed projects on an outer
   ring, unplaced ones on an inner ring, in the server's stable order. No continuous movement
-  (§30.6). Recorded in ADR-0032.
+  (§30.6). Recorded in [ADR-0032](../adr/0032-connections-ring-layout-session-positions.md).
 - **Dragged positions:** kept only for the session (in the panel's memory), with a "Reset layout"
   button. No schema change; saved positions wait for `graph_view_states`. This defers §30.6
-  "preserve manual positions" across restarts. Recorded in ADR-0032.
+  "preserve manual positions" across restarts. Recorded in [ADR-0032](../adr/0032-connections-ring-layout-session-positions.md).
 
 ## Plan
 1. `connections-layout.ts` (pure): ring layout, React Flow node/edge mapping, legend labels.
@@ -37,7 +37,18 @@ forms, with a keyboard list that shows source, relation, target and origin (GRAP
   "(archived)"; unplaced projects show "no building".
 
 ## What was done
-_(filled in as slices land)_
+- `db7f9df` ring layout, labels and legend words (pure, unit-tested).
+- `6e867a9` the M0 spike graph moved to `SpikeConnectionsGraph.tsx`.
+- `2bb546c` the Connections tab: `ConnectionsTab`, `ConnectionsGraph`, `ConnectionsList`, `LinkForm`
+  (with `RemoveLinkDialog`), `use-world-connections`; `RealmAtlasPanel` and `MainScreen` pass `comfort`.
+- E2E in a new `tests/e2e/atlas-connections.spec.ts` (7 tests) instead of `atlas.spec.ts`, which
+  holds the M0 spike tests. `realm-atlas.spec.ts`'s placeholder test now checks the real counts.
+- A screenshot check (`webContents.capturePage`) found all four nodes in one vertical line, with
+  the link running through the unplaced ones. Fixed: the inner ring is turned half a step and kept
+  about one node width from the centre (unit test added).
+- Checks: typecheck, lint, format:check pass; unit 1119/1119; E2E 101/101.
+- Honest limit: the reduced-motion E2E checks the `data-layout-animation` attribute, which comes
+  from the same flag that sets the fit-view duration; it doesn't measure the animation itself.
 
 ## Open questions
 _None yet._

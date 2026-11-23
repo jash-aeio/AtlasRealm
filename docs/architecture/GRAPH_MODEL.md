@@ -76,6 +76,8 @@ Show unconfirmed AI links with a dashed style and Proposed label. Accepting a su
 
 Default to a one-hop neighborhood when editing a file. Offer depth controls, search, type/origin filters, collapsed folder/task groups, focus-selected, and fit-to-view. Use stable layouts and preserve manual positions; avoid continuous movement while the user reads.
 
+> The world Connections tab (M2-13) uses a built-in deterministic ring layout (placed projects outside, unplaced inside), and dragged node positions last for the session only until `graph_view_states` exists. Changed by ADR-0032.
+
 Initial implementation target: fetch at most 150 visible nodes and 300 visible edges per graph request, with explicit truncation/grouping and expansion controls. These are adjustable engineering limits, not limits on stored project size. Profile the selected renderer before increasing them. A large folder should never freeze the interface by rendering every file at once.
 
 The graph has a keyboard-accessible list equivalent showing source, relation, target, and provenance. Icons/shapes and labels supplement color. Magical visual accents can show actual current work, but the graph must remain readable in reduced-motion mode.
