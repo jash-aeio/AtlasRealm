@@ -209,7 +209,9 @@ test('keyboard selection works through the list view and a focused graph node', 
 
 test('selection survives hiding the world, and a new scene draws it at once', async () => {
   await graphNode('mock-photos').click();
-  const toggle = page.getByRole('button', { name: /world view/ });
+  const toggle = page
+    .locator('details.developer-spikes')
+    .getByRole('button', { name: /world view/ });
   await toggle.click(); // hide: the projects (mock entities) and selection stay
   await expect(world()).toHaveCount(0);
   await expect(page.getByTestId('atlas-selection')).toContainText('mock-photos');
