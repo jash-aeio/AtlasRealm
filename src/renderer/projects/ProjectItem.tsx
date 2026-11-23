@@ -5,9 +5,13 @@
 // The map actions (M2-7 #72) are the list equivalent of the placement tool (UI_SPEC §6.6):
 // "Place on map" opens the tool, "Auto-place" places without the map, and "Remove from map"
 // confirms that the project, its files and its runs are kept (§22.2 #3).
+//
+// "Pin to hotbar" (M2-10 #75) opens the slot picker; it never replaces a slot without asking.
 import { useId, useRef, useState } from 'react';
 
 import type { ProjectSummary } from '../../common/contracts/project';
+import type { Hotbar } from '../hotbar/hotbar-store';
+import { PinToHotbar } from '../hotbar/PinToHotbar';
 import { nameProblem } from '../onboarding/form-messages';
 import { REMOVE_FROM_MAP_COPY, type PlacementActions } from '../world/placement-tool';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -45,6 +49,8 @@ interface ProjectItemProps {
   readonly placementActions?: PlacementActions;
   /** Shows the project's details (M2-9): the list equivalent of double-clicking its building. */
   readonly onOpen?: (projectId: string) => void;
+  /** This world's hotbar; without it the row has no "Pin to hotbar" (M2-10). */
+  readonly hotbar?: Hotbar;
 }
 
 /** The template's name when it is still available, else its stored ID and version. */
@@ -72,6 +78,7 @@ export function ProjectItem({
   placed,
   placementActions,
   onOpen,
+  hotbar,
 }: ProjectItemProps) {
   const headingId = `project-${project.id}`;
   const renameButton = useRef<HTMLButtonElement>(null);
@@ -185,6 +192,15 @@ export function ProjectItem({
           >
             Open
           </button>
+        )}
+        {hotbar !== undefined && (
+          <PinToHotbar
+            hotbar={hotbar}
+            target={{ type: 'project', id: project.id }}
+            name={project.name}
+            onMessage={onMessage}
+            canPin={editable}
+          />
         )}
         {editable && (
           <>

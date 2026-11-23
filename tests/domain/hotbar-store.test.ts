@@ -12,7 +12,7 @@ import {
   serviceOfEntrance,
   slotKey,
   type HotbarApi,
-} from '../../src/renderer/hotbar/hotbar';
+} from '../../src/renderer/hotbar/hotbar-store';
 
 const WORLD = '00000000-0000-4000-8000-000000000001';
 const P1 = '00000000-0000-4000-8000-0000000000a1';

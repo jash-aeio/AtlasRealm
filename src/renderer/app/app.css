@@ -660,15 +660,71 @@ button.primary {
   list-style: none;
 }
 
+/* M2-10 #75: each slot shows its key and what it holds. Empty slots are dashed and say "Empty";
+   archived or trashed pins say so in text (the colour is only a hint, UI_SPEC §6.5). */
+.hotbar-slots {
+  flex-wrap: wrap;
+}
+
 .hotbar-slot {
-  display: grid;
-  place-content: center;
-  width: 2rem;
-  height: 2rem;
-  border: 1px dashed #46505e;
+  display: flex;
+  align-items: stretch;
+  border: 1px solid #46505e;
   border-radius: 4px;
-  color: #9a978e;
   font-size: 0.85rem;
+}
+
+.hotbar-slot[data-filled='false'] {
+  border-style: dashed;
+  color: #9a978e;
+}
+
+.hotbar-slot[data-status='archived'],
+.hotbar-slot[data-status='trashed'] {
+  border-color: #6b5a2e;
+  color: #f2d16b;
+}
+
+.hotbar-activate,
+.hotbar-unpin {
+  padding: 0.2rem 0.4rem;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+.hotbar-activate {
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hotbar-unpin {
+  border-left: 1px solid #3a3d48;
+}
+
+.hotbar-message {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.pin-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 0.3rem;
+  margin: 0.5rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pin-slots button {
+  width: 100%;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 kbd {

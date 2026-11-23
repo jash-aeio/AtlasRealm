@@ -1,6 +1,6 @@
 // The panel an entrance opens over the world area. It has a heading and one way out ("Back to
 // world", or Escape through the shortcut layer). Closing only unmounts the view: nothing saved
-// is changed by it.
+// is changed by it. A service panel can carry extra header actions, such as "Pin to hotbar".
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 
 interface EntrancePanelProps {
@@ -8,10 +8,18 @@ interface EntrancePanelProps {
   /** Move focus to the heading when the panel opens (not for the panel shown at startup). */
   readonly focusOnOpen: boolean;
   readonly onClose: () => void;
+  /** Extra controls next to the heading (M2-10: "Pin to hotbar" on service panels). */
+  readonly actions?: ReactNode;
   readonly children: ReactNode;
 }
 
-export function EntrancePanel({ title, focusOnOpen, onClose, children }: EntrancePanelProps) {
+export function EntrancePanel({
+  title,
+  focusOnOpen,
+  onClose,
+  actions,
+  children,
+}: EntrancePanelProps) {
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -26,6 +34,7 @@ export function EntrancePanel({ title, focusOnOpen, onClose, children }: Entranc
         <h2 id={headingId} ref={heading} tabIndex={-1}>
           {title}
         </h2>
+        {actions}
         <button type="button" onClick={onClose} aria-keyshortcuts="Escape">
           Back to world
         </button>
