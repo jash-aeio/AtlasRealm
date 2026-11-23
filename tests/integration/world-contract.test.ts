@@ -112,6 +112,8 @@ describe('world.create', () => {
     ['oversize name', { name: 'x'.repeat(81) }],
     ['empty name', { name: '' }],
     ['control character', { name: 'Home\u0000' }],
+    ['variation selector run (#60)', { name: `Home${String.fromCodePoint(0xfe0f, 0xfe0f)}` }],
+    ['combining grapheme joiner (#60)', { name: `Ho${String.fromCodePoint(0x034f)}me` }],
     ['chosen ID', { name: 'Home', id: '00000000-0000-4000-8000-000000000001' }],
     ['grid size (not exposed)', { name: 'Home', gridWidth: 1000 }],
     ['no payload', undefined],
