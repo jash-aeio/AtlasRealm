@@ -31,5 +31,24 @@ Neither decision changes a contract, schema or permission, so neither gets an AD
 
    `shell.spec.ts` drops its "library placeholder" assertion.
 
-## Done / open
-_(filled in as slices land)_
+## Done
+Five commits on `feat/74-library-panel`, all checks green:
+1. `5685e80`: the store gets the "On map" filter. A map filter, or a search set while the first page is still loading, now reads every remaining page too. (Search used to stop at the first page in that race.)
+2. `69633a7`: the list gets the "On map" button group, summaries such as "Showing 55 active projects not placed.", and an **Open** button on each row. Until now a project could only be opened from its building or the inspector.
+3. `3acadff`: `LibraryPanel` with the six tabs (WAI-ARIA tabs pattern, roving tabindex), `AppearancesTab` (read from the manifest through a new `buildingAppearances()` in `world-assets.ts`), and `library-tabs.ts` with a unit test. The main screen remembers the last tab for the session. The `library` entry left `NOT_BUILT`.
+4. `5522050`: the top bar gets a "Hide world view" button. Hiding the world cancels an open placement tool. "Place on map" and "Move" show the world again.
+5. `ef0783b`: `tests/e2e/library.spec.ts` (3 tests). `atlas.spec.ts` and `world.spec.ts` now look for their "world view" toggle inside Developer spikes, because the main screen has one too.
+
+**Evidence (worktree, 2026-11-23):** typecheck, lint and format:check pass. Unit/integration: 1030/1030. E2E: 86/86. Packaged E2E has not been run yet; that happens during /ship or at M2-15.
+
+## How each acceptance criterion is shown
+- **E and the button toggle the library:** `library.spec` test 1 and `shell.spec` "E toggles the library…". Typing E in the search field stays in the field.
+- **Projects tab: search, the five filters, paging, keyboard:** `library.spec` test 2 uses 57 active and 2 archived projects. It covers Load more, Not placed and Placed across every page, Archived combined with each map filter, map filter plus search, and Trash. It also shows the filter buttons work with Tab and Enter.
+- **Other tabs say "Planned for M3", and the appearance is marked as a placeholder:** `library.spec` test 1 and `tests/domain/library-tabs.test.ts`.
+- **Every critical action from the list:** `library.spec` test 3 does open, rename, auto-place, remove from map, archive and restore, trash and restore from trash, then place on map.
+- **Works with the world hidden:** test 3 checks that no `canvas` exists while the actions above run.
+
+## Open questions / notes
+- When the world is hidden, the undo and redo buttons go away with it, because they live in the world view. Undo history is kept and comes back when the world is shown again.
+- Closing a project's details after opening it from the library sends focus to the top of the page, not back to the library. This is the same as opening from the inspector today. It could become a follow-up for M8 (UI polish).
+- The library and the sidebar Projects panel share one list component, so each new filter appears in both.
