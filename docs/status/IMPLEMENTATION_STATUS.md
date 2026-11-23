@@ -2,7 +2,7 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-23 · **Branch:** docs/adr-0030-react-flow-v13 (main @ eda2331, main checkout)
+**Last updated:** 2026-11-23 · **Branch:** feat/77-atlas-shell-map (main @ fb786ed, main checkout)
 
 ## Current milestone
 **M2 — Isometric world, placement, hotbar, library and Atlas shell** (⏳ planned 2026-11-20: 21 issues, see `docs/pm/milestones/M2.md`). IMP-1 moved into M3.
@@ -216,6 +216,13 @@
   - Shortcut layer (`src/renderer/app/shortcuts.ts`): one `keydown` listener on `window`. It ignores keys from `input`/`textarea`/`select`/`contenteditable`, while a modal `<dialog>` is open, during IME composition, on key repeat, with the Windows key, and when another handler already used the key. Modifiers must match exactly, and the newest shortcut for a key wins. Components register keys with `useShortcut(key, run)` (`ShortcutLayer.tsx`).
   - `E` toggles the library (a placeholder until M2-9 #74). Escape closes the drawer, then the open panel. Closing only unmounts the view, and focus returns to what opened it (or to the entrance button if that element is gone). Escape inside a text field stays with the field: the create form uses it to cancel its draft.
   - Developer spikes moved below the shell, still collapsed and labelled as M0 mock data.
+- **M2-12 Realm Atlas shell and Map tab (#77, branch `feat/77-atlas-shell-map`, ADR-0031):** the upper-right Realm Atlas is real; the M0 mock panel moved to Developer spikes (`SpikeAtlasPanel.tsx`).
+  - **Map tab** (`src/renderer/atlas/{MapTab.tsx,map-geometry.ts}`): an SVG whose `viewBox` is world pixels. It draws the world's diamond, one footprint shape per saved building (from `placement.list` only, rotation included), the selected building (blue fill and thick white outline), the pinned building (a ring) and the camera viewport (dashed box, clipped to the map). A Buildings list is the keyboard equivalent. Clicking a shape or a list row selects the project and never moves the camera.
+  - **Camera bridge** (`src/renderer/world/world-camera.ts`): WorldView reports `{ camera, width, height }` after every camera or size change (`useWorldScene` `onViewport`), and `null` when it unmounts. `centerOn(point)` is the only way the Atlas moves the camera; it counts as a user move, so it's saved like a pan.
+  - **Go to** centres the Atlas context (the pinned project, else the selection) and is disabled with a reason when there is nothing to go to, the project has no building, the placement tool is open, or the world view is hidden. **Follow selection** (off by default) centres the camera when the selection changes, not when it's switched on, never while pinned or while the placement tool is open.
+  - **Shell** (`RealmAtlasPanel.tsx`): Map/Connections tabs (WAI-ARIA tabs; Connections says "Not built yet (planned later in M2)"), Collapse/Show, Expand (`min(720px, 60vw)`), a window-splitter resize handle on the column's left edge (drag, or arrows ±16 px, Shift ±64, Home/End; 256–720 px, shown as `min(width, 45vw)`), "Pin to selected project", and a "Pinned to: Name · Unpin" indicator that stays while collapsed and says so when the pinned project is gone.
+  - **Saved per world** through new `profile.atlasView.get/update` (`src/common/preferences/atlas-view.ts`): tab, collapsed, expanded, width, pinned project, follow. Stored under `atlasViews` in `preferences_json`, no revision, forgiving parse, LRU cap 32 worlds. The renderer store (`atlas-views.ts`) shows changes at once and debounces width saves (400 ms).
+  - **Narrow windows (≤ 60rem):** the Atlas & inspector drawer is now a grid column beside the world (`auto` width, `min(width, 50vw)` open), not a `position: fixed` overlay, so it can't cover editing controls.
 - **M2-11 project links (#76, merged as 39400be, ADR-0029):** typed, descriptive links between projects of one world, plus the bounded query that will feed the Atlas Connections tab. No UI yet (M2-13 #78).
   - Schema v6: `project_relations` (migration 6). Composite FKs `(source_project_id, world_id)` and `(target_project_id, world_id)` → `projects (id, world_id)`, RESTRICT. CHECKs: no self-link; types `depends_on`/`supports`/`references`; origin `user` only; a user link is `confirmed`. Unique `(source, target, type)`. Every type is directed: the source → target order is the direction (A→B and B→A are different links; no direction column).
   - IPC (Zod, router, preload `window.atlas.relation` / `window.atlas.graph`):
@@ -273,6 +280,10 @@
   - §22.2 #2 at command level: ten pinned projects, an 11th created, the hotbar and all 11 projects unchanged, and pinning the 11th into any slot is `slot_occupied`.
 
 ## Changed components
+- #77 (M2-12):
+  - Source: `src/common/preferences/atlas-view.ts` (new), `src/common/contracts/{profile,channels,atlas-api}.ts`, `src/main/ipc/commands/profile.ts`, `src/main/ipc/register.ts`, `src/main/profiles/profile-service.ts` (`getAtlasViews`, `updateAtlasView`), `src/preload/index.ts`, `src/renderer/world/world-camera.ts` (new), `src/renderer/world/{use-world-scene.ts,WorldView.tsx}`, `src/renderer/atlas/{RealmAtlasPanel.tsx,MapTab.tsx,map-geometry.ts,atlas-views.ts}` (new panel), `src/renderer/atlas/SpikeAtlasPanel.tsx` (moved from `RealmAtlasPanel.tsx`), `src/renderer/app/{MainScreen.tsx,DeveloperSpikes.tsx,app.css}`.
+  - Tests: `tests/domain/atlas-view-preferences.test.ts` (new, 12), `tests/domain/world-camera.test.ts` (new, 6), `tests/domain/atlas-map.test.ts` (new, 14), `tests/integration/profile-contract.test.ts` (+6), `tests/e2e/realm-atlas.spec.ts` (new, 7), `tests/e2e/shell.spec.ts` (API shape).
+  - Docs: ADR-0031, DATA_MODEL §9.3 row, lesson 036, glossary, changelog.
 - #76 (M2-11):
   - Source: `src/main/storage/migrations/index.ts` (migration 6), `src/main/storage/repositories/project-relation-repository.ts` (new), `repository-support.ts` (`guardedDelete` accepts `project_relations`), `src/main/services/graph-service.ts` (new), `src/main/ipc/commands/{relation,graph}.ts` (new), `src/main/ipc/register.ts`, `src/common/contracts/{relation,graph}.ts` (new), `channels.ts`, `atlas-api.ts`, `src/preload/index.ts`.
   - Tests: `tests/integration/storage-migration-v6.test.ts` (new), `storage-project-relation-repository.test.ts` (new), `relation-graph-contract.test.ts` (new, 20), `tests/e2e/relations.spec.ts` (new), `shell.spec.ts` (API shape), and the schema v6 expectations in `storage.spec.ts` and `packaged.spec.ts`.
@@ -313,6 +324,7 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- #77 (M2-12), 2026-11-23, local Windows 11, main checkout on `feat/77-atlas-shell-map` (main @ fb786ed): typecheck, lint, format:check pass. Unit/integration 1110/1110 (new: atlas-view preferences 12, world-camera 6, atlas-map 14, profile.atlasView contract 6). Full E2E 94/94; `realm-atlas.spec.ts` 21/21 over `--repeat-each=3`. Negative control: with the old `position: fixed` drawer the overlap test fails (Expected false, Received true). A screenshot check (`webContents.capturePage`, 1280 × 800 and 900 × 700) showed 2×2 buildings as specks on a 64 × 64 Map; fixed with a thick same-colour stroke. Packaged E2E not re-run (no packaging change). Reviews: invariant-reviewer found no violations (re-ran typecheck and the 92 new/changed unit and contract tests). security-auditor approved with no Critical/High/Medium findings and 3 Lows: L1 (the size test used a smaller camera centre than the schema allows) fixed by testing ±99999.99; L2 (unknown top-level preference keys are kept and share the 16 KiB budget) and L3 (world IDs not checked against `worlds`) recorded in ADR-0031 as known limits.
 - #76 (M2-11), 2026-11-23, local Windows 11, main checkout on `feat/76-project-links` (main @ 19c09e9).
   - typecheck, lint and format:check pass.
   - Unit/integration: 1064/1064.
@@ -484,6 +496,7 @@
 - CI: see the PR checks (first CI run with E2E on windows-latest).
 
 ## Known limitations
+- M2-12 (#77): the Connections tab is a labelled placeholder until M2-13 (#78). The Map's SVG shapes aren't focusable; the Buildings list is the keyboard path. Service structures would draw on the Map but can't be selected (none are seeded yet). In very narrow windows an open drawer leaves the world small (user's accepted trade-off). The pinned project ID isn't checked against the database; a stale pin shows "no longer here". Atlas views are last write wins, and views for deleted worlds stay until the 32-entry cap drops them. "Go to" keeps the current zoom.
 - M2-11 (#76):
   - No UI yet: the Connections tab comes in M2-13 (#78).
   - Only `user` links exist. Parsed, execution and AI-proposed links, evidence columns and file/note links come later (`graph_edges`, M3+).
@@ -568,6 +581,7 @@
 - Graph entities (M1-4): if an entity's tombstone ever disagrees with its project (for example after a manual edit), trash and restore of that project fail with `invalid_transition`/`not_found` and change nothing. That's safe, but there's no repair path yet; an integrity check belongs with backup/restore (M7). `source_locator` is unused until imports: before it holds external paths, store a root ID plus a relative path, re-resolve it under SECURITY rules on every use, and tighten its CHECK (security review notes in the #31 PR). The tombstone methods match on the current state, not an expected revision, because entities only change with their project.
 
 ## Data/schema changes
+- #77 (M2-12): no migration. `preferences_json` gains `{ "atlasViews": { <worldId>: { tab, collapsed, expanded, width, pinnedProjectId, followSelection } } }` (ADR-0031). IPC: new `profile.atlasView.get/update`.
 - #76 (M2-11): **schema v6**. Migration 6 creates `project_relations`; existing rows are untouched and start with no links. The automatic pre-migration backup applies as usual. IPC: new `relation.create`, `relation.remove` and `graph.worldConnections`.
 - #79 (M2-14): no migration. `profile_settings.preferences_json` now holds `{ "comfort": { reducedMotion, buildingLabels, cameras: { <worldId>: { centerX, centerY, zoom } } } }` (ADR-0028). IPC: new `profile.preferences.get/update`; `PlacementSummary` gained `projectName` (nullable).
 - Schema v1 (migration 0001 `create_app_meta`): `app_meta(key PK, value, created_at, updated_at, revision)` STRICT, plus the runner's `schema_migrations(version PK, name, applied_at)`.
@@ -585,6 +599,7 @@
 - `userData/profiles-index.json` (M1-2, not in SQLite): `{ schemaVersion: 1, profiles: [{ id, displayName }], lastUsedProfileId }`. Profile folders: `profiles/<default | uuid>/`.
 
 ## Decisions
+- [ADR-0031](../adr/0031-atlas-view-preferences-and-docked-drawer.md) (M2-12 #77): Realm Atlas display choices per world live under `atlasViews` in `preferences_json` via `profile.atlasView.get/update` (no revision, max 32 worlds); `graph_view_states` waits for layout coordinates; the narrow drawer docks as a grid column so it can't cover editing controls
 - [ADR-0030](../adr/0030-react-flow-v13.md) (Dependabot PR #55, merged as 918a758): `@xyflow/react` 12.12.1 → 13.0.2. `onNodesChange` now receives a `NodeChangeset` object (we read `getByType('select')`), and `colorMode` became `forceColorMode`; the CSS file and CSP are unchanged
 - [ADR-0029](../adr/0029-project-links-in-project-relations.md) (M2-11 #76): project links live in a dedicated `project_relations` table (composite FKs keep both ends in one world), not a general `graph_edges`; the source → target order is the direction (A→B ≠ B→A, no direction column); links of a trashed project are kept but hidden from `graph.worldConnections` and its counts; `relation.remove` takes an expected revision; deterministic 150-node / 300-edge cut with omitted counts
 - M2-9 (user choices via AskUserQuestion, no ADR, recorded in `docs/sessions/2026-11-23-library-panel.md`): "Hide world view" is a session-only toggle, not a saved setting; Placed / Not placed is a second "On map" filter group that combines with the status filter and loads every page while on.
@@ -624,6 +639,7 @@
 - For M2-10: replace the `.hotbar-slot` list. The library (M2-9) is built: a "Pin to hotbar" action fits as another optional prop on `ProjectItem` (like `onOpen`), so it shows in both the sidebar list and the library. E2E that look for a "world view" button must scope to `details.developer-spikes`, since the main screen has its own toggle. #56's worker-boundary follow-up is #82 (M4).
 - For M2-10 (#75): use `hotbar.list` (with `projectStatus`) and show an archived/trashed pin as such. On `slot_occupied`, show the occupant and ask before retrying with `replace: { expectedTargetId }`. #70 already draws ten placeholder `.hotbar-slot`s and provides `useShortcut(key, run)` in `ShortcutLayer.tsx` for the `1`–`0` keys.
 - For M2-13 (#78), the Connections tab:
+  - The shell is built (M2-12 #77): replace the placeholder in the `view.tab === 'connections'` branch of `RealmAtlasPanel.tsx`. Selection goes through the same `ProjectSelection` (`selection.select`), and the pinned project is `view.pinnedProjectId`. Saved layout coordinates would justify the `graph_view_states` table (ADR-0031). The Atlas column is `min(width, 45vw)` wide (256–720 px), `min(720px, 60vw)` expanded.
   - Read `graph.worldConnections` and refetch it after each committed `relation.create`/`remove`. React Flow's state is never the authoritative copy.
   - Show `omittedNodes` and `omittedEdges`. Draw arrowheads from source to target, and style archived nodes differently.
   - `relation.remove` needs the edge's `revision`.

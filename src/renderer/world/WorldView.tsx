@@ -32,6 +32,7 @@ import { PlacementToolBar } from './PlacementToolBar';
 import { DEFAULT_TILE, type Camera, type MapSize } from './projection';
 import { useWorldScene } from './use-world-scene';
 import { buildingSprites } from './world-assets';
+import type { WorldCamera } from './world-camera';
 import type { WorldPlacements } from './world-placements';
 import { WorldToolbar, WorldUnavailableNotices } from './WorldChrome';
 
@@ -47,6 +48,8 @@ interface WorldViewProps {
   readonly onOpenProject: (projectId: string) => void;
   /** Comfort preferences (M2-14): the name label toggle and the saved camera. */
   readonly comfort: Comfort;
+  /** Shares the viewport with the Realm Atlas Map and takes its "Go to" requests (M2-12). */
+  readonly camera?: WorldCamera;
 }
 
 /** Bundled building art by appearance ID. Read once: the manifest is part of the build. */
@@ -92,6 +95,7 @@ export function WorldView({
   history,
   onOpenProject,
   comfort,
+  camera,
 }: WorldViewProps) {
   const map = useMemo<MapSize>(
     () => ({ columns: world.gridWidth, rows: world.gridHeight }),
@@ -171,8 +175,22 @@ export function WorldView({
     onCamera(scene) {
       reportDrawn(sectionRef.current, scene);
     },
+    onViewport(viewport) {
+      camera?.report(viewport);
+    },
   });
-  const { sceneRef, hostRef, status, hover, ready, restoreCamera } = view;
+  const { sceneRef, hostRef, status, hover, ready, restoreCamera, centerOn } = view;
+
+  // The Map's "Go to" lands here. When this view goes away (hidden, another world) the Map
+  // stops drawing a viewport.
+  useEffect(() => {
+    if (camera === undefined) return;
+    const detach = camera.attach(centerOn);
+    return () => {
+      detach();
+      camera.report(null);
+    };
+  }, [camera, centerOn]);
 
   // The preferences are read at startup alongside the scene. If they arrive after the scene
   // started, open the saved view then, unless the user has already moved the camera.

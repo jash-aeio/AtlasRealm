@@ -69,6 +69,8 @@ import {
 import { createProfileSwitchHandler, profileSwitchCommand } from './commands/profile-switch';
 import { createTemplateListHandler, templateListCommand } from './commands/template-list';
 import {
+  createProfileAtlasViewGetHandler,
+  createProfileAtlasViewUpdateHandler,
   createProfileCreateHandler,
   createProfileListHandler,
   createProfileRenameHandler,
@@ -76,6 +78,8 @@ import {
   createProfileSettingsUpdateHandler,
   createProfilePreferencesGetHandler,
   createProfilePreferencesUpdateHandler,
+  profileAtlasViewGetCommand,
+  profileAtlasViewUpdateCommand,
   profileCreateCommand,
   profileListCommand,
   profileRenameCommand,
@@ -149,6 +153,8 @@ export function registerIpcHandlers(
   handle(profileSettingsUpdateCommand, createProfileSettingsUpdateHandler(profiles));
   handle(profilePreferencesGetCommand, createProfilePreferencesGetHandler(profiles));
   handle(profilePreferencesUpdateCommand, createProfilePreferencesUpdateHandler(profiles));
+  handle(profileAtlasViewGetCommand, createProfileAtlasViewGetHandler(profiles));
+  handle(profileAtlasViewUpdateCommand, createProfileAtlasViewUpdateHandler(profiles));
   handle(worldCreateCommand, createWorldCreateHandler(activeProfile));
   handle(worldListCommand, createWorldListHandler(activeProfile));
   handle(worldRenameCommand, createWorldRenameHandler(activeProfile));

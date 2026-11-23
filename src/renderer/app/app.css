@@ -339,7 +339,7 @@ button.primary {
     'top top top' auto
     'side world right' minmax(0, 1fr)
     'bottom bottom bottom' auto
-    / 11rem minmax(0, 1fr) 20rem;
+    / 11rem minmax(0, 1fr) var(--side-width, 20rem);
   height: 100vh;
   background: #1d1f26;
 }
@@ -490,9 +490,128 @@ button.primary {
 
 .side-column {
   grid-area: right;
+  position: relative;
   overflow-y: auto;
   padding: 0.75rem;
   border-left: 1px solid #3a3d48;
+}
+
+/* Realm Atlas (M2-12 #77): the real panel at the top of the side column. */
+.atlas-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.atlas-panel-header h2 {
+  flex: 1;
+}
+
+.atlas-pin {
+  margin: 0.4rem 0 0;
+  padding: 0.25rem 0.4rem;
+  border-left: 4px solid #f2c14e;
+  background: #262833;
+}
+
+.atlas-pin-mark {
+  color: #f2c14e;
+}
+
+.atlas-tabpanel {
+  margin-top: 0.5rem;
+}
+
+.atlas-map-svg {
+  display: block;
+  width: 100%;
+  height: 12rem;
+  border: 1px solid #3a3d48;
+  border-radius: 6px;
+  background: #1b1d24;
+}
+
+.atlas-panel[data-expanded='true'] .atlas-map-svg {
+  height: 28rem;
+}
+
+/* Strokes stay one screen pixel wide whatever the map's scale (the viewBox is world pixels). */
+.atlas-map-svg * {
+  vector-effect: non-scaling-stroke;
+}
+
+.atlas-map-ground {
+  fill: #2f4a32;
+  stroke: #7d8794;
+  stroke-width: 1;
+}
+
+/*
+ * A small building on a big map is only a few pixels across, so a thick stroke in its own colour
+ * gives it a usable size. Strokes are part of the click target and stay a fixed screen size.
+ */
+.atlas-map-building {
+  fill: #c9a86a;
+  stroke: #c9a86a;
+  stroke-width: 6;
+  stroke-linejoin: round;
+  cursor: pointer;
+}
+
+.atlas-map-building[data-archived='true'] {
+  fill: #7d8794;
+  stroke: #7d8794;
+}
+
+/* Selection: the world's highlight colour plus a thicker outline (never colour alone). */
+.atlas-map-building[data-selected='true'] {
+  fill: #6bc6f2;
+  stroke: #ffffff;
+  stroke-width: 9;
+}
+
+.atlas-map-pin {
+  fill: none;
+  stroke: #f2c14e;
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.atlas-map-viewport {
+  fill: rgb(255 255 255 / 8%);
+  stroke: #efe2bf;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
+.atlas-map-legend {
+  font-size: 0.8rem;
+}
+
+.atlas-map-actions,
+.atlas-pin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* The side column's resize handle (a WAI-ARIA window splitter) on its left edge. */
+.atlas-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.atlas-resize:hover,
+.atlas-resize:focus-visible {
+  background: #6bc6f2;
 }
 
 .side-card {
@@ -559,14 +678,18 @@ kbd {
   font-size: 0.8em;
 }
 
-/* Narrow windows: the Atlas + inspector column becomes a drawer over the world. */
+/*
+ * Narrow windows: the Atlas + inspector column becomes a drawer. It docks beside the world (it
+ * takes a grid column of its own) instead of floating over it, so it can never cover the world's
+ * editing controls or an open panel (GRAPH_MODEL §30.1, ADR-0031). Closed, the column is empty.
+ */
 @media (max-width: 60rem) {
   .shell {
     grid-template:
-      'top top' auto
-      'side world' minmax(0, 1fr)
-      'bottom bottom' auto
-      / 9rem minmax(0, 1fr);
+      'top top top' auto
+      'side world right' minmax(0, 1fr)
+      'bottom bottom bottom' auto
+      / 9rem minmax(0, 1fr) auto;
   }
 
   .drawer-toggle {
@@ -578,15 +701,9 @@ kbd {
   }
 
   .side-column[data-open='true'] {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 10;
     box-sizing: border-box;
-    width: min(20rem, 90vw);
+    width: min(var(--side-width, 20rem), 50vw);
     background: #1b1d24;
-    box-shadow: -4px 0 12px rgb(0 0 0 / 50%);
   }
 }
 

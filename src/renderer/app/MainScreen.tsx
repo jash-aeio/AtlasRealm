@@ -10,7 +10,11 @@
 // "Hide world view" (M2-9 #74) unmounts the canvas for this session; nothing is saved. Every
 // project action stays in the Projects panel and the library. Placing or moving by hand needs
 // the map, so those show it again.
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
+
+import { atlasViewOf, ATLAS_WIDTH_MAX } from '../../common/preferences/atlas-view';
+import { createAtlasViewPreferences } from '../atlas/atlas-views';
+import { AtlasResizeHandle, RealmAtlasPanel } from '../atlas/RealmAtlasPanel';
 
 import type { LibraryTabId } from '../library/library-tabs';
 import { LibraryPanel } from '../library/LibraryPanel';
@@ -27,6 +31,7 @@ import { createPlacementHistory } from '../world/placement-history';
 import { createPlacementTool, type PlacementActions } from '../world/placement-tool';
 import { ProjectInspector } from '../world/ProjectInspector';
 import { worldSprite } from '../world/world-assets';
+import { createWorldCamera } from '../world/world-camera';
 import {
   createWorldPlacements,
   placedProjectIds,
@@ -94,6 +99,19 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
   const drawerVisible = narrow && drawerOpen;
   const drawerToggle = useRef<HTMLButtonElement>(null);
   const drawerClose = useRef<HTMLButtonElement>(null);
+  /** The Realm Atlas display choices of every world, saved per profile (M2-12, ADR-0031). */
+  const [atlasViews] = useState(() => createAtlasViewPreferences(window.atlas.profile));
+  const atlasViewsState = useStore(atlasViews.store);
+  useEffect(() => {
+    void atlasViews.load();
+    // A width still waiting for its debounce is saved when the screen goes away.
+    const flush = () => void atlasViews.flush();
+    window.addEventListener('pagehide', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, [atlasViews]);
 
   function openPanel(id: PanelId, project?: OpenPanel['project']) {
     const active = document.activeElement;
@@ -162,6 +180,7 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
     const history = createPlacementHistory(window.atlas, toolWorld, placements);
     return {
       placements,
+      camera: createWorldCamera(),
       selection: createProjectSelection(),
       history,
       tool: createPlacementTool(
@@ -187,7 +206,15 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
   );
 
   if (world === undefined || scope === null) return null;
-  const { placements, selection, tool, history } = scope;
+  const { placements, selection, tool, history, camera } = scope;
+  const atlasView = atlasViewOf(atlasViewsState.views, world.id);
+  // The side column's width: the saved width, or the larger expanded size. Each is capped to
+  // part of the window so the world always keeps room (app.css reads --side-width).
+  const shellStyle = {
+    '--side-width': atlasView.expanded
+      ? `min(${String(ATLAS_WIDTH_MAX)}px, 60vw)`
+      : `min(${String(atlasView.width)}px, 45vw)`,
+  } as CSSProperties;
 
   /** The map actions the Projects list and the inspector offer (M2-7). */
   const placementActions: PlacementActions = {
@@ -267,7 +294,7 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
 
   return (
     <>
-      <div className="shell">
+      <div className="shell" style={shellStyle}>
         <div className="shell-top">
           <header className="top-bar">
             <h1 className="brand">Atlas Realm</h1>
@@ -354,6 +381,7 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
                 history={history}
                 onOpenProject={openProject}
                 comfort={comfort}
+                camera={camera}
               />
             </WorldErrorBoundary>
           )}
@@ -380,14 +408,22 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
               Close Atlas &amp; inspector
             </button>
           )}
-          <section className="side-card" aria-labelledby={`${sideColumnId}-atlas`}>
-            <h2 id={`${sideColumnId}-atlas`}>Realm Atlas</h2>
-            <p className="not-built">Not built yet (planned later in M2)</p>
-            <p className="muted">
-              A map of your world and the connections between projects. A mock version lives under
-              Developer spikes.
-            </p>
-          </section>
+          {!atlasView.expanded && (
+            <AtlasResizeHandle
+              width={atlasView.width}
+              onWidth={(width) => void atlasViews.change(world.id, { width })}
+            />
+          )}
+          <RealmAtlasPanel
+            key={world.id}
+            world={world}
+            placements={placements}
+            selection={selection}
+            camera={camera}
+            views={atlasViews}
+            tool={tool}
+            version={projectChanges}
+          />
           <section className="side-card" aria-labelledby={`${sideColumnId}-inspector`}>
             <h2 id={`${sideColumnId}-inspector`}>Inspector</h2>
             <ProjectInspector
