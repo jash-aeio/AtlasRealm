@@ -398,6 +398,14 @@ button.primary {
   background: #2f4a32;
 }
 
+/* Shown instead of the canvas while "Hide world view" is on (M2-9). */
+.world-hidden {
+  padding: 1rem;
+  background: #1d1f26;
+  height: 100%;
+  box-sizing: border-box;
+}
+
 /* The product world fills the world area; panels open over it. */
 .world-product {
   display: flex;

@@ -6,6 +6,10 @@
 // closes the drawer, then the open panel. Closing a panel only hides it; focus goes back to
 // whatever opened it (UI_SPEC §6.6). Starting the placement tool (M2-7) closes the panel so the
 // map is visible; the tool then holds focus until it closes.
+//
+// "Hide world view" (M2-9 #74) unmounts the canvas for this session; nothing is saved. Every
+// project action stays in the Projects panel and the library. Placing or moving by hand needs
+// the map, so those show it again.
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import type { LibraryTabId } from '../library/library-tabs';
@@ -85,6 +89,8 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
 
   const narrow = useMediaQuery(NARROW);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /** True while the world canvas is hidden (session only, M2-9). */
+  const [worldHidden, setWorldHidden] = useState(false);
   const drawerVisible = narrow && drawerOpen;
   const drawerToggle = useRef<HTMLButtonElement>(null);
   const drawerClose = useRef<HTMLButtonElement>(null);
@@ -187,10 +193,12 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
   const placementActions: PlacementActions = {
     place(project) {
       closePanel({ restoreFocus: false });
+      setWorldHidden(false);
       tool.startPlacing(project);
     },
     move(project) {
       closePanel({ restoreFocus: false });
+      setWorldHidden(false);
       tool.startMoving(project);
     },
     autoPlace: (project) => tool.autoPlace(project),
@@ -293,6 +301,17 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
             </div>
             <button
               type="button"
+              data-testid="world-visibility"
+              onClick={() => {
+                // An open placement tool has nothing to point at once the map is gone.
+                if (!worldHidden) tool.cancel();
+                setWorldHidden((hidden) => !hidden);
+              }}
+            >
+              {worldHidden ? 'Show world view' : 'Hide world view'}
+            </button>
+            <button
+              type="button"
               ref={drawerToggle}
               className="drawer-toggle"
               aria-expanded={drawerVisible}
@@ -317,18 +336,27 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
         <Sidebar open={panel?.id ?? null} onOpen={openPanel} />
 
         <div className="world-area" data-testid="world-area">
-          <WorldErrorBoundary>
-            <WorldView
-              key={world.id}
-              world={world}
-              placements={placements}
-              selection={selection}
-              tool={tool}
-              history={history}
-              onOpenProject={openProject}
-              comfort={comfort}
-            />
-          </WorldErrorBoundary>
+          {worldHidden ? (
+            <div className="world-hidden" data-testid="world-hidden">
+              <p>The world view is hidden. Nothing about your projects changed.</p>
+              <p className="muted">
+                Every project action is still available from Projects and the Library (E).
+              </p>
+            </div>
+          ) : (
+            <WorldErrorBoundary>
+              <WorldView
+                key={world.id}
+                world={world}
+                placements={placements}
+                selection={selection}
+                tool={tool}
+                history={history}
+                onOpenProject={openProject}
+                comfort={comfort}
+              />
+            </WorldErrorBoundary>
+          )}
           {shownPanel !== null && (
             <EntrancePanel
               key={`${shownPanel.id}:${shownPanel.project?.projectId ?? ''}`}
