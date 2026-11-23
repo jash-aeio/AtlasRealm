@@ -31,6 +31,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 - Projects in an archived world can no longer be changed (#59): renaming, editing the goal, archiving, restoring, trashing and restoring from the trash are all refused with "This world is archived. Restore it before changing its projects.", and nothing is changed. You can still open and list those projects. There is no button to archive a world yet, so this is a safety rule for later screens rather than something you will see today.
 
 ### Security
+- Stricter image rule (#58): the app's window now only shows images from the app's own files. It no longer accepts images written directly into a web address (`data:` URLs), which nothing in the app used. This removes one way that injected content could put pictures on screen.
 - Faster refusal of bad requests (#56): the app now refuses binary data, unusual objects and oversized requests from its own window before checking them in detail. Before, one 10 MB binary message could keep the trusted main process busy for several seconds. The 64 KiB limit is unchanged, but it now applies to the request as sent: padding that would be trimmed away still counts.
 
 ## [0.2.0-m1] - 2026-11-20 — M1: Profiles, worlds, and project persistence

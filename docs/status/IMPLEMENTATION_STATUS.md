@@ -2,7 +2,7 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-24 · **Branch:** feat/62-profile-security-notice (main @ c6ff673, main checkout)
+**Last updated:** 2026-11-24 · **Branch:** chore/58-csp-img-src (main @ e69139d, main checkout)
 
 ## Current milestone
 **M2 — Isometric world, placement, hotbar, library and Atlas shell** (⏳ planned 2026-11-20: 21 issues, see `docs/pm/milestones/M2.md`). IMP-1 moved into M3.
@@ -216,7 +216,10 @@
   - Shortcut layer (`src/renderer/app/shortcuts.ts`): one `keydown` listener on `window`. It ignores keys from `input`/`textarea`/`select`/`contenteditable`, while a modal `<dialog>` is open, during IME composition, on key repeat, with the Windows key, and when another handler already used the key. Modifiers must match exactly, and the newest shortcut for a key wins. Components register keys with `useShortcut(key, run)` (`ShortcutLayer.tsx`).
   - `E` toggles the library (a placeholder until M2-9 #74). Escape closes the drawer, then the open panel. Closing only unmounts the view, and focus returns to what opened it (or to the entrance button if that element is gone). Escape inside a text field stays with the field: the create form uses it to cancel its draft.
   - Developer spikes moved below the shell, still collapsed and labelled as M0 mock data.
-- **Profile security notice (#62, branch `feat/62-profile-security-notice`, no ADR):** the first-launch profile step and Settings → Profiles say plainly that profiles keep data apart but are not password-protected or encrypted, and that anyone who can sign in to this Windows account (or an administrator) can read them (SECURITY.md §13.5).
+- **CSP images from our own origin only (#58, branch `chore/58-csp-img-src`, no ADR):** the renderer CSP's `img-src` is now `'self'` (was `'self' data:`), in production and dev.
+  - Checked first: our code has no `data:` images; PixiJS uses `data:` URIs only in its `Assets` loader and `ExtractSystem`, which we don't call (art loads through a plain `<img>`); `@xyflow/react` has none; Vite's `assetsInlineLimit: 0` already keeps small images as files.
+  - An E2E test proves a valid `data:` GIF is refused while a bundled PNG loads, and it fails if `data:` is put back.
+- **Profile security notice (#62, merged as e69139d, no ADR):** the first-launch profile step and Settings → Profiles say plainly that profiles keep data apart but are not password-protected or encrypted, and that anyone who can sign in to this Windows account (or an administrator) can read them (SECURITY.md §13.5).
   - One component, `src/renderer/onboarding/ProfilePrivacyNote.tsx` (`<p role="note">`). Its section points to it with `aria-describedby`, and it comes before every profile control. On first launch it shows only on step 1.
   - This was the release gate "before profiles hold secrets or provider keys".
 - **M2-10 ten-slot hotbar UI (#75, merged as c6ff673, no ADR):** the bottom-bar hotbar is real.
@@ -298,6 +301,10 @@
   - §22.2 #2 at command level: ten pinned projects, an 11th created, the hotbar and all 11 projects unchanged, and pinning the 11th into any slot is `slot_occupied`.
 
 ## Changed components
+- #58:
+  - Source: `src/common/security/csp.ts`.
+  - Tests: `tests/security/csp.test.ts` (+1: "images come only from our own origin, never data: URIs"), `tests/e2e/shell.spec.ts` (+1: "CSP refuses data: images but loads bundled ones").
+  - Docs: changelog (Security), session log `docs/sessions/2026-11-24-csp-img-src.md`.
 - #62:
   - Source: `src/renderer/onboarding/ProfilePrivacyNote.tsx` (new), `src/renderer/onboarding/Onboarding.tsx`, `src/renderer/app/SettingsView.tsx`.
   - Tests: `tests/e2e/onboarding.spec.ts` (+1: "both profile screens say plainly that profiles are not encrypted").
@@ -354,6 +361,7 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- #58, 2026-11-24, local Windows 11, main checkout on `chore/58-csp-img-src` (main @ e69139d): typecheck, lint, format:check pass. Unit/integration 1134/1134 (new: 1). Full E2E 109/109 (new: 1); the world and atlas specs, which fail on any `securitypolicyviolation`, pass while Pixi and React Flow draw real art. Built `out/renderer/index.html` has `img-src 'self'`. Mutation check: with `data:` put back, the new E2E fails (`data: "loaded"`). Packaged E2E 15/15 after a fresh `pnpm package` + `package:test`.
 - #62, 2026-11-24, local Windows 11, main checkout on `feat/62-profile-security-notice` (main @ c6ff673): typecheck, lint, format:check pass. Unit/integration 1133/1133. Full E2E 108/108 (new: 1). The new test checks, on both screens, the note's exact text, that it is visible, that it is the section's accessible description, and that it comes before the first control. Packaged E2E not run (no packaging change). Reviews: invariant-reviewer passed with no findings (it confirmed no `safeStorage` use and plain SQLite profile files, so the wording is accurate). security-auditor not run: renderer copy and tests only (no main, preload, IPC contract, file or secret code). Not checked by hand in `pnpm dev`.
 - #75 (M2-10), 2026-11-23, local Windows 11, main checkout on `feat/75-hotbar-ui` (main @ efb7a74): typecheck, lint, format:check pass. Unit/integration 1133/1133 (new: hotbar-store 14). `hotbar.spec` 7/7, including §22.2 #2 through the UI (ten slots pinned in the dialog, an 11th project created, Cancel on the replace question, everything unchanged after a restart). Negative control: with the dialog replacing a filled slot without asking, the §22.2 #2 and replace tests fail (2 failed); restored. Full E2E twice: 104/107 (three `realm-atlas.spec` tests) and 106/107 (the known `world.spec` hover flake), different tests each run; `realm-atlas.spec` + `world.spec` alone 26/26. Treated as load flakes; CI to confirm. Packaged E2E not run (no packaging change). Reviews: invariant-reviewer found no violations (one note: update this file, done). security-auditor not run: the diff touches only the renderer (no main, preload, IPC contract, file or secret code). Not checked by hand in `pnpm dev`.
 - #78 (M2-13), 2026-11-23, local Windows 11, main checkout on `feat/78-atlas-connections` (main @ fca518a): typecheck, lint, format:check pass. Unit/integration 1119/1119 (new: atlas-connections 9). Full E2E 101/101 (new: `atlas-connections.spec.ts` 7). Evidence per acceptance criterion: nodes/edges/legend/counts ("nodes and links come from graph.worldConnections…", and "a world with more than 150 projects shows how much was left out", 151 projects → 150 nodes, "1 project … left out"); create/remove ("create a link through the form, then remove it…": duplicate refused, dialog text, project status/revision and placements unchanged); keyboard list ("the keyboard list shows source, relation, target and origin…"); shared selection ("selection is shared with the world and the Map, and selecting starts nothing": project states and graph unchanged); drag ("dragging a graph node leaves every building where it was…": `placement.list` identical before/after); reduced motion ("reduced motion switches the layout animation off"). A screenshot check (`webContents.capturePage`) showed four nodes in one vertical line with the link through the inner nodes; fixed (inner ring turned half a step, min radius 160) with a unit test. Negative control: with the drag handler not reaching the node (graph scrolled off-screen), the drag test fails. Packaged E2E not run (no packaging or main-process change). Reviews: invariant-reviewer found no violations (re-ran typecheck, lint and the new unit tests); its one low risk, that clicking empty graph space no longer clears the selection as the M0 spike did, is kept on purpose: the Map tab behaves the same and clicking the world ground clears it. security-auditor not run (renderer, tests and docs only; no main, preload, contract, file or credential change).
@@ -529,6 +537,7 @@
 - CI: see the PR checks (first CI run with E2E on windows-latest).
 
 ## Known limitations
+- #58: if a future feature needs Pixi's `Assets` loader, SVG/GIF textures or canvas export (`ExtractSystem`), it will hit `img-src` refusals; prefer loading files from `app://atlas`, and only widen `img-src` with a test that shows why.
 - #62: the note is plain text, not a Tab stop. Screen readers get it as the section's description, and keyboard users meet it before every control. It explains the boundary but changes nothing about it: profile data is still unencrypted on disk.
 - M2-10 (#75): moving a pin to another slot is unpin then pin (no `hotbar.move`); add one if users ask. Service slots open their panel, and five of those panels still say "not built yet". The hotbar doesn't reload when another window changes it (only after this window's own changes or a reload). Activating a project slot selects it but doesn't move the camera to its building ("Go to" in the Atlas does).
 - M2-13 (#78): dragged node positions last for the session only (ADR-0032); `graph_view_states` comes when they must survive a restart. The link form can only pick the 150 projects the graph shows (it says how many are left out). The ring gets crowded near 150 nodes (zoom and drag help). Fit-to-view isn't re-run when the panel is expanded or resized (the fit button does it). The reduced-motion E2E checks the `data-layout-animation` attribute, which comes from the same flag as the animation duration; it doesn't measure the animation. Graph nodes are focusable through React Flow, but the list is the supported keyboard path. Removing a link has no undo yet (`relation.remove` returns the link for a later undo).
@@ -596,7 +605,7 @@
 - Textures (M0-8): we don't use Pixi's `Assets` loader (its `blob:` workers and `fetch`/CORS don't fit our CSP or `app://`). Load art with `<img>` like `grid-scene.ts` does. Keep `blob:` out of the CSP.
 - Packaged app: no resource-timing entries are recorded for `app://` loads. The "every resource is from app://atlas" loop in the packaged "works offline" test therefore checks an empty list (since M0-7). Its script and stylesheet checks, which read the DOM, are real. Cause unknown; a follow-up.
 - Art: only placeholders exist. 3×3/4×4 placeholders, ground and buildings drawn from art, and the invalid marker in use all come with M1 placement. The palette lives in two places (generator script and `world-assets.ts`) because Node runs the script without a bundler.
-- CSP `img-src` still allows `data:`, which no longer seems needed (security-auditor advice). Removing it is a user decision; follow-up.
+- ~~CSP `img-src` still allows `data:`~~: fixed in #58 (`img-src 'self'` only).
 - Imported asset packs (later) need main-process path confinement (realpath, no symlinks) and digest checks on the bytes read. The manifest schema only checks path text.
 - Zod in the renderer runs `jitless` (no generated parsers). Fine at today's sizes; measure before parsing large data there.
 - `node:sqlite` is a release candidate API (ADR-0010). It works in the packaged build (M0-7 E2E).
@@ -617,6 +626,7 @@
 - Graph entities (M1-4): if an entity's tombstone ever disagrees with its project (for example after a manual edit), trash and restore of that project fail with `invalid_transition`/`not_found` and change nothing. That's safe, but there's no repair path yet; an integrity check belongs with backup/restore (M7). `source_locator` is unused until imports: before it holds external paths, store a root ID plus a relative path, re-resolve it under SECURITY rules on every use, and tighten its CHECK (security review notes in the #31 PR). The tombstone methods match on the current state, not an expected revision, because entities only change with their project.
 
 ## Data/schema changes
+- #58: none.
 - #62: none.
 - #75 (M2-10): no migration, no new IPC. The renderer uses the existing `hotbar.list/assign/clear` and `project.get`.
 - #78 (M2-13): no migration, no new IPC. The renderer uses the existing `relation.create`, `relation.remove` and `graph.worldConnections`.
@@ -674,7 +684,7 @@
 
 ## Next task
 - M2 is planned (2026-11-20): 15 new issues #66–#80 plus the follow-ups #56–#60 and #62. See `docs/pm/milestones/M2.md` and `docs/pm/DEPENDENCIES.md` (Task level: M2).
-- Lanes: **A** M2-1 #66, M2-2 #67, M2-3 #68 and M2-4 #69 (67aa27e) merged; M2-11 #76 (project links, ADR-0029) merged (39400be). **B** M2-5 #70 merged (a421ca6); M2-6 #71 merged (1c78f07); M2-7 #72 merged (be81468); M2-8 #73 merged (54870bf); M2-14 #79 merged (19c09e9). **C** M2-9 #74 (library) merged (2b97bb0); M2-12 #77 (Atlas shell) merged (fca518a); M2-13 #78 (Connections tab, ADR-0032) merged (efb7a74); M2-10 #75 (hotbar UI) merged (c6ff673). **D** #62 (profile security notice) in review on `feat/62-profile-security-notice`. Left in M2: #57, #58, #60 (parallel-safe follow-ups, ready now) and then M2-15 #80 (milestone acceptance).
+- Lanes: **A** M2-1 #66, M2-2 #67, M2-3 #68 and M2-4 #69 (67aa27e) merged; M2-11 #76 (project links, ADR-0029) merged (39400be). **B** M2-5 #70 merged (a421ca6); M2-6 #71 merged (1c78f07); M2-7 #72 merged (be81468); M2-8 #73 merged (54870bf); M2-14 #79 merged (19c09e9). **C** M2-9 #74 (library) merged (2b97bb0); M2-12 #77 (Atlas shell) merged (fca518a); M2-13 #78 (Connections tab, ADR-0032) merged (efb7a74); M2-10 #75 (hotbar UI) merged (c6ff673). **D** #62 (profile security notice) merged (e69139d); #58 (CSP `img-src` without `data:`) in review on `chore/58-csp-img-src`. Left in M2: #57, #60 (parallel-safe follow-ups, ready now) and then M2-15 #80 (milestone acceptance).
 - Parallel lanes must each use their own git worktree from the start (MULTI_AGENT_GUIDE). On 2026-11-22 #69 and #70 shared one checkout and a commit landed on the wrong branch; see `docs/sessions/2026-11-22-hotbar-commands.md`.
 - After M2-10 (#75), for M2-15 (#80): the hotbar lives per world in `MainScreen`'s `scope` (`createHotbar`); call `hotbar.refresh()` after anything that changes project names or statuses. E2E helpers (`createProjects`, `pinThroughApi`, `pinThroughUi`) are in `tests/e2e/hotbar.spec.ts`. A dialog with several steps needs a `key` per step so `autoFocus` applies (lesson 038). E2E that look for a "world view" button must scope to `details.developer-spikes`. #56's worker-boundary follow-up is #82 (M4).
 - After M2-13 (#78), for M2-15 (#80) and later graph work:
