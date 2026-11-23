@@ -8,7 +8,7 @@ import {
   ReactFlow,
   type Edge,
   type Node,
-  type NodeChange,
+  type NodeChangeset,
 } from '@xyflow/react';
 import { useCallback, useMemo } from 'react';
 
@@ -62,11 +62,13 @@ export function ConnectionsGraph({ graph, selectedId, state }: ConnectionsGraphP
 
   // React Flow reports selection as "changes" (from a click or from Enter/Space on a focused
   // node). We forward only "this node was selected" to the store and drop everything else,
-  // so the graph can never disagree with the world about what's selected.
+  // so the graph can never disagree with the world about what's selected. Since v13 the
+  // changes arrive as a `NodeChangeset` object rather than an array; `getByType` picks out
+  // the selection changes.
   const onNodesChange = useCallback(
-    (changes: NodeChange<EntityNode>[]) => {
-      for (const change of changes) {
-        if (change.type === 'select' && change.selected) state.select(change.id, 'atlas');
+    (changes: NodeChangeset<EntityNode>) => {
+      for (const change of changes.getByType('select')) {
+        if (change.selected) state.select(change.id, 'atlas');
       }
     },
     [state],
@@ -85,7 +87,7 @@ export function ConnectionsGraph({ graph, selectedId, state }: ConnectionsGraphP
         edges={edges}
         onNodesChange={onNodesChange}
         onPaneClick={onPaneClick}
-        colorMode="dark"
+        forceColorMode="dark"
         fitView
         minZoom={0.1}
         nodesDraggable={false}
