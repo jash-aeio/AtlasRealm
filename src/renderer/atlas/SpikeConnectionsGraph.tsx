@@ -39,18 +39,18 @@ function toEdges(graph: SpikeGraph): Edge[] {
   }));
 }
 
-interface ConnectionsGraphProps {
+interface SpikeConnectionsGraphProps {
   readonly graph: SpikeGraph;
   readonly selectedId: string | null;
   readonly state: SelectionState;
 }
 
 /**
- * The Connections graph (M0 spike). Selection is *controlled*: the shared store decides
+ * The M0 spike Connections graph (mock data, under Developer spikes since M2-12). Selection is *controlled*: the shared store decides
  * which node is selected, and React Flow only reports what the user clicked or pressed.
  * Nodes can't be dragged, connected or deleted here; layout is cosmetic (GRAPH_MODEL §30.5).
  */
-export function ConnectionsGraph({ graph, selectedId, state }: ConnectionsGraphProps) {
+export function SpikeConnectionsGraph({ graph, selectedId, state }: SpikeConnectionsGraphProps) {
   const baseNodes = useMemo(() => toNodes(graph), [graph]);
   const edges = useMemo(() => toEdges(graph), [graph]);
   // Only the selected node gets a new object; the others keep their identity, so React Flow

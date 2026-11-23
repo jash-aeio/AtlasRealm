@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { spikeSelection, type SelectionState } from '../state/selection';
 import { createStressGraph, SMALL_SPIKE_GRAPH } from '../state/spike-graph';
 import { useStore } from '../state/use-store';
-import { ConnectionsGraph } from './ConnectionsGraph';
+import { SpikeConnectionsGraph } from './SpikeConnectionsGraph';
 
 const SOURCE_LABELS = { atlas: 'Connections', world: 'world view' } as const;
 
@@ -48,7 +48,7 @@ export function SpikeAtlasPanel({ state = spikeSelection }: { state?: SelectionS
         <p className="muted atlas-meta" data-testid="atlas-dataset">
           {graph.name}: {graph.entities.length} entities, {graph.links.length} links
         </p>
-        <ConnectionsGraph graph={graph} selectedId={selectedId} state={state} />
+        <SpikeConnectionsGraph graph={graph} selectedId={selectedId} state={state} />
 
         <output className="atlas-selection" data-testid="atlas-selection">
           {selection.entityId === null
