@@ -1,6 +1,6 @@
 # ADR-0003: React Flow for the Realm Atlas Connections graph
 
-- **Status:** Accepted, confirmed by the M0-5 spike (2026-11-10)
+- **Status:** Accepted, confirmed by the M0-5 spike (2026-11-10). Package version changed by [ADR-0030](0030-react-flow-v13.md) (v13, 2026-11-23)
 - **Date:** 2026-11-06 (spike outcome added 2026-11-10)
 - **Milestone(s) affected:** M0, M2, M5
 
@@ -14,7 +14,7 @@ React Flow owns relationship diagrams. It shares entity IDs and selection with P
 - The M0-5 spike must prove selection sharing works. If performance at 150 nodes / 300 edges fails, revisit.
 
 ## M0-5 spike outcome (2026-11-10, #8): confirmed
-- **Package:** `@xyflow/react` 12.12.1 (MIT), exact pin. It needs its CSS file, which Vite bundles into our stylesheet. It injects no runtime `<style>` tags, so the production CSP is unchanged and the E2E tests saw no violations.
+- **Package:** `@xyflow/react` 12.12.1 (MIT), exact pin (now 13.0.2: changed by ADR-0030). It needs its CSS file, which Vite bundles into our stylesheet. It injects no runtime `<style>` tags, so the production CSP is unchanged and the E2E tests saw no violations.
 - **Selection sharing works both ways** through one store (`src/renderer/state/`, built on `useSyncExternalStore`, no extra dependency). React Flow's selection is controlled: the store decides `selected`, and React Flow's "select" changes are forwarded to the store. E2E tests (built app) check graph click → Pixi highlight (by pixels), world click → graph node, keyboard paths, and a world remount.
 - **Performance at 150 nodes / 300 edges** (local Windows 11, built app, 6 runs):
   - Loading the full graph: 84–184 ms.
