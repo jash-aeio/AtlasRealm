@@ -50,13 +50,32 @@ We chose **strict on input, lenient on read** and **refuse the whole U+E0100–U
   U+2764 U+FE0F, CJK standardized variants).
 - Reading back: `normalizeStoredName` keeps the pre-#60 rules for the profile index, and
   `StoredDisplayName` (a plain string, at most 400 UTF-16 units) is used for names in replies.
+- The startup repair (`ensureProfileSettings`) copies the index name into the settings row with
+  the stored rules too (`nameRule: 'stored'`). With the strict rule, an older name would stop
+  the app from starting. `ProfileService.create` and `rename` check new names strictly before
+  the index is written, because the index accepts older names.
+- After the security review, the list also covers other characters that draw nothing: the
+  Mongolian free variation selectors and vowel separator (U+180B–U+180F), Khmer invisible vowels
+  (U+17B4, U+17B5), deprecated format characters (U+206A–U+206F), interlinear annotation marks
+  (U+FFF9–U+FFFB) and musical formatting (U+1D173–U+1D17A). The braille blank (U+2800) stays
+  allowed: it is a real character in braille text.
+
+### Known gap (tracked in #106, an M3 release gate)
+Characters allowed one at a time can still be combined to hide data: one variation selector
+after every letter, selectors separated by zero-width joiners, or a pure ZWJ/ZWNJ string. Names
+made only of such characters look empty. Closing this needs context rules (a selector only
+after an emoji or a CJK ideograph, a joiner only between emoji or letters), which is subtle
+enough for its own issue. #106 also re-checks stored text when M3 builds prompts. Decided
+2026-11-24 via AskUserQuestion.
 
 ## Consequences
 - New names and goals can't carry hidden text, at the IPC boundary or in the main process.
 - Data saved under older rules still loads. It shows exactly as stored, and renaming it
   requires a clean name.
 - Prompt building (M3) must still treat stored text as untrusted: older rows may hold
-  characters the input rule now refuses, so the prompt layer should not assume clean input.
+  characters the input rule now refuses, so the prompt layer should not assume clean input (#106).
+- Mongolian text that uses free variation selectors (U+180B–U+180F) is refused in names and
+  goals. Revisit if someone needs it.
 - Signals to revisit: people ask for exact kanji variants (consider option B), or a new
   invisible-character trick shows up (extend `hidden-characters.ts`, the only place to change).
 

@@ -37,13 +37,29 @@ gate from the #34 security review, L1). `WorldSummary.name` must be lenient on o
 
 ## What was done
 - Moved to worktree `D:/MyProjectsJCB/AtlasRealm-60`: a peer session (#58) had switched the shared checkout to its branch.
-- Slice 1 (22e3ec9): shared `hidden-characters.ts`; contracts and repositories refuse the new hidden characters. 126 unit cases (each refused range, allowed emoji and scripts) plus contract rows.
+- Slice 1 (22e3ec9): shared `hidden-characters.ts`; contracts and repositories refuse the new hidden characters. 126 unit cases at first, 156 after the review fixes (each refused range, allowed emoji and scripts) plus contract rows.
 - Slice 2 (ec6fb95): lenient output names (world, profile, graph) and `normalizeStoredName` for the profile index. Without the source change, exactly the 4 new read-side tests fail; with it they pass.
 - ADR-0033, SECURITY §21.2 bullet, glossary terms (variation selector, ASCII smuggling, strict on input / lenient on read).
-- Checks: typecheck, lint and format:check pass; unit/integration 1269/1269.
+- Checks before review: typecheck, lint and format:check pass; unit/integration 1269/1269.
+
+## Review (/ship)
+- invariant-reviewer: no violations; it re-ran typecheck, lint and the suite itself.
+- security-auditor: no Critical/High. Decisions via AskUserQuestion:
+  - M1 (hiding data by combining characters that are allowed one at a time: a selector after each
+    letter, ZWJ/ZWNJ strings) → follow-up issue #106, an M3 release gate, recorded in ADR-0033.
+  - L1 (more invisible characters) → added in this PR, except the braille blank U+2800 (a real
+    character in braille text; its "empty-looking name" case goes to #106).
+- Fixed without asking (they follow from the decisions already made):
+  - L4: the startup repair copied index names with the strict rule, which could stop the app
+    from starting. It now uses the stored rules (`nameRule: 'stored'`). 3 tests.
+  - L2: `ProfileService.create`/`rename` check new names strictly before the index is written.
+    The suggested fix (strict schema on index write) was not used: the index is written whole,
+    so one older name would block creating any new profile.
+  - L3 (re-check stored text at prompt build) → #106.
+- Final checks: typecheck, lint, format:check pass; unit/integration 1302/1302.
 
 ## Gotchas
 - Write and Edit turn a written backslash-u escape into the real invisible character. Tests build hidden characters with String.fromCodePoint; source regexes were restored with a small Node script and checked with grep -P.
 
 ## Open questions
-- None. M3 prompt building should still treat stored text as untrusted (older rows may hold characters now refused on input).
+- None open. Follow-up #106 (M3 release gate). M3 prompt building should still treat stored text as untrusted (older rows may hold characters now refused on input).
