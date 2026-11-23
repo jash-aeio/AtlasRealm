@@ -8,6 +8,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 
 import type { ProjectStatus } from '../../common/contracts/project';
 import type { WorldSummary } from '../../common/contracts/world';
+import type { Hotbar } from '../hotbar/hotbar-store';
 import { useStore } from '../state/use-store';
 import type { PlacementActions } from '../world/placement-tool';
 import { CreateProjectForm } from './CreateProjectForm';
@@ -39,6 +40,8 @@ interface ProjectsPanelProps {
   readonly placementActions?: PlacementActions;
   /** Shows a project's details; each row gets an Open button when this is given (M2-9). */
   readonly onOpenProject?: (projectId: string) => void;
+  /** This world's hotbar, for each row's "Pin to hotbar" (M2-10). */
+  readonly hotbar?: Hotbar;
 }
 
 const FILTERS: readonly ProjectStatus[] = ['active', 'archived', 'trashed'];
@@ -51,6 +54,7 @@ export function ProjectsPanel({
   changeToken = 0,
   placementActions,
   onOpenProject,
+  hotbar,
 }: ProjectsPanelProps) {
   const searchId = useId();
   const formId = useId();
@@ -210,6 +214,7 @@ export function ProjectsPanel({
               placed={placedIds === null ? undefined : placedIds.has(project.id)}
               {...(placementActions === undefined ? {} : { placementActions })}
               {...(onOpenProject === undefined ? {} : { onOpen: onOpenProject })}
+              {...(hotbar === undefined ? {} : { hotbar })}
             />
           ))}
         </ul>

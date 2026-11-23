@@ -96,6 +96,8 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Message passing** | Processes share no memory; they send each other copies of plain-data messages | `worker-protocol.ts` |
 | **MessagePort / MessageChannel** | A private two-way pipe. Whoever holds the two ends can talk; nobody else can | `utility-transport.ts` |
 | **Request ID (correlation ID)** | A unique ID on each request that its reply repeats, so replies can arrive in any order and still reach the right caller | `worker-bridge.ts` |
+| **Reconciliation (React)** | How React compares the new render with the old one: an element of the same type at the same position is reused (only its props change); a different type or `key` is thrown away and mounted fresh | lesson 038 |
+| **Remount (forced with `key`)** | Giving a component a new `key` so React builds it from scratch, which resets its state and re-runs mount-only behaviour such as `autoFocus` | `PinToHotbar.tsx`, `ProjectInspector.tsx`, lesson 038 |
 | **AbortController / AbortSignal** | The standard JavaScript way to ask running work to stop. The controller fires; code holding the signal stops | `dispatcher.ts` |
 | **Stale reply** | A reply that arrives after its request was cancelled or timed out. It's dropped, never delivered | `worker-bridge.ts` |
 | **Sprite** | A single picture (PNG) drawn into the world at a position, e.g. a building or a marker | `grid-scene.ts` |

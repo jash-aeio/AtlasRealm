@@ -7,6 +7,10 @@
 // whatever opened it (UI_SPEC §6.6). Starting the placement tool (M2-7) closes the panel so the
 // map is visible; the tool then holds focus until it closes.
 //
+// The hotbar (M2-10 #75) belongs to the world: keys 1–0 select a pinned project or open a
+// pinned service's panel. "Pin to hotbar" sits in the project list, the library, the inspector
+// and the service panels.
+//
 // "Hide world view" (M2-9 #74) unmounts the canvas for this session; nothing is saved. Every
 // project action stays in the Projects panel and the library. Placing or moving by hand needs
 // the map, so those show it again.
@@ -16,6 +20,14 @@ import { atlasViewOf, ATLAS_WIDTH_MAX } from '../../common/preferences/atlas-vie
 import { createAtlasViewPreferences } from '../atlas/atlas-views';
 import { AtlasResizeHandle, RealmAtlasPanel } from '../atlas/RealmAtlasPanel';
 
+import {
+  createHotbar,
+  SERVICE_ENTRANCES,
+  serviceOfEntrance,
+  type HotbarEntry,
+} from '../hotbar/hotbar-store';
+import { Hotbar } from '../hotbar/Hotbar';
+import { PinServiceToHotbar } from '../hotbar/PinToHotbar';
 import type { LibraryTabId } from '../library/library-tabs';
 import { LibraryPanel } from '../library/LibraryPanel';
 import { PlaceholderAvatar } from '../onboarding/PlaceholderAvatar';
@@ -63,7 +75,6 @@ const EMPTY_PLACEMENTS = createStore<WorldPlacementsState>({
   placements: [],
   error: null,
 });
-const HOTBAR_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'] as const;
 
 export function MainScreen(props: MainScreenProps) {
   return (
@@ -180,6 +191,7 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
     const history = createPlacementHistory(window.atlas, toolWorld, placements);
     return {
       placements,
+      hotbar: createHotbar(window.atlas, worldId),
       camera: createWorldCamera(),
       selection: createProjectSelection(),
       history,
@@ -194,6 +206,7 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
   }, [profileId, worldId, gridWidth, gridHeight]);
   useEffect(() => {
     void scope?.placements.refresh();
+    void scope?.hotbar.refresh();
   }, [scope]);
   /** Bumped after any project change, so the inspector and details read it again. */
   const [projectChanges, setProjectChanges] = useState(0);
@@ -206,7 +219,7 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
   );
 
   if (world === undefined || scope === null) return null;
-  const { placements, selection, tool, history, camera } = scope;
+  const { placements, selection, tool, history, camera, hotbar } = scope;
   const atlasView = atlasViewOf(atlasViewsState.views, world.id);
   // The side column's width: the saved width, or the larger expanded size. Each is capped to
   // part of the window so the world always keeps room (app.css reads --side-width).
@@ -242,7 +255,26 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
   /** After a change in the Projects list: archive and trash remove buildings (ADR-0025). */
   function projectsChanged() {
     void placements.refresh();
+    // Pins stay, but their names and statuses may have changed.
+    void hotbar.refresh();
     setProjectChanges((n) => n + 1);
+  }
+
+  /** A hotbar slot's key or click: select its project, or open its service's panel. */
+  function activateSlot(entry: HotbarEntry) {
+    if (entry.target.type === 'service') {
+      openPanel(SERVICE_ENTRANCES[entry.target.id]);
+      return;
+    }
+    selection.select(entry.target.id);
+    // In a narrow window the inspector lives in the drawer; show it.
+    if (narrow) setDrawerOpen(true);
+  }
+
+  /** "Pin to hotbar" in a service panel's header; not for Projects, the library or details. */
+  function servicePin(id: PanelId) {
+    const service = id === 'library' || id === 'project' ? undefined : serviceOfEntrance(id);
+    return service === undefined ? null : <PinServiceToHotbar hotbar={hotbar} service={service} />;
   }
 
   // A details panel left open for a project of another world is not shown.
@@ -260,6 +292,7 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
         changeToken={inspectorChanges}
         placementActions={placementActions}
         onOpenProject={openProject}
+        hotbar={hotbar}
       />
     );
     if (id === 'library') {
@@ -391,6 +424,7 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
               title={shownPanel.id === 'projects' ? world.name : panelTitle(shownPanel.id)}
               focusOnOpen={shownPanel.focus}
               onClose={closePanel}
+              actions={servicePin(shownPanel.id)}
             >
               {panelContent(shownPanel.id)}
             </EntrancePanel>
@@ -434,6 +468,7 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
               version={projectChanges}
               onOpen={openProject}
               placementActions={placementActions}
+              hotbar={hotbar}
               onChanged={() => {
                 projectsChanged();
                 setInspectorChanges((n) => n + 1);
@@ -452,16 +487,7 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
           >
             Library <kbd>E</kbd>
           </button>
-          <div className="hotbar" role="group" aria-label="Hotbar">
-            <ol className="hotbar-slots" aria-hidden="true">
-              {HOTBAR_KEYS.map((key) => (
-                <li key={key} className="hotbar-slot">
-                  {key}
-                </li>
-              ))}
-            </ol>
-            <span className="not-built">Hotbar: not built yet (planned later in M2)</span>
-          </div>
+          <Hotbar hotbar={hotbar} onActivate={activateSlot} />
         </footer>
       </div>
 

@@ -5,9 +5,12 @@
 // (user decision 2026-11-21) runs `project.restore` after the same confirmation the project
 // list uses. Clearing the selection changes nothing saved. The map actions (M2-7) open the
 // placement tool or remove the building after a confirmation; the project itself is kept.
+// "Pin to hotbar" (M2-10) opens the same slot picker as the project list.
 import { useRef, useState } from 'react';
 
 import type { WorldSummary } from '../../common/contracts/world';
+import type { Hotbar } from '../hotbar/hotbar-store';
+import { PinToHotbar } from '../hotbar/PinToHotbar';
 import { ConfirmDialog } from '../projects/ConfirmDialog';
 import { LIFECYCLE_COPY, projectCommandProblem, STATUS_LABELS } from '../projects/project-messages';
 import { useProject } from '../projects/use-project';
@@ -27,6 +30,8 @@ interface ProjectInspectorProps {
   readonly onChanged: () => void;
   /** Place, move and remove the project's building (M2-7). */
   readonly placementActions?: PlacementActions;
+  /** This world's hotbar, for "Pin to hotbar" (M2-10). */
+  readonly hotbar?: Hotbar;
 }
 
 export function ProjectInspector(props: ProjectInspectorProps) {
@@ -51,6 +56,7 @@ function SelectedProject({
   onOpen,
   onChanged,
   placementActions,
+  hotbar,
   projectId,
 }: ProjectInspectorProps & { readonly projectId: string }) {
   const load = useProject(world.id, projectId, version);
@@ -189,6 +195,15 @@ function SelectedProject({
               {REMOVE_FROM_MAP_COPY.button}
             </button>
           </>
+        )}
+        {hotbar !== undefined && (
+          <PinToHotbar
+            hotbar={hotbar}
+            target={{ type: 'project', id: project.id }}
+            name={project.name}
+            onMessage={setMessage}
+            canPin={project.status !== 'trashed'}
+          />
         )}
         <button type="button" onClick={selection.clear}>
           Clear selection

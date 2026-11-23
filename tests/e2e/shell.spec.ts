@@ -397,9 +397,8 @@ test.describe('main screen layout and keyboard shortcuts', () => {
     await expect(side.getByRole('heading', { name: 'Realm Atlas' })).toBeVisible();
     await expect(side.getByRole('heading', { name: 'Inspector' })).toBeVisible();
     await expect(libraryButton()).toBeVisible();
-    await expect(page.getByRole('group', { name: 'Hotbar' })).toContainText(
-      'Hotbar: not built yet (planned later in M2)',
-    );
+    // M2-10: ten labelled slots (hotbar.spec covers what they do).
+    await expect(page.getByRole('group', { name: 'Hotbar' }).getByRole('listitem')).toHaveCount(10);
     // M1-10's project list is there without any clicks.
     await expect(entrance('Projects')).toHaveAttribute('aria-current', 'true');
     await expect(page.getByTestId('projects-summary')).toBeVisible();
