@@ -1,13 +1,14 @@
 // First launch (PRD §5.1): local profile → optional avatar → starter world → usable world.
 // Shown while the active profile has no active world (ADR-0022). No account, no network and
 // no filesystem access are involved: every step is a local IPC command.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 import type { Session, SessionData } from '../state/session';
 import { AvatarChooser } from './AvatarChooser';
 import { CreateWorldForm } from './CreateWorldForm';
 import { commandProblem } from './form-messages';
 import { ProfilePicker } from './ProfilePicker';
+import { ProfilePrivacyNote } from './ProfilePrivacyNote';
 
 const STEPS = ['Profile', 'Avatar', 'World'] as const;
 
@@ -19,6 +20,7 @@ interface OnboardingProps {
 export function Onboarding({ session, data }: OnboardingProps) {
   const [step, setStep] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const privacyNoteId = useId();
 
   // Move focus to the new step's heading, so keyboard and screen-reader users follow along.
   useEffect(() => {
@@ -30,7 +32,11 @@ export function Onboarding({ session, data }: OnboardingProps) {
   ];
 
   return (
-    <section className="onboarding panel" aria-labelledby="onboarding-heading">
+    <section
+      className="onboarding panel"
+      aria-labelledby="onboarding-heading"
+      aria-describedby={step === 0 ? privacyNoteId : undefined}
+    >
       <p className="step-count">
         Step {step + 1} of {STEPS.length}: {STEPS[step]}
       </p>
@@ -43,6 +49,7 @@ export function Onboarding({ session, data }: OnboardingProps) {
           <p className="muted">
             Profiles live only on this computer. No account or internet connection is needed.
           </p>
+          <ProfilePrivacyNote id={privacyNoteId} />
           <ProfilePicker
             profiles={data.profiles}
             onRename={session.renameProfile}

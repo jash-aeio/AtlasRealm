@@ -146,6 +146,54 @@ test('first launch works offline and by keyboard alone, and the world survives a
   }
 });
 
+// #62: profiles separate data but are not encrypted. Both profile screens say so, and the note
+// is part of the section's accessible description, so a screen reader announces it with the
+// section. It sits before the first control, so reading forward from the focused heading (or
+// tabbing into the section) meets it before any profile action.
+test('both profile screens say plainly that profiles are not encrypted', async () => {
+  const { app, page } = await launch(userDataDir);
+  const wording =
+    "Profiles keep each person's worlds and settings apart, but they are not password-protected or encrypted. Anyone who can sign in to this Windows account, or an administrator of this computer, can read them.";
+  const precedes = async (note: Locator, control: Locator) =>
+    note.evaluate(
+      (element, other) =>
+        (element.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+      await control.elementHandle(),
+    );
+  try {
+    // First launch, step 1.
+    const onboarding = page.getByRole('region', { name: 'Who is using Atlas Realm?' });
+    await expect(page.getByRole('heading', { name: 'Who is using Atlas Realm?' })).toBeFocused();
+    const firstNote = onboarding.getByRole('note');
+    await expect(firstNote).toBeVisible();
+    await expect(firstNote).toHaveText(wording);
+    await expect(onboarding).toHaveAccessibleDescription(wording);
+    const continueButton = page.getByRole('button', { name: 'Continue as Default' });
+    expect(await precedes(firstNote, onboarding.getByRole('textbox').first())).toBe(true);
+    expect(await precedes(firstNote, continueButton)).toBe(true);
+
+    // The other steps are not about profiles, so the note goes away.
+    await continueButton.click();
+    await expect(page.getByRole('heading', { name: 'Choose an avatar (optional)' })).toBeFocused();
+    await expect(page.getByTestId('profile-privacy')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Skip' }).click();
+    await page.getByLabel('World name').fill('Hearth');
+    await page.getByRole('button', { name: 'Create world' }).click();
+    await expect(screen(page, 'main')).toBeVisible();
+
+    // Settings → Profiles.
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const profiles = page.getByRole('region', { name: 'Profiles' });
+    const settingsNote = profiles.getByRole('note');
+    await expect(settingsNote).toBeVisible();
+    await expect(settingsNote).toHaveText(wording);
+    await expect(profiles).toHaveAccessibleDescription(wording);
+    expect(await precedes(settingsNote, profiles.getByRole('textbox').first())).toBe(true);
+  } finally {
+    await app.close();
+  }
+});
+
 test('an avatar chosen during onboarding can be changed and removed in Settings', async () => {
   const { app, page } = await launch(userDataDir);
   try {
