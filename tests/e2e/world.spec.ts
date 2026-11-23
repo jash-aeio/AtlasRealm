@@ -481,9 +481,9 @@ test.describe('world view with graphics available', () => {
     // Show, then hide a microtask later while Pixi's async init is still running.
     // A late-finishing init must destroy its own app (and its WebGL context).
     const hiddenWhileLoading = await page.evaluate(async () => {
-      const button = Array.from(document.querySelectorAll('details.developer-spikes button')).find(
-        (b) => b.textContent.includes('world view'),
-      );
+      const button = Array.from(
+        document.querySelectorAll<HTMLButtonElement>('details.developer-spikes button'),
+      ).find((b) => b.textContent.includes('world view'));
       if (button === undefined) throw new Error('toggle not found');
       const nextTask = () => new Promise((resolve) => setTimeout(resolve, 0));
       let raced = 0;
