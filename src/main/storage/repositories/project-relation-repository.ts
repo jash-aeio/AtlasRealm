@@ -85,6 +85,14 @@ export class ProjectRelationRepository {
     return row === undefined ? undefined : toRelation(row);
   }
 
+  /** How many links the world stores, hidden links of trashed projects included. */
+  countByWorld(worldId: string): number {
+    const row = this.db
+      .prepare('SELECT count(*) AS n FROM project_relations WHERE world_id = ?')
+      .get(worldId);
+    return integer(row ?? {}, 'n');
+  }
+
   /** Every link stored for the world, oldest first (then by ID), including trashed ends. */
   listByWorld(worldId: string): ProjectRelation[] {
     return this.db

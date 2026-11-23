@@ -11,7 +11,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 
 import { GRAPH_MAX_EDGES, GRAPH_MAX_NODES } from '../../src/common/contracts/graph';
-import type { RelationSummary, RelationType } from '../../src/common/contracts/relation';
+import {
+  MAX_RELATIONS_PER_WORLD,
+  type RelationSummary,
+  type RelationType,
+} from '../../src/common/contracts/relation';
 import { APP_ENTRY_URL } from '../../src/main/bootstrap/app-origin';
 import {
   createGraphWorldConnectionsHandler,
@@ -33,6 +37,7 @@ import { ActiveProfile } from '../../src/main/profiles/active-profile';
 import {
   ARCHIVED_WORLD_LINK_REFUSAL,
   DUPLICATE_LINK_MESSAGE,
+  LINK_LIMIT_MESSAGE,
   GraphService,
   SELF_LINK_REFUSAL,
   TRASHED_PROJECT_LINK_REFUSAL,
@@ -58,14 +63,21 @@ interface Session {
 }
 
 let session: Session;
+// A clock that ticks once per read, so creation order is never a same-millisecond tie broken
+// by random UUIDs. It keeps running across a simulated restart.
+let clock = new Date('2026-11-23T12:00:00.000Z');
+const tick = (): Date => {
+  clock = new Date(clock.getTime() + 1_000);
+  return clock;
+};
 let world: World;
 let otherWorld: World;
 
 async function openSession(userData: string): Promise<Session> {
   const opened = await openStartupProfile(userData);
   const active = new ActiveProfile(userData, { profileId: opened.profileId, db: opened.db });
-  const projects = new ProjectService(active, catalog);
-  return { userData, opened, projects, graph: new GraphService(active, projects) };
+  const projects = new ProjectService(active, catalog, undefined, tick);
+  return { userData, opened, projects, graph: new GraphService(active, projects, tick) };
 }
 
 function call<I extends z.ZodType, O extends z.ZodType>(
@@ -408,6 +420,62 @@ describe('graph.worldConnections', () => {
     ).toBe(true);
     // Deterministic: asking again gives the same cut.
     expect(await graphOf()).toEqual(graph);
+  });
+});
+
+describe('the per-world link cap', () => {
+  it(`refuses link ${String(MAX_RELATIONS_PER_WORLD + 1)}, counting hidden links of trashed projects`, async () => {
+    // 72 projects give 72 × 71 × 3 ordered, typed pairs: plenty. Filled with raw SQL for speed.
+    const all = Array.from({ length: 72 }, (_, i) => newProject(`P${String(i)}`));
+    const insert = session.opened.db.prepare(
+      `INSERT INTO project_relations (id, world_id, source_project_id, target_project_id,
+                                      relation_type, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, '2026-11-23T12:00:00.000Z', '2026-11-23T12:00:00.000Z')`,
+    );
+    let n = 0;
+    session.opened.db.exec('BEGIN');
+    fill: for (const type of ['depends_on', 'supports', 'references'] as const) {
+      for (const source of all.slice(1)) {
+        for (const target of all.slice(1)) {
+          if (source === target) continue;
+          if (n === MAX_RELATIONS_PER_WORLD) break fill;
+          n += 1;
+          insert.run(
+            `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
+            world.id,
+            source.id,
+            target.id,
+            type,
+          );
+        }
+      }
+    }
+    session.opened.db.exec('COMMIT');
+    // Trashing a linked project hides its links but they still count.
+    const hidden = all[1];
+    if (hidden === undefined) throw new Error('setup failed');
+    session.projects.trash(lifecycle(hidden));
+    expect((await graphOf()).totalEdges).toBeLessThan(MAX_RELATIONS_PER_WORLD);
+
+    const free = all[0];
+    const other = all[2];
+    if (free === undefined || other === undefined) throw new Error('setup failed');
+    const before = snapshot();
+    expect(await create(linkInput(free, other))).toEqual({
+      ok: false,
+      error: { code: 'limit_reached', message: LINK_LIMIT_MESSAGE },
+    });
+    expect(snapshot()).toEqual(before);
+
+    // Removing one link makes room again.
+    expect(
+      await remove({
+        worldId: world.id,
+        relationId: '00000000-0000-4000-8000-000000000001',
+        expectedRevision: 1,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await create(linkInput(free, other))).toMatchObject({ ok: true });
   });
 });
 

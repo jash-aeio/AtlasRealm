@@ -9,7 +9,11 @@
 // counts; restoring the project brings them back.
 import { GRAPH_MAX_EDGES, GRAPH_MAX_NODES } from '../../common/contracts/graph';
 import type { GraphWorldConnectionsOutput } from '../../common/contracts/graph';
-import type { RelationSummary, RelationType } from '../../common/contracts/relation';
+import {
+  MAX_RELATIONS_PER_WORLD,
+  type RelationSummary,
+  type RelationType,
+} from '../../common/contracts/relation';
 import { CommandError } from '../ipc/router';
 import type { ActiveProfile } from '../profiles/active-profile';
 import {
@@ -30,6 +34,8 @@ export const TRASHED_PROJECT_LINK_REFUSAL =
 export const SELF_LINK_REFUSAL = 'A project cannot be linked to itself.';
 
 export const DUPLICATE_LINK_MESSAGE = 'Those projects already have that link.';
+
+export const LINK_LIMIT_MESSAGE = `This world already has ${String(MAX_RELATIONS_PER_WORLD)} links (links of projects in the trash included).`;
 
 export class GraphService {
   constructor(
@@ -63,6 +69,10 @@ export class GraphService {
     const relations = this.relations();
     if (relations.find(input.sourceProjectId, input.targetProjectId, input.type) !== undefined) {
       throw new CommandError('already_exists', DUPLICATE_LINK_MESSAGE);
+    }
+    // Count and insert run synchronously, so no other command can slip in between them.
+    if (relations.countByWorld(world.id) >= MAX_RELATIONS_PER_WORLD) {
+      throw new CommandError('limit_reached', LINK_LIMIT_MESSAGE);
     }
     return summary(relations.create({ ...input, worldId: world.id }));
   }

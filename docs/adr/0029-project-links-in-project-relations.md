@@ -39,6 +39,7 @@ We chose **a dedicated `project_relations` table**, **direction = source → tar
 - `relation.create` refuses a trashed endpoint and allows an archived one (as hotbar and placement do). `relation.remove` takes the relation ID and the revision the caller saw, deletes only that row, and returns it (for undo). An unknown ID is `not_found`.
 - `graph.worldConnections` reads `projects`, not placements, so unplaced projects are included (§30.1). It leaves trashed projects and every link touching one out of the nodes, edges **and** the totals. Archived projects are included with their status so the UI can style them.
 - Bounds (§30.6): at most 150 nodes and 300 edges. Nodes are ordered active before archived, then by number of links (most first), then `created_at`, then `id`; the first 150 are kept. Edges are kept only when both ends were kept, ordered by `created_at`, then `id`; the first 300 are kept. The reply carries `totalNodes`, `totalEdges`, `omittedNodes` and `omittedEdges` (an edge dropped because an end was cut counts as omitted). Names are never used for ordering, because a rename would make the cut jump around.
+- At most **5000 links per world**, hidden links of trashed projects included (like the 1000-project cap). The next one is refused with `limit_reached`. Added after the security review found that unbounded links would let the graph query freeze the main process (user decision via AskUserQuestion, 2026-11-23).
 - Profile isolation comes from one database file per profile (ADR-0014): another profile's IDs are simply `not_found`.
 
 ## Consequences
@@ -47,6 +48,9 @@ We chose **a dedicated `project_relations` table**, **direction = source → tar
 - File, note, task and artifact links will use `graph_edges` over `graph_entities` when indexing arrives (M3+). The Connections query then joins both sources.
 - Trashing and restoring a project needs no change to links. Permanent deletion from the trash (later) must delete the project's links first, or the RESTRICT foreign keys will refuse it, which is the intended guard.
 - The 150/300 limits are engineering limits, not stored limits. The M2-13 UI must show the omitted counts and must refetch after a committed change: React Flow's state is never the authoritative copy.
+- Moving a project to another world (not built) must delete or remap its links first: the composite foreign keys have no ON UPDATE rule and will refuse the move with a raw foreign-key error.
+- `relation.remove` may remove, and return, a link whose other end is in the trash. Only a caller that already holds the link ID can do that, and undo needs it.
+- Duplicate refusal is check-then-insert, like placements and pins. It is safe because both run in one synchronous call on the single writer connection. If that ever becomes async, map SQLite's UNIQUE error to `already_exists`.
 - Revisit if links ever need to connect a project to a non-project entity (then they move to `graph_edges`), or if users ask for undirected links.
 
 ## Learning note

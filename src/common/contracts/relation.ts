@@ -9,6 +9,12 @@ import { Revision, Timestamp } from './display-name';
 import { ProjectId } from './project';
 import { WorldId } from './world';
 
+/**
+ * At most this many links per world, hidden links of trashed projects included, so the graph
+ * query stays fast on the main process (user decision 2026-11-23, #76 security review).
+ */
+export const MAX_RELATIONS_PER_WORLD = 5000;
+
 /** The Project Relationships preset's verbs (§30.3). Matches migration 6's CHECK. */
 export const RELATION_TYPES = ['depends_on', 'supports', 'references'] as const;
 export const RelationType = z.enum(RELATION_TYPES);

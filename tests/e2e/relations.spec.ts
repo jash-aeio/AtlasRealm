@@ -86,9 +86,10 @@ test('link, refuse, read, survive a restart and remove through window.atlas', as
     omittedNodes: 0,
     omittedEdges: 0,
   });
-  expect(created.graph.nodes.map((n) => [n.name, n.placed])).toEqual([
-    ['Event', false],
+  // Both have one link and may share a creation millisecond, so their order is not asserted.
+  expect(created.graph.nodes.map((n) => [n.name, n.placed]).sort()).toEqual([
     ['Campaign', false],
+    ['Event', false],
   ]);
 
   await app.close();
