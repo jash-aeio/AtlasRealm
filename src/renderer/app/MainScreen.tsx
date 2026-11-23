@@ -423,6 +423,7 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
             views={atlasViews}
             tool={tool}
             version={projectChanges}
+            comfort={comfort}
           />
           <section className="side-card" aria-labelledby={`${sideColumnId}-inspector`}>
             <h2 id={`${sideColumnId}-inspector`}>Inspector</h2>
