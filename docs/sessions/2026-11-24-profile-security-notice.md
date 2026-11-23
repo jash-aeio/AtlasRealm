@@ -20,5 +20,10 @@ Issue #62: say plainly in the UI that profiles are not encrypted. Release gate: 
 ## Done
 - typecheck, lint, format:check pass. Unit 1133/1133. Full E2E 108/108 (including the new test).
 
+## Ship
+- invariant-reviewer: pass, no findings. It confirmed there's no `safeStorage` call anywhere and profile data is a plain SQLite file, so the wording is accurate. security-auditor not needed (renderer copy and tests only).
+- Docs: status, roadmap, M2 mirror (and the stale #75 "in review" entry, now merged c6ff673), changelog, glossary (2 terms), lesson 039.
+- The user wrote no code themselves this session.
+
 ## Open questions
 - None.
