@@ -54,11 +54,23 @@ User-created, typed, descriptive links between projects, plus the bounded query 
 | Removing a link removes only the relation; no side effects | "deletes only the link and returns it" and "never changes a project, a building, a pin or a graph entity" (snapshots of every other table) |
 | Survives restart; profile isolation | "a link survives a restart" (integration and E2E); "another profile sees none of…" |
 
-## Verification (2026-11-23, branch head be84da7)
+## Verification (2026-11-23)
 - typecheck, lint and format:check all pass.
-- Unit/integration: 1063/1063.
-- E2E: 83 passed after the storage spec's migration list got version 6 (the first run failed on exactly that list), plus the new relations spec (1/1).
-- Packaged E2E not run yet. Its schema expectation was bumped to v6.
+- Unit/integration: 1064/1064.
+- E2E: 83 passed after the storage spec's migration list got version 6 (the first run failed on exactly that list), plus the new relations spec (1/1, re-run after the last fix).
+- Packaged E2E: 15/15.
+
+## /ship reviews
+- **invariant-reviewer:** no violations.
+- **security-auditor:** no High findings.
+  - **M1 fixed** (`0185540`): links per world had no limit, and every graph query reads all of a world's links on the main process. The user chose a cap of **5000 links per world** (AskUserQuestion; links of trashed projects count, `limit_reached`), recorded in ADR-0029.
+  - **Not changed, with reasons recorded in ADR-0029:**
+    - L2: check-then-insert for duplicates is safe while synchronous, as in placements and pins.
+    - L3: `relation.remove` can return a link whose other end is trashed; undo needs that.
+    - L5: moving a project between worlds will need its links removed first.
+    - L4: one bad stored name fails the whole graph closed, the same as `project.list`.
+- **Flake found and fixed:** fixing M1 exposed a flaky test. Projects created in the same millisecond tie on `created_at`, so their order came down to random UUIDs. The contract tests now use a ticking clock, and the E2E spec no longer asserts the order of a tie.
+- **Lesson 035** (bounded graph queries). Lesson 034 was already taken by the #74 session's worktree.
 
 ## Open questions
 None. Handoff to M2-13 (#78):
