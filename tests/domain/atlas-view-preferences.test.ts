@@ -150,7 +150,7 @@ describe('applyAtlasViewChange', () => {
       comfort = applyComfortPatch(comfort, {
         camera: {
           worldId: uuid(i),
-          camera: { centerX: -8191.99, centerY: 8191.99, zoom: 0.123456 },
+          camera: { centerX: -99999.99, centerY: -99999.99, zoom: 0.123456 },
         },
       });
     }
