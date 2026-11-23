@@ -14,6 +14,7 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | Automation | A trigger (schedule) that starts a workflow run |
 | Artifact | A real saved output file, with version history |
 | Realm Atlas | Upper-right panel: Map (where?) and Connections (how related?) |
+| Project link (relation) | A user-made, typed arrow from one project to another in the same world: depends on, supports or references. Descriptive only: it never changes permissions, scheduling or files |
 | Blueprint mode | Simplified structural view of a project interior |
 
 ## Developer terms
@@ -176,3 +177,6 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Last write wins** | A concurrency rule where the newest save simply replaces what is stored, with no revision check. Safe only when the newest value is always the right one, like a camera position | ADR-0028, lesson 033 |
 | **Comfort preferences** | Per-profile settings that make the app easier to use without changing any data: reduced motion, building labels and the saved camera per world | `src/common/preferences/comfort.ts`, UI_SPEC §6.6 |
 | **Reduced motion** | A mode that turns off easing and decorative animation. Follows the operating system's `prefers-reduced-motion` setting unless the profile overrides it | `use-reduced-motion.ts`, UI_SPEC §6.6 |
+| **Directed edge** | A link with a start and an end, like an arrow. `A depends_on B` and `B depends_on A` are two different links. We store the direction as the source → target order, so it can never disagree with itself | ADR-0029 |
+| **Truncation (bounded query)** | Returning only the first N results by a fixed order, together with how many were left out, so a large world can never freeze the screen and the user always knows something is hidden | `graph.worldConnections`, GRAPH_MODEL §30.6 |
+| **Deterministic ordering** | Sorting by values that don't change on their own (status, link count, creation time, ID) so the same data always gives the same answer. Names aren't used, because a rename would reshuffle the cut | ADR-0029 |
