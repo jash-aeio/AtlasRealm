@@ -60,6 +60,13 @@ const api: AtlasApi = {
     assign: (input) => ipcRenderer.invoke(Channels.hotbarAssign, input),
     clear: (input) => ipcRenderer.invoke(Channels.hotbarClear, input),
   },
+  relation: {
+    create: (input) => ipcRenderer.invoke(Channels.relationCreate, input),
+    remove: (input) => ipcRenderer.invoke(Channels.relationRemove, input),
+  },
+  graph: {
+    worldConnections: (input) => ipcRenderer.invoke(Channels.graphWorldConnections, input),
+  },
 };
 
 contextBridge.exposeInMainWorld('atlas', api);

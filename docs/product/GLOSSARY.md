@@ -14,6 +14,7 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | Automation | A trigger (schedule) that starts a workflow run |
 | Artifact | A real saved output file, with version history |
 | Realm Atlas | Upper-right panel: Map (where?) and Connections (how related?) |
+| Project link (relation) | A user-made, typed arrow from one project to another in the same world: depends on, supports or references. Descriptive only: it never changes permissions, scheduling or files |
 | Blueprint mode | Simplified structural view of a project interior |
 
 ## Developer terms
@@ -178,3 +179,7 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Reduced motion** | A mode that turns off easing and decorative animation. Follows the operating system's `prefers-reduced-motion` setting unless the profile overrides it | `use-reduced-motion.ts`, UI_SPEC §6.6 |
 | **WAI-ARIA tabs pattern** | The standard way to build accessible tabs: a `tablist` holding `tab` buttons, each controlling a `tabpanel`. Screen readers announce "tab 2 of 6, selected", the arrow keys move between tabs, and Home and End jump to the first and last | `src/renderer/library/library-tabs.ts` (M2-9), lesson 034 |
 | **Roving tabindex** | Only the selected item in a group gets `tabindex="0"`; the rest get `-1`. Tab then stops once on the group, and the arrow keys move inside it, so a long row of tabs doesn't cost six Tab presses | `LibraryPanel.tsx` (M2-9), lesson 034 |
+| **Directed edge** | A link with a start and an end, like an arrow. `A depends_on B` and `B depends_on A` are two different links. We store the direction as the source → target order, so it can never disagree with itself | ADR-0029 |
+| **Truncation (bounded query)** | Returning only the first N results by a fixed order, together with how many were left out, so a large world can never freeze the screen and the user always knows something is hidden | `graph.worldConnections`, GRAPH_MODEL §30.6 |
+| **Deterministic ordering** | Sorting by values that don't change on their own (status, link count, creation time, ID) so the same data always gives the same answer. Names aren't used, because a rename would reshuffle the cut | ADR-0029 |
+| **Resource-exhaustion attack (DoS)** | Making an app unusable by feeding it more data or requests than it can handle, instead of stealing anything. A per-world cap on stored links (5000) prevents it for the graph query | ADR-0029, lesson 035 |

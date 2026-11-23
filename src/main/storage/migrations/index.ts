@@ -359,10 +359,57 @@ const m0005PlacementsAndHotbar: Migration = {
   `,
 };
 
+// User-made links between projects (M2-11 #76, ADR-0029, GRAPH_MODEL §30.4). A link is
+// descriptive only: nothing in scheduling, permissions or file access may read this table.
+// Every type is directed and the source → target order *is* the direction (no separate column
+// that could disagree with it). Both ends point at the same world's project through composite
+// foreign keys, so a cross-world link can't exist even through raw SQL. Nothing references this
+// table, so a later migration can widen its CHECKs (more origins, evidence) with a cheap rebuild.
+// Links of a trashed project stay here; the graph query hides them (ADR-0029).
+const m0006ProjectRelations: Migration = {
+  version: 6,
+  name: 'create_project_relations',
+  up: `
+    CREATE TABLE project_relations (
+      id                 TEXT    PRIMARY KEY CHECK (
+                           id GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
+      world_id           TEXT    NOT NULL REFERENCES worlds (id) ON DELETE RESTRICT,
+      source_project_id  TEXT    NOT NULL,
+      target_project_id  TEXT    NOT NULL,
+      relation_type      TEXT    NOT NULL
+                         CHECK (relation_type IN ('depends_on', 'supports', 'references')),
+      -- Only user links exist so far; parsed, execution and ai_proposed come later (§30.4).
+      origin             TEXT    NOT NULL DEFAULT 'user' CHECK (origin IN ('user')),
+      confirmation_state TEXT    NOT NULL DEFAULT 'confirmed'
+                         CHECK (confirmation_state IN ('proposed', 'confirmed', 'rejected')),
+      created_at         TEXT    NOT NULL,
+      updated_at         TEXT    NOT NULL,
+      revision           INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+      -- Both ends are projects of this link's world.
+      FOREIGN KEY (source_project_id, world_id) REFERENCES projects (id, world_id)
+        ON DELETE RESTRICT,
+      FOREIGN KEY (target_project_id, world_id) REFERENCES projects (id, world_id)
+        ON DELETE RESTRICT,
+      CHECK (source_project_id <> target_project_id),
+      -- A link the user made is confirmed by making it.
+      CHECK (origin <> 'user' OR confirmation_state = 'confirmed')
+    ) STRICT;
+
+    -- One link of each type per direction. A → B and B → A are different links.
+    CREATE UNIQUE INDEX project_relations_unique
+      ON project_relations (source_project_id, target_project_id, relation_type);
+    -- Finding a project's incoming links (the unique index already covers outgoing ones).
+    CREATE INDEX project_relations_by_target ON project_relations (target_project_id);
+    -- The graph query: a world's links in a stable order.
+    CREATE INDEX project_relations_by_world ON project_relations (world_id, created_at, id);
+  `,
+};
+
 export const MIGRATIONS: readonly Migration[] = [
   m0001AppMeta,
   m0002ProfileWorldsProjects,
   m0003GraphEntities,
   m0004TemplateIdNamespaces,
   m0005PlacementsAndHotbar,
+  m0006ProjectRelations,
 ];

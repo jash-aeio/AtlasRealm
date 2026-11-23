@@ -32,6 +32,9 @@ export const Channels = {
   hotbarList: 'hotbar.list',
   hotbarAssign: 'hotbar.assign',
   hotbarClear: 'hotbar.clear',
+  relationCreate: 'relation.create',
+  relationRemove: 'relation.remove',
+  graphWorldConnections: 'graph.worldConnections',
 } as const;
 
 export type Channel = (typeof Channels)[keyof typeof Channels];

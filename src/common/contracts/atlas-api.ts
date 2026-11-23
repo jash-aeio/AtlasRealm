@@ -1,6 +1,7 @@
 // The complete API the preload exposes to the renderer as `window.atlas`.
 // Keep it small and explicit: one typed method per command, no generic `invoke`.
 import type { LaunchInfoOutput } from './app-launch-info';
+import type { GraphWorldConnectionsInput, GraphWorldConnectionsOutput } from './graph';
 import type { PingInput, PingOutput } from './app-ping';
 import type {
   HotbarAssignInput,
@@ -42,6 +43,7 @@ import type {
   ProjectUpdateGoalInput,
 } from './project';
 import type { TemplateListOutput } from './project-template';
+import type { RelationCreateInput, RelationOutput, RelationRemoveInput } from './relation';
 import type { WorkerCheckInput, WorkerCheckOutput, WorkerStatusOutput } from './runtime-worker';
 import type {
   WorldCreateInput,
@@ -121,5 +123,19 @@ export interface AtlasApi {
     readonly list: (input: HotbarListInput) => Promise<IpcResult<HotbarListOutput>>;
     readonly assign: (input: HotbarAssignInput) => Promise<IpcResult<HotbarSlotOutput>>;
     readonly clear: (input: HotbarClearInput) => Promise<IpcResult<HotbarSlotOutput>>;
+  };
+  /**
+   * User-made links between projects of one world (ADR-0029). Descriptive only: a link never
+   * changes permissions, scheduling or files, and removing one never touches its projects.
+   */
+  readonly relation: {
+    readonly create: (input: RelationCreateInput) => Promise<IpcResult<RelationOutput>>;
+    readonly remove: (input: RelationRemoveInput) => Promise<IpcResult<RelationOutput>>;
+  };
+  /** Realm Atlas graphs: bounded (150 nodes / 300 edges) with explicit omitted counts. */
+  readonly graph: {
+    readonly worldConnections: (
+      input: GraphWorldConnectionsInput,
+    ) => Promise<IpcResult<GraphWorldConnectionsOutput>>;
   };
 }

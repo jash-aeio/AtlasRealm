@@ -80,9 +80,22 @@ test('preload exposes only the explicit API', async () => {
     project: Object.keys(window.atlas.project),
     placement: Object.keys(window.atlas.placement),
     hotbar: Object.keys(window.atlas.hotbar),
+    relation: Object.keys(window.atlas.relation),
+    graph: Object.keys(window.atlas.graph),
   }));
   expect(shape).toEqual({
-    top: ['app', 'runtime', 'template', 'profile', 'world', 'project', 'placement', 'hotbar'],
+    top: [
+      'app',
+      'runtime',
+      'template',
+      'profile',
+      'world',
+      'project',
+      'placement',
+      'hotbar',
+      'relation',
+      'graph',
+    ],
     app: ['ping', 'launchInfo'],
     runtime: ['workerStatus', 'workerCheck'],
     template: ['list'],
@@ -103,6 +116,8 @@ test('preload exposes only the explicit API', async () => {
     ],
     placement: ['list', 'create', 'move', 'remove'],
     hotbar: ['list', 'assign', 'clear'],
+    relation: ['create', 'remove'],
+    graph: ['worldConnections'],
   });
 });
 
