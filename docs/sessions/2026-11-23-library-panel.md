@@ -39,7 +39,7 @@ Five commits on `feat/74-library-panel`, all checks green:
 4. `5522050`: the top bar gets a "Hide world view" button. Hiding the world cancels an open placement tool. "Place on map" and "Move" show the world again.
 5. `ef0783b`: `tests/e2e/library.spec.ts` (3 tests). `atlas.spec.ts` and `world.spec.ts` now look for their "world view" toggle inside Developer spikes, because the main screen has one too.
 
-**Evidence (worktree, 2026-11-23):** typecheck, lint and format:check pass. Unit/integration: 1030/1030. E2E: 86/86. Packaged E2E has not been run yet; that happens during /ship or at M2-15.
+**Evidence (worktree, 2026-11-23):** typecheck, lint and format:check pass. Unit/integration: 1030/1030. E2E: 86/86. Packaged E2E: 15/15 (run during /ship). invariant-reviewer: no violations. security-auditor not needed (renderer only). Lesson 034 written (WAI-ARIA tabs and roving tabindex). The user wrote no code in this task; Claude wrote all of it.
 
 ## How each acceptance criterion is shown
 - **E and the button toggle the library:** `library.spec` test 1 and `shell.spec` "E toggles the library…". Typing E in the search field stays in the field.
