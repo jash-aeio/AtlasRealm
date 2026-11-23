@@ -5,7 +5,7 @@ import {
   type ElectronApplication,
   type Page,
 } from '@playwright/test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -317,6 +317,35 @@ test('file: scripts and images are blocked from the app:// page', async () => {
     return results;
   });
   expect(outcome).toEqual({ script: 'blocked', img: 'blocked', unc: 'blocked' });
+});
+
+// #58: img-src is 'self' only. A bundled image is the control: if it didn't load either, a
+// "blocked" data: result could just mean image loading is broken, not that CSP refused it.
+test('CSP refuses data: images but loads bundled ones', async () => {
+  const bundled = readdirSync(join('out', 'renderer', 'assets')).find((name) =>
+    name.endsWith('.png'),
+  );
+  if (bundled === undefined) throw new Error('no bundled .png in out/renderer/assets');
+  const outcome = await page.evaluate(async (bundledName) => {
+    const load = (src: string): Promise<string> =>
+      new Promise((resolve) => {
+        const img = new Image();
+        img.addEventListener('load', () => {
+          resolve('loaded');
+        });
+        img.addEventListener('error', () => {
+          resolve('blocked');
+        });
+        setTimeout(() => {
+          resolve('timeout');
+        }, 2000);
+        img.src = src;
+      });
+    // A valid 1×1 transparent GIF, so only the CSP can be the reason it fails.
+    const pixel = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    return { bundled: await load(`./assets/${bundledName}`), data: await load(pixel) };
+  }, bundled);
+  expect(outcome).toEqual({ bundled: 'loaded', data: 'blocked' });
 });
 
 test('app:// handler refuses paths outside the renderer folder', async () => {
