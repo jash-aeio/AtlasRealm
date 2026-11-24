@@ -112,6 +112,8 @@ describe('world.create', () => {
     ['oversize name', { name: 'x'.repeat(81) }],
     ['empty name', { name: '' }],
     ['control character', { name: 'Home\u0000' }],
+    ['variation selector run (#60)', { name: `Home${String.fromCodePoint(0xfe0f, 0xfe0f)}` }],
+    ['combining grapheme joiner (#60)', { name: `Ho${String.fromCodePoint(0x034f)}me` }],
     ['chosen ID', { name: 'Home', id: '00000000-0000-4000-8000-000000000001' }],
     ['grid size (not exposed)', { name: 'Home', gridWidth: 1000 }],
     ['no payload', undefined],
@@ -140,6 +142,22 @@ describe('world.list', () => {
     expect(activeOnly).toMatchObject({ ok: true, data: { worlds: [{ id: home.id }] } });
     const all = await list({ includeArchived: true });
     expect(all.ok && all.data.worlds.map((w) => w.name)).toEqual(['Home', 'Work']);
+  });
+
+  it('still lists a world whose stored name breaks the newer input rules (#60, ADR-0033)', async () => {
+    const world = await createWorld('Home');
+    // A name saved before #60 tightened the rules: a variation selector run and a Hangul filler.
+    const older = `Home${String.fromCodePoint(0x2764, 0xfe0f, 0xfe0f, 0x3164)}`;
+    opened.db.prepare('UPDATE worlds SET name = ? WHERE id = ?').run(older, world.id);
+
+    await expect(list()).resolves.toMatchObject({
+      ok: true,
+      data: { worlds: [{ id: world.id, name: older }] },
+    });
+    // Input stays strict: the same name can't be typed in again.
+    await expect(
+      rename({ worldId: world.id, expectedRevision: world.revision, name: older }),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'invalid_payload' } });
   });
 
   it.each([

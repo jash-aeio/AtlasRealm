@@ -2,7 +2,7 @@
 // profile's database, so a world ID from another profile is simply unknown here (`not_found`).
 import { z } from 'zod';
 
-import { DisplayName, Revision, Timestamp } from './display-name';
+import { DisplayName, Revision, StoredDisplayName, Timestamp } from './display-name';
 
 /** At most this many worlds (archived ones included) per profile, so lists stay bounded. */
 export const MAX_WORLDS = 100;
@@ -22,7 +22,8 @@ export const WorldId = z
 
 export const WorldSummary = z.strictObject({
   id: WorldId,
-  name: DisplayName,
+  // Lenient on output: one world with a name saved under older rules must not fail the list.
+  name: StoredDisplayName,
   // A plain slug on output: one world with an unknown theme must not fail the whole list.
   themeId: z
     .string()

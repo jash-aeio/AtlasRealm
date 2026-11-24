@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { AtlasViewChange, AtlasViews } from '../preferences/atlas-view';
 import { ComfortPatch, ComfortPreferences } from '../preferences/comfort';
 import { WorldId } from './world';
-import { DisplayName, Revision, Timestamp } from './display-name';
+import { DisplayName, Revision, StoredDisplayName, Timestamp } from './display-name';
 
 /** At most this many local profiles, so `profile.list` stays bounded without paging. */
 export const MAX_PROFILES = 50;
@@ -39,16 +39,18 @@ export const TimezoneId = z
   .max(64)
   .regex(/^[A-Za-z][A-Za-z0-9_+\-/]*$/);
 
+// Names are lenient on output (StoredDisplayName, ADR-0033): one profile saved under older
+// rules must not break the profile list or switcher. Input still uses DisplayName.
 export const ProfileSummary = z.strictObject({
   id: ProfileIdText,
-  displayName: DisplayName,
+  displayName: StoredDisplayName,
   isActive: z.boolean(),
 });
 export type ProfileSummary = z.infer<typeof ProfileSummary>;
 
 export const ProfileSettings = z.strictObject({
   profileId: ProfileIdText,
-  displayName: DisplayName,
+  displayName: StoredDisplayName,
   /** null until the user picks one (the avatar step can be skipped). */
   avatarPreset: AvatarPreset.nullable(),
   avatarColour: AvatarColour.nullable(),

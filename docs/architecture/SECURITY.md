@@ -130,6 +130,7 @@ This section defines concrete controls for features that can read files or take 
 - Limit input/output size, recursion, request counts, and execution time.
 - Preview sensitive data destinations before provider dispatch.
 - Keep network policy separate from file policy. Read permission is not permission to upload.
+- Names and goals refuse hidden Unicode on input (spoofing characters, variation selector runs and the variation selector supplement, invisible fillers), so a goal cannot smuggle text into a prompt. Text read back from storage is not re-checked with newer rules, so prompt building must still treat it as untrusted (`src/common/text/hidden-characters.ts`). Combinations of characters that are allowed one at a time, and the prompt-side re-check, are tracked in #106 (an M3 release gate). Changed by ADR-0033
 
 ### 21.3 Logs and diagnostics
 

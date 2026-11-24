@@ -7,7 +7,7 @@
 // bounded (§30.6) and says exactly how much was left out.
 import { z } from 'zod';
 
-import { DisplayName } from './display-name';
+import { StoredDisplayName } from './display-name';
 import { ProjectId } from './project';
 import { RelationSummary } from './relation';
 import { WorldId } from './world';
@@ -18,7 +18,8 @@ export const GRAPH_MAX_EDGES = 300;
 
 export const GraphProjectNode = z.strictObject({
   projectId: ProjectId,
-  name: DisplayName,
+  // Lenient on output (ADR-0033): one odd stored name must not fail the whole graph.
+  name: StoredDisplayName,
   /** Trashed projects are never returned. */
   status: z.enum(['active', 'archived']),
   /** Whether the project has a building. Unplaced projects are nodes too (§30.1). */
