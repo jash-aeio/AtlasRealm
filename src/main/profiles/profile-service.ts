@@ -38,7 +38,7 @@ import {
   ProfileSettingsRepository,
   type ProfileSettingsPatch,
 } from '../storage/repositories/profile-settings-repository';
-import { canonicalTimezone } from '../storage/repositories/repository-support';
+import { canonicalTimezone, normalizeName } from '../storage/repositories/repository-support';
 import type { ActiveProfile } from './active-profile';
 
 export interface ProfileListing {
@@ -59,7 +59,9 @@ export function systemTimezone(): string {
  * Makes sure the profile has a settings row whose name matches the index (run at startup,
  * ADR-0019). A missing row is created with defaults: no avatar, the system timezone. A name
  * that differs from the index (a rename interrupted between its two writes) is repaired from
- * the index, which is what the picker showed.
+ * the index, which is what the picker showed. The index name may predate the current input
+ * rules, so it is copied with the rules it was stored under: a stricter check here would stop
+ * the app from starting (ADR-0033).
  */
 export function ensureProfileSettings(
   db: Database,
@@ -70,10 +72,13 @@ export function ensureProfileSettings(
   const repository = new ProfileSettingsRepository(db, now);
   const existing = repository.get(profileId);
   if (existing === undefined) {
-    return repository.create({ profileId, displayName, timezone: systemTimezone() });
+    return repository.create(
+      { profileId, displayName, timezone: systemTimezone() },
+      { nameRule: 'stored' },
+    );
   }
   if (existing.displayName === displayName) return existing;
-  return repository.update(profileId, existing.revision, { displayName });
+  return repository.update(profileId, existing.revision, { displayName }, { nameRule: 'stored' });
 }
 
 /** Names are not keys, but two profiles that look the same in the picker are confusing. */
@@ -112,6 +117,9 @@ export class ProfileService {
    */
   create(displayName: string): Promise<ProfileEntry> {
     return this.exclusive(async () => {
+      // Check the new name strictly before anything is written: the index itself accepts names
+      // saved under older rules (ADR-0033), so it is not the place that keeps new names clean.
+      normalizeName(displayName, 'Profile name');
       const index = this.readIndex();
       if (index.profiles.length >= MAX_PROFILES) {
         throw new CommandError(
@@ -163,6 +171,8 @@ export class ProfileService {
    */
   rename(displayName: string, expectedRevision: number): Promise<ProfileSettings> {
     return this.exclusive(async () => {
+      // Strict before the index is written (see create).
+      normalizeName(displayName, 'Profile name');
       const { profileId, db } = this.active.current();
       const repository = new ProfileSettingsRepository(db, this.now);
       const current = this.settingsOf(repository, profileId);

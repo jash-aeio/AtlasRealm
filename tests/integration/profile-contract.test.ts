@@ -129,6 +129,57 @@ describe('startup settings row (ADR-0019)', () => {
     const repaired = ensureProfileSettings(opened.db, opened.profileId, 'Renamed in index');
     expect(repaired).toMatchObject({ displayName: 'Renamed in index', revision: 2 });
   });
+
+  // #60 review L4: the index may hold a name saved before the stricter input rules. Copying it
+  // with the strict rule would throw and stop the app from starting (ADR-0033).
+  const older = `Work${String.fromCodePoint(0xfe0f, 0xfe0f, 0x3164)}`;
+
+  it('repairs from an index name saved under older rules', () => {
+    expect(ensureProfileSettings(opened.db, opened.profileId, older)).toMatchObject({
+      displayName: older,
+      revision: 2,
+    });
+  });
+
+  it('recreates a missing row from an index name saved under older rules', () => {
+    opened.db.prepare('DELETE FROM profile_settings').run();
+    expect(ensureProfileSettings(opened.db, opened.profileId, older)).toMatchObject({
+      displayName: older,
+      revision: 1,
+    });
+  });
+
+  it('profile.list and profile.settings.get return such a name unchanged', async () => {
+    await profilesIndex.writeProfilesIndex(userData, {
+      ...readIndex(),
+      profiles: [{ id: opened.profileId, displayName: older }],
+    });
+    ensureProfileSettings(opened.db, opened.profileId, older);
+    await expect(list()).resolves.toMatchObject({
+      ok: true,
+      data: { profiles: [{ id: opened.profileId, displayName: older, isActive: true }] },
+    });
+    expect((await settingsNow()).displayName).toBe(older);
+  });
+});
+
+describe('new profile names in the service (#60 review L2)', () => {
+  const hidden = `Work${String.fromCodePoint(0xfe0f, 0xfe0f)}`;
+
+  it('create refuses a hidden-character name even without the contract, and writes nothing', async () => {
+    const before = readIndex();
+    await expect(service.create(hidden)).rejects.toMatchObject({ code: 'invalid_input' });
+    expect(readIndex()).toEqual(before);
+  });
+
+  it('rename refuses a hidden-character name before the index is written', async () => {
+    const before = readIndex();
+    const { revision } = await settingsNow();
+    await expect(service.rename(hidden, revision)).rejects.toMatchObject({
+      code: 'invalid_input',
+    });
+    expect(readIndex()).toEqual(before);
+  });
 });
 
 describe('profile.list', () => {

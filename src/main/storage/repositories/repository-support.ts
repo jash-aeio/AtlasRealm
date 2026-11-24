@@ -3,6 +3,7 @@
 //
 // The schema's CHECK constraints (migrations/index.ts, v2) are the last line of defence; the
 // checks here run first so callers get a stable error code instead of a raw SQLite message.
+import { hasHiddenCharacters, SPOOFING_CHARS } from '../../../common/text/hidden-characters';
 import type { Database, SQLInputValue } from '../database';
 
 /** Stable codes. Application services map them to IPC errors; never match on messages. */
@@ -52,35 +53,37 @@ export function charCount(value: string): number {
 // \p{Cc} is the Unicode "control character" category (NUL, escape, DEL, ...).
 const CONTROL_CHARS = /\p{Cc}/u;
 const CONTROL_CHARS_EXCEPT_LINE_BREAKS_AND_TABS = /(?![\t\n\r])\p{Cc}/u;
-// Invisible characters that can disguise text ("Trojan Source" spoofing): zero-width space,
-// left/right marks, the Arabic letter mark, bidi embeddings, overrides and isolates, the soft
-// hyphen, word joiner and invisible operators, the BOM, and tag characters (which can hide text
-// a model would read, "ASCII smuggling"). Zero-width (non-)joiners stay
-// allowed: emoji sequences and scripts such as Persian need them.
-const SPOOFING_CHARS =
-  /[\u200B\u200E\u200F\u202A-\u202E\u2066-\u2069\u061C\u00AD\u2060-\u2064\uFEFF\u{E0000}-\u{E007F}]/u;
 // Unicode line and paragraph separators: a "single line" name must not contain them.
 const LINE_SEPARATORS = /[\p{Zl}\p{Zp}]/u;
 // In a `u` regex, a surrogate range matches only *unpaired* halves. SQLite would silently
 // replace one with U+FFFD, so the stored text would differ from the input.
 const LONE_SURROGATE = /[\uD800-\uDFFF]/u;
 
-function assertCleanText(value: string, field: string, allowLineBreaks: boolean): void {
-  const control = allowLineBreaks ? CONTROL_CHARS_EXCEPT_LINE_BREAKS_AND_TABS : CONTROL_CHARS;
+/**
+ * `strict` (new input) refuses every hidden character. Otherwise (text saved earlier) only
+ * the spoofing characters refused since M1, so older data keeps loading (ADR-0033).
+ */
+function assertCleanText(
+  value: string,
+  field: string,
+  options: { readonly allowLineBreaks: boolean; readonly strict: boolean },
+): void {
+  const control = options.allowLineBreaks
+    ? CONTROL_CHARS_EXCEPT_LINE_BREAKS_AND_TABS
+    : CONTROL_CHARS;
   if (
     control.test(value) ||
-    SPOOFING_CHARS.test(value) ||
-    (!allowLineBreaks && LINE_SEPARATORS.test(value))
+    (!options.allowLineBreaks && LINE_SEPARATORS.test(value)) ||
+    (options.strict ? hasHiddenCharacters(value) : SPOOFING_CHARS.test(value))
   ) {
-    throw new RepositoryError('invalid_input', `${field} contains control characters.`);
+    throw new RepositoryError('invalid_input', `${field} contains control or hidden characters.`);
   }
   if (LONE_SURROGATE.test(value)) {
     throw new RepositoryError('invalid_input', `${field} is not valid Unicode text.`);
   }
 }
 
-/** A display name: trimmed, 1–80 characters, single line. Returns the trimmed value. */
-export function normalizeName(value: string, field: string): string {
+function checkName(value: string, field: string, strict: boolean): string {
   const name = value.trim();
   if (name.length === 0) throw new RepositoryError('invalid_input', `${field} is empty.`);
   if (charCount(name) > LIMITS.nameMaxChars) {
@@ -89,8 +92,22 @@ export function normalizeName(value: string, field: string): string {
       `${field} is longer than ${String(LIMITS.nameMaxChars)} characters.`,
     );
   }
-  assertCleanText(name, field, false);
+  assertCleanText(name, field, { allowLineBreaks: false, strict });
   return name;
+}
+
+/** A new display name: trimmed, 1–80 characters, single line. Returns the trimmed value. */
+export function normalizeName(value: string, field: string): string {
+  return checkName(value, field, true);
+}
+
+/**
+ * A display name read back from storage (the profile index): the rules names had when they
+ * were saved. Hidden characters refused since #60 are let through, so one older name can't
+ * make the whole file unreadable. Never use this for new input.
+ */
+export function normalizeStoredName(value: string, field: string): string {
+  return checkName(value, field, false);
 }
 
 /** Free text such as a project goal: trimmed, may be empty, may span lines. */
@@ -102,7 +119,7 @@ export function normalizeText(value: string, field: string, maxChars: number): s
       `${field} is longer than ${String(maxChars)} characters.`,
     );
   }
-  assertCleanText(text, field, true);
+  assertCleanText(text, field, { allowLineBreaks: true, strict: true });
   return text;
 }
 

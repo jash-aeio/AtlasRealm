@@ -43,6 +43,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 037 | [Deterministic graph layout and accessible graphs](lessons/037-deterministic-layout-accessible-graphs.md) | M2 | ring layout, polar coordinates, stable order, meaning not by colour alone, list equivalent of a canvas, session-only display state |
 | 038 | [React keys and remounting](lessons/038-react-keys-and-remounting.md) | M2 | reconciliation, reuse vs mount, `key` to reset a subtree, autoFocus only on mount, index keys |
 | 039 | [Accessible descriptions](lessons/039-accessible-descriptions.md) | M2 | accessible name vs description, `aria-describedby`, `role="note"`, why static text isn't a Tab stop, `toHaveAccessibleDescription` |
+| 040 | [Hidden Unicode, strict on input / lenient on read](lessons/040-hidden-unicode-strict-input-lenient-read.md) | M2 | variation selectors, ASCII smuggling, one shared rule for two layers, not re-checking stored data with newer rules (ADR-0033) |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map

@@ -222,6 +222,10 @@ describe('project.create', () => {
     ['empty name', { name: '   ' }],
     ['control character in goal', { goal: `Goal${String.fromCharCode(7)}` }],
     ['zero-width space in goal', { goal: `Go${String.fromCharCode(0x200b)}al` }],
+    // #60: hidden characters that could smuggle text into a model prompt.
+    ['variation selector supplement in goal', { goal: `Goal${String.fromCodePoint(0xe0141)}` }],
+    ['variation selector run in goal', { goal: `Goal${String.fromCodePoint(0xfe0f, 0xfe0f)}` }],
+    ['Hangul filler in name', { name: `Site${String.fromCodePoint(0x3164)}` }],
     ['oversize goal', { goal: 'x'.repeat(2001) }],
   ])('rejects a forged payload (%s) and creates nothing', async (_label, override) => {
     await expect(create({ ...newProjectInput(), ...override })).resolves.toMatchObject({

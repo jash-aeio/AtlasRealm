@@ -100,6 +100,15 @@ describe('readProfilesIndex', () => {
     expect(readProfilesIndex(userData)).toEqual({ kind: 'ok', index: validIndex() });
   });
 
+  it('still reads a profile name saved before #60 tightened the rules (ADR-0033)', () => {
+    // A variation selector run and a Hangul filler: refused for new names, but refusing them
+    // here would report the whole index as damaged and block startup.
+    const older = `Work${String.fromCodePoint(0xfe0f, 0xfe0f, 0x3164)}`;
+    const index = { ...validIndex(), profiles: [{ id: toProfileId(UUID), displayName: older }] };
+    writeRaw(JSON.stringify(index));
+    expect(readProfilesIndex(userData)).toEqual({ kind: 'ok', index });
+  });
+
   it('reports an index from a newer app version as newer, not damaged, and keeps it', () => {
     const content = JSON.stringify({ schemaVersion: 2, profiles: 'whatever the future holds' });
     writeRaw(content);

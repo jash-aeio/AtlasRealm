@@ -6,7 +6,8 @@
 // deletes: archive and trash are reversible status changes (PRD §5.6; no permanent delete in M1).
 import { z } from 'zod';
 
-import { DisplayName, Revision, Timestamp } from './display-name';
+import { hasHiddenCharacters } from '../text/hidden-characters';
+import { DisplayName, Revision, StoredDisplayName, Timestamp } from './display-name';
 import { TemplateId, TemplateVersion } from './project-template';
 import { WorldId } from './world';
 
@@ -23,9 +24,8 @@ export const ProjectStatus = z.enum(['active', 'archived', 'trashed']);
 export type ProjectStatus = z.infer<typeof ProjectStatus>;
 
 // Same character rules as DisplayName, but may be empty and may span lines. The repository
-// (normalizeText) runs the full check again in the main process.
-const FORBIDDEN_IN_GOAL =
-  /[\u200B\u200E\u200F\u202A-\u202E\u2066-\u2069\u061C\u00AD\u2060-\u2064\uFEFF\u{E0000}-\u{E007F}]/u;
+// (normalizeText) runs the full check again in the main process. Goals will reach model
+// prompts (M3), so hidden characters that could smuggle instructions are refused.
 const CONTROL_EXCEPT_LINE_BREAKS = /(?![\t\n\r])\p{Cc}/u;
 const LONE_SURROGATE = /[\uD800-\uDFFF]/u;
 
@@ -37,7 +37,7 @@ export const ProjectGoal = z
   .refine((goal) => Array.from(goal).length <= PROJECT_GOAL_MAX_CHARS, 'goal is too long')
   .refine(
     (goal) =>
-      !FORBIDDEN_IN_GOAL.test(goal) &&
+      !hasHiddenCharacters(goal) &&
       !CONTROL_EXCEPT_LINE_BREAKS.test(goal) &&
       !LONE_SURROGATE.test(goal),
     'invalid characters',
@@ -61,7 +61,7 @@ export const ProjectSummary = z.strictObject({
   worldId: WorldId,
   // Plain bounded strings on output: one row with unusual stored text must not fail a page
   // (input still uses DisplayName / ProjectGoal, and the repository checks again).
-  name: z.string().max(400),
+  name: StoredDisplayName,
   goal: z.string().max(PROJECT_GOAL_MAX_CHARS * 2),
   templateId: z.string().max(100),
   templateVersion: z.string().max(32),
