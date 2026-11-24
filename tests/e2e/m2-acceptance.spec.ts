@@ -280,7 +280,9 @@ test('Check: collisions are rechecked, through the UI and forged command input (
   await page.keyboard.press('Escape');
   expect(await buildingLines()).toEqual(saved);
 
-  // Forged input straight to window.atlas.placement, with no preview involved.
+  // Forged input straight to window.atlas.placement, with no preview involved. "Off the map"
+  // is checked only here: the UI case above is an overlap, and the map's edge is off screen at
+  // the default camera. The preview and the command share the same rules (placement-rules.ts).
   const outcomes = await page.evaluate(
     async ({ gamma, alpha }) => {
       const worlds = await window.atlas.world.list();
@@ -592,7 +594,7 @@ test('Check: every critical action works from the list view with the world hidde
   expect(projects.find((p) => p.name === 'Field notes')?.goal).toBe('Written with the map hidden');
 });
 
-test('Exit: the world matches the saved projects, more than ten placed and unplaced, after a restart', async () => {
+test('Exit: the world matches the saved projects (more than ten in total, placed and unplaced) after a restart', async () => {
   test.setTimeout(90_000);
   // Twelve set up behind the UI: seven placed (one archived), five unplaced (one archived).
   await seedProjects(page, [
