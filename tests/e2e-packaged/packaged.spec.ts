@@ -274,6 +274,26 @@ test('loads the UI and its bundled assets only from app://atlas (works offline)'
   try {
     const { page } = running;
     expect(page.url()).toBe('app://atlas/index.html');
+    // Two sources of loaded URLs (#57). Chromium records no resource-timing entry for an
+    // uncached app:// fetch, so on the first load that list is empty. We connect only after
+    // that load, so we start recording and reload: the DevTools network events list every
+    // request, and the reload (served from cache) does fill resource timing. The page CSP
+    // blocks outside URLs, so CSP console errors are recorded as a second net.
+    const requested: string[] = [];
+    const failed: string[] = [];
+    const refused: string[] = [];
+    page.on('request', (request) => requested.push(request.url()));
+    page.on('requestfailed', (request) =>
+      failed.push(`${request.url()} (${request.failure()?.errorText ?? 'no reason'})`),
+    );
+    page.on('console', (message) => {
+      // Chromium's wording has changed over time ("Refused to load …", now "… violates the
+      // following Content Security Policy directive"), so match the part both share.
+      if (message.type() === 'error' && message.text().includes('Content Security Policy')) {
+        refused.push(message.text());
+      }
+    });
+    await page.reload({ waitUntil: 'networkidle' });
     const loaded = await page.evaluate(() => ({
       resources: performance.getEntriesByType('resource').map((entry) => entry.name),
       scripts: [...document.scripts].map((script) => script.src),
@@ -285,20 +305,39 @@ test('loads the UI and its bundled assets only from app://atlas (works offline)'
     }));
     expect(loaded.scripts.length).toBeGreaterThan(0);
     expect(loaded.styles.length).toBeGreaterThan(0);
-    for (const url of [...loaded.resources, ...loaded.scripts, ...loaded.styles]) {
+    // Positive controls: both lists must hold the page's own files, so neither can be empty
+    // or miss what the DOM says was loaded.
+    expect(requested).toEqual(
+      expect.arrayContaining(['app://atlas/index.html', ...loaded.scripts, ...loaded.styles]),
+    );
+    expect(loaded.resources).toEqual(expect.arrayContaining([...loaded.scripts, ...loaded.styles]));
+    for (const url of [...requested, ...loaded.resources]) {
       expect(url).toMatch(/^app:\/\/atlas\//);
     }
+    expect(failed).toEqual([]);
+    expect(refused).toEqual([]);
     expect(loaded.bodyMargin).toBe('0px');
     // React ran: the heading exists and the IPC bridge answered.
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Atlas Realm');
+
+    // Control for the recorders: an outside image is caught as a failed request and as a CSP
+    // error (the CSP stops it before any network access, so this works offline).
+    await page.evaluate(() => {
+      const image = document.createElement('img');
+      image.src = 'https://example.invalid/outside.png';
+      document.body.append(image);
+    });
+    await expect.poll(() => refused.join('\n')).toContain('https://example.invalid/outside.png');
+    // Polled too: the console message and the failed request may arrive in either order.
+    await expect.poll(() => failed).toContain('https://example.invalid/outside.png (csp)');
   } finally {
     await quit(running);
   }
 });
 
 test('bundled placeholder art ships in app.asar and loads offline from app://atlas (M0-8)', async () => {
-  // The packaged app records no resource-timing entries for app:// loads, so instead of
-  // reading performance entries we decode the built file by name. Its hashed name comes from
+  // Chromium records no resource-timing entry for an uncached app:// load (#57), so instead
+  // of reading performance entries we decode the built file by name. Its hashed name comes from
   // out/renderer, the build that `pnpm package` just wrapped.
   const built = readdirSync(resolve('out', 'renderer', 'assets')).filter((name) =>
     /^selection-[\w-]+\.png$/.test(name),
