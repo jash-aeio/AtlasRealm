@@ -7,7 +7,11 @@ const BASE_DIRECTIVES = {
   'default-src': ["'self'"],
   'script-src': ["'self'"],
   'style-src': ["'self'"],
-  'img-src': ["'self'", 'data:'],
+  // No data: (#58). Nothing we ship needs it: our art loads as files from app://atlas
+  // (assetsInlineLimit 0), React Flow has no data: images, and PixiJS only uses data: URIs in
+  // its Assets loader and extract code, which we don't call. A data: source would let injected
+  // markup build images out of thin air, so leave it out unless a test proves it's needed.
+  'img-src': ["'self'"],
   'font-src': ["'self'"],
   'connect-src': ["'self'"],
   'object-src': ["'none'"],
