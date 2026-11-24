@@ -24,6 +24,13 @@ describe('renderer Content Security Policy', () => {
     }
   });
 
+  it('images come only from our own origin, never data: URIs', () => {
+    for (const csp of [PRODUCTION_CSP, DEVELOPMENT_CSP]) {
+      expect(directive(csp, 'img-src')).toBe("img-src 'self'");
+      expect(csp).not.toContain('data:');
+    }
+  });
+
   it('development never allows eval and only connects to localhost', () => {
     expect(DEVELOPMENT_CSP).not.toContain('unsafe-eval');
     expect(directive(DEVELOPMENT_CSP, 'connect-src')).toBe("connect-src 'self' ws://localhost:*");
