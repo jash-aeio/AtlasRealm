@@ -51,3 +51,12 @@ Added after each milestone close. The table above stays as the spec wrote it; th
 - **Open: "local profiles imply false security."** Profiles separate data, but they are not encrypted, and the UI doesn't say so yet. *Response:* add a plain-language note before profiles hold secrets (M3).
 - **New: flaky tests erode trust in CI.** Two timing-sensitive tests failed now and then all through M1. *Response:* fix them early in M2.
 - **New: follow-ups from security reviews pile up.** Low findings (Unicode fillers in names and goals, read caps) are noted in docs rather than tracked. *Response:* make each one an issue with a gate; the Unicode one must land before goals reach prompts (M3).
+
+### M2 close (2026-11-25)
+- **Mitigated: "UI and runner disagree"** (for buildings, so far). The world, the Atlas Map and the library all read the same saved placements. The M2 Exit test compares all three with the database after a restart (`m2-acceptance.spec.ts`). Runs don't exist yet, so the runner half of this risk returns in M4.
+- **Mitigated: "local profiles imply false security."** The first launch and Settings → Profiles now say plainly that profiles aren't encrypted and that the Windows account is the real boundary (#62). Encryption itself is still not offered.
+- **Mitigated: follow-ups from security reviews pile up.** M2 planning turned every open follow-up into an issue with a gate, and all of them landed except #61 (read caps, M3). New findings went straight into issues (#82, #106, #108) instead of status notes.
+- **Still open: flaky tests.** #56 fixed the router and worker timing tests, and #71 fixed the world-canvas test, but a rarer `world.spec` flake appeared (#108, 1 failure in 116, then 95/95 on repeat). *Response:* fix #108 early in M3.
+- **Open, gated: text that hides instructions from people but not from models.** New names and goals refuse hidden characters (#60), but text saved earlier isn't re-checked. *Response:* #106 must land before any name or goal reaches a prompt (M3/M4).
+- **New: performance measured on one machine only.** 100 buildings kept up with a ~144 Hz display on the development PC. That says nothing about a slow laptop. *Response:* measure on lower-end hardware before the M8 polish pass, and keep culling covered by tests.
+- **New: parallel lanes sharing one checkout.** On 2026-11-22 a commit landed on the wrong branch because two lanes used the same folder. *Response:* each lane gets its own worktree from the start (MULTI_AGENT_GUIDE). No repeats since.
