@@ -21,6 +21,7 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | Term | Meaning | Where it shows up |
 |---|---|---|
 | **Acceptance criteria** | Checkable statements that define when a task is done | every issue |
+| **Acceptance test** | An end-to-end test of a promise made to the user (an M2 Check, a §22.2 scenario), driven through the real UI, often across a restart | `tests/e2e/m2-acceptance.spec.ts`, lesson 041 |
 | **ADR** | Architecture Decision Record: a short file explaining one important decision and why | `docs/adr/` |
 | **Branch / PR** | A separate line of work / a request to merge it into `main`, with review | GitHub |
 | **CI** | Continuous Integration: automatic checks on every push or PR | `.github/workflows/ci.yml` |
@@ -33,6 +34,7 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **E2E test** | End-to-end test: drives the real built app like a user would (we use Playwright) | `tests/e2e/` |
 | **Electron main / preload / renderer** | The privileged Node process / a tiny bridge script / the web page UI (no privileges) | `architecture/ARCHITECTURE.md` §7.2 |
 | **Exhaustiveness check** | Making the compiler prove every case of a union is handled, using `assertNever` in a `switch` default | `src/common/errors/assert-never.ts` |
+| **Flaky test** | A test that sometimes fails without any code change, usually because it races the app's timing. Rerun to tell it from a real failure, then fix or track it | #56, #108 |
 | **Formatter** | A tool that rewrites code layout (quotes, spacing) without changing behavior. We use Prettier. | `.prettierrc.json` |
 | **Hook (Claude Code)** | A script the harness runs automatically on events (before a tool runs, at session start…) | `.claude/hooks/` |
 | **Shared validation** | One pure rule used by both the preview (renderer) and the authoritative check (main), so they give the same answer. Main still runs it again itself, because the renderer is not trusted | `src/common/world/placement-rules.ts`, lesson 026 |

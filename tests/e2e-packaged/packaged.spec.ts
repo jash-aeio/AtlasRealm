@@ -30,6 +30,19 @@ import {
   snapshotFixtures,
   writeExternalFixtures,
 } from '../e2e/support/m1-ui';
+import {
+  allProjects,
+  entrancePanel,
+  expectWorldMatchesSaved,
+  isBackground,
+  isGround,
+  libraryButton,
+  type SavedBuilding,
+  savedBuildings,
+  screenPixel,
+  seedProjects,
+  windowPointOf,
+} from '../e2e/support/m2-ui';
 import { openDeveloperSpikes } from '../e2e/support/onboarding';
 import {
   hasProfileData,
@@ -267,6 +280,193 @@ test('M1 Checks packaged: offline create and reopen, rename identity, external f
     expect(await quit(second)).toBe(0);
   }
   expect(snapshotFixtures(fixtures)).toEqual(snapshot);
+});
+
+/** Main screen with no panel over the world, the world ready. */
+async function showWorld(page: Page): Promise<void> {
+  const panel = entrancePanel(page);
+  if (await panel.isVisible()) await panel.getByRole('button', { name: 'Back to world' }).click();
+  await expect(panel).toHaveCount(0);
+  await expect(page.getByTestId('world-view')).toHaveAttribute('data-state', 'ready');
+}
+
+test('M2 Checks packaged: world matches saved projects offline after a restart, buildings drawn from bundled art', async () => {
+  test.setTimeout(120_000);
+  // Same userData as above: the world exists, with one trashed project from the M1 test.
+  const placed = [
+    { name: 'Apiary', tile: { x: 28, y: 28 } },
+    { name: 'Bakery', tile: { x: 33, y: 28 } },
+    { name: 'Chapel', tile: { x: 28, y: 33 } },
+    { name: 'Dovecote', tile: { x: 33, y: 33 } },
+    { name: 'Forge', tile: { x: 38, y: 28 }, archived: true },
+  ];
+  const first = await launchPackaged();
+  const saved: { projects: ProjectSummary[]; buildings: SavedBuilding[] } = {
+    projects: [],
+    buildings: [],
+  };
+  try {
+    const { page } = first;
+    const attempts = await goOfflineRenderer(page);
+    const ids = await seedProjects(page, [
+      ...placed,
+      { name: 'Inn' },
+      { name: 'Jetty' },
+      { name: 'Kiln' },
+      { name: 'Lantern' },
+      { name: 'Mill', archived: true },
+    ]);
+    await page.reload();
+    await expect(screen(page, 'main')).toBeVisible();
+    // Through the UI, without the map: one more project, auto-placed, and a pin.
+    await createProjectThroughUi(page, 'Orchard');
+    await page
+      .getByRole('listitem', { name: 'Orchard', exact: true })
+      .getByRole('button', { name: 'Auto-place' })
+      .click();
+    await expect(page.getByTestId('projects-message')).toHaveText(/^Placed “Orchard” at tile/);
+    await page
+      .getByRole('listitem', { name: 'Inn', exact: true })
+      .getByRole('button', { name: 'Pin to hotbar' })
+      .click();
+    await page.getByTestId('pin-dialog').locator('button[data-slot="1"]').click();
+    await expect(page.getByTestId('projects-message')).toHaveText(/^Pinned “Inn” to slot 1\./);
+
+    // Collision recheck in the packaged main process: a forged overlap is refused.
+    const forged = await page.evaluate(async (projectId) => {
+      const worlds = await window.atlas.world.list();
+      if (!worlds.ok) throw new Error(worlds.error.code);
+      const worldId = worlds.data.worlds[0]?.id ?? '';
+      const result = await window.atlas.placement.create({
+        worldId,
+        projectId,
+        tileX: 29,
+        tileY: 29,
+        rotation: 0,
+      });
+      return result.ok ? 'saved' : `${result.error.code}:${result.error.placement?.reason ?? ''}`;
+    }, ids['Kiln'] ?? '');
+    expect(forged).toBe('placement_blocked:overlaps');
+
+    await showWorld(page);
+    expect(await expectWorldMatchesSaved(page)).toEqual({ placed: 6, unplaced: 5 });
+    saved.projects = await allProjects(page);
+    saved.buildings = await savedBuildings(page);
+    expect(attempts).toEqual([]);
+  } finally {
+    expect(await quit(first)).toBe(0);
+  }
+
+  expect(saved.projects).toHaveLength(12);
+  const second = await launchPackaged();
+  try {
+    const { page } = second;
+    const attempts = await goOfflineRenderer(page);
+    await showWorld(page);
+    expect(await allProjects(page)).toEqual(saved.projects);
+    expect(await savedBuildings(page)).toEqual(saved.buildings);
+    expect(await expectWorldMatchesSaved(page)).toEqual({ placed: 6, unplaced: 5 });
+    await expect(
+      page.getByRole('group', { name: 'Hotbar' }).locator('li[data-slot="1"] .hotbar-activate'),
+    ).toHaveAccessibleName('Slot 1: Inn');
+
+    // Buildings really drawn from the bundled art, offline: the middle of Apiary's walls is
+    // neither grass nor background. Control: open ground away from every building is grass.
+    await libraryButton(page).click();
+    await expect(entrancePanel(page)).toHaveCount(0);
+    const wall = await windowPointOf(page, { gx: 29.5, gy: 29.5 });
+    await expect
+      .poll(async () => {
+        const pixel = await screenPixel(page, { x: wall.x, y: wall.y - 30 });
+        return !isGround(pixel) && !isBackground(pixel);
+      })
+      .toBe(true);
+    const ground = await windowPointOf(page, { gx: 31, gy: 24 });
+    expect(isGround(await screenPixel(page, ground))).toBe(true);
+    expect(attempts).toEqual([]);
+  } finally {
+    expect(await quit(second)).toBe(0);
+  }
+});
+
+test('100 buildings in the packaged app: culling and frame-gap measurement', async () => {
+  test.setTimeout(120_000);
+  // A fresh profile of its own, so the 100 buildings don't share the world above.
+  const sharedUserData = userDataDir;
+  userDataDir = join(root, 'user data 100 buildings');
+  const running = await launchPackaged();
+  try {
+    const { page } = running;
+    await onboardThroughUi(page, 'Default', 'Hundred Vale');
+    await seedProjects(
+      page,
+      Array.from({ length: 100 }, (_, index) => ({
+        name: `Project ${String(index + 1).padStart(3, '0')}`,
+        tile: { x: 6 + (index % 10) * 5, y: 6 + Math.floor(index / 10) * 5 },
+      })),
+    );
+    await page.reload();
+    await showWorld(page);
+    const world = page.getByTestId('world-view');
+    await expect(world).toHaveAttribute('data-buildings', '100');
+    const host = page.getByTestId('world-view-host');
+    const drawn = async () => Number(await world.getAttribute('data-drawn-buildings'));
+
+    for (let i = 0; i < 6; i++)
+      await world.getByRole('button', { name: 'Zoom in', exact: true }).click();
+    await expect(page.getByTestId('world-view-status')).toContainText('Zoom 191%');
+    await expect.poll(drawn).toBeLessThan(100);
+    const zoomedIn = await drawn();
+    for (let i = 0; i < 10; i++)
+      await world.getByRole('button', { name: 'Zoom out', exact: true }).click();
+    await expect(page.getByTestId('world-view-status')).toContainText('Zoom 25%');
+    await expect.poll(drawn).toBeGreaterThan(zoomedIn);
+    const zoomedOut = await drawn();
+    await world.getByRole('button', { name: 'Reset view', exact: true }).click();
+
+    // Measurement, not a guarantee (UI_SPEC §17.4): the same input as the dev test.
+    await page.evaluate(() => {
+      const scope = window as unknown as { __frames: number[] };
+      scope.__frames = [];
+      let last = performance.now();
+      const tick = (now: number) => {
+        scope.__frames.push(now - last);
+        last = now;
+        if (scope.__frames.length < 100_000) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    const box = await host.boundingBox();
+    if (box === null) throw new Error('world host not visible');
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    const started = performance.now();
+    for (let i = 0; i < 40; i++) await page.mouse.move(cx - 200 + i * 10, cy + (i % 5) * 6);
+    await page.mouse.move(cx, cy);
+    for (let i = 0; i < 6; i++) await page.mouse.wheel(0, i < 3 ? -100 : 100);
+    await page.mouse.down({ button: 'middle' });
+    for (let i = 0; i < 40; i++) await page.mouse.move(cx + i * 5, cy + i * 2);
+    await page.mouse.up({ button: 'middle' });
+    const elapsed = performance.now() - started;
+    const frames = await page.evaluate(() =>
+      (window as unknown as { __frames: number[] }).__frames.slice(1),
+    );
+    const sorted = [...frames].sort((a, b) => a - b);
+    const p95 = sorted[Math.floor(sorted.length * 0.95)] ?? 0;
+    const longest = sorted.at(-1) ?? 0;
+    const mean = frames.reduce((sum, value) => sum + value, 0) / Math.max(1, frames.length);
+    const summary =
+      `packaged, 100 buildings: drawn ${String(zoomedIn)} at 191%, ${String(zoomedOut)} at 25%; ` +
+      `${String(frames.length)} frames over ${elapsed.toFixed(0)} ms of input: ` +
+      `mean ${mean.toFixed(1)} ms, p95 ${p95.toFixed(1)} ms, longest ${longest.toFixed(1)} ms`;
+    test.info().annotations.push({ type: 'performance', description: summary });
+    console.log(`[world perf] ${summary}`);
+    // A loose sanity bound only: the number to read is the annotation.
+    expect(p95).toBeLessThan(100);
+  } finally {
+    expect(await quit(running)).toBe(0);
+    userDataDir = sharedUserData;
+  }
 });
 
 test('loads the UI and its bundled assets only from app://atlas (works offline)', async () => {
