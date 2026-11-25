@@ -2,10 +2,10 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-25 · **Branch:** chore/release-v0.3.0-m2 (M2 release PR, on main @ c254355)
+**Last updated:** 2026-11-25 · **Branch:** docs/plan-m3 (M3 planning PR, on main @ 4306f6b)
 
 ## Current milestone
-**M3 — Bundled resources and permission broker** (📋 not planned yet; run `/plan-milestone M3`). Includes IMP-1 inspect + IMP-2 commit; #61 and #106 already filed.
+**M3 — Bundled resources and permission broker** (⏳ planned 2026-11-25; 24 issues: #111–#131 plus #61, #106, #108). Breakdown: `docs/pm/milestones/M3.md`; graph and lanes: `docs/pm/DEPENDENCIES.md#task-level-m3`.
 
 **M2 — Isometric world, placement, hotbar, library and Atlas shell: ✅ closed 2026-11-25, tag `v0.3.0-m2`.** All 21 issues (#56–#60, #62, #66–#80) merged. Evidence on main @ c254355: typecheck, lint, format:check pass; unit/integration 1303/1303, E2E 116/116, packaged E2E 17/17; CI green. See `docs/sessions/2026-11-25-m2-close.md`.
 
@@ -719,8 +719,8 @@
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- M2 is closed (`v0.3.0-m2`, 2026-11-25; all 21 issues merged, see `docs/sessions/2026-11-25-m2-close.md`). **Next: run `/plan-milestone M3`.** Already filed for M3: #61 (read caps, before imports and restore) and #106 (hidden-data combinations, re-check stored text before prompts). Also decide there: #108 (rare `world.spec` hover flake, no milestone yet); fixing it early in M3 is recommended.
-- After #60, for M3 prompt building: new names and goals are checked by `hasHiddenCharacters` (`src/common/text/hidden-characters.ts`), but rows saved earlier are not re-checked (ADR-0033). Treat stored text as untrusted when building prompts. Use `StoredDisplayName` for any new reply field that returns a stored name; never re-check stored data with `DisplayName`. #106 (M3 release gate) adds context rules for joiners/selectors and the prompt-side re-check.
+- M3 is planned (2026-11-25, see `docs/sessions/2026-11-25-plan-m3.md`). **Start lanes, each in its own worktree:** A = #108 (flake) then M3-1 #111 (manifest contract, goes first); B = M3-9 #119 (path policy); D = #61 (read caps, gate before M3-18). Lane C (#106, M3-4 #114) fills gaps. Migrations: M3-3 #113 = 7, M3-10 #120 = 8, M3-17 #127 = 9. Tasks that add IPC channels (M3-5, M3-6, M3-11, M3-13, M3-17) run one at a time.
+- After #60, for M3 prompt building: new names and goals are checked by `hasHiddenCharacters` (`src/common/text/hidden-characters.ts`), but rows saved earlier are not re-checked (ADR-0033). Treat stored text as untrusted when building prompts. Use `StoredDisplayName` for any new reply field that returns a stored name; never re-check stored data with `DisplayName`. #106 (M3) adds context rules for joiners/selectors; the prompt-side re-check moved to #132 (M4, gate before the first provider call).
 - Parallel lanes must each use their own git worktree from the start (MULTI_AGENT_GUIDE). On 2026-11-22 #69 and #70 shared one checkout and a commit landed on the wrong branch; see `docs/sessions/2026-11-22-hotbar-commands.md`.
 - After M2-10 (#75), for M2-15 (#80): the hotbar lives per world in `MainScreen`'s `scope` (`createHotbar`); call `hotbar.refresh()` after anything that changes project names or statuses. E2E helpers (`createProjects`, `pinThroughApi`, `pinThroughUi`) are in `tests/e2e/hotbar.spec.ts`. A dialog with several steps needs a `key` per step so `autoFocus` applies (lesson 038). E2E that look for a "world view" button must scope to `details.developer-spikes`. #56's worker-boundary follow-up is #82 (M4).
 - After M2-13 (#78), for M2-15 (#80) and later graph work:
