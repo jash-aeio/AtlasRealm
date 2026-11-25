@@ -60,7 +60,13 @@ async function launch(initScript?: () => void): Promise<Launched> {
   page.on('console', (message) => consoleLines.push(`${message.type()}: ${message.text()}`));
   await page.waitForLoadState('domcontentloaded');
   await app.evaluate(({ BrowserWindow }, size) => {
-    BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height);
+    const window = BrowserWindow.getAllWindows()[0];
+    window?.setContentSize(size.width, size.height);
+    // The test window is a real window on the desktop, so the physical cursor's own moves and
+    // leaves reach the page too and overwrite the test's pointer: a stray real move reset the
+    // hover readout to idle mid-test (#108). Ignoring OS mouse input stops that; the test's
+    // pointer is sent straight to the page (CDP) and still arrives.
+    window?.setIgnoreMouseEvents(true);
   }, WINDOW);
   // Record CSP violations from the very start of each load (before any app code), so a test
   // can assert none happened while Pixi starts under the strict CSP.
