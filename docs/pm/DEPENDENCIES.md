@@ -165,5 +165,80 @@ flowchart LR
 **Parallel lanes at the start (max 3):** A = M2-2 (schema), with #59 first or alongside it · B = M2-5 (layout) · C = M2-1 (rules). Lane D follow-ups (#56 already in progress, #57, #58, #60) are small and parallel-safe, so they fill gaps. M2-3, M2-4 and M2-11 share `channels.ts`, `atlas-api.ts` and the preload, so they run one after another. Once M2-6 lands, B (M2-7 → M2-8, M2-14) and C (M2-12, M2-9 → M2-10) can overlap.
 > Migration numbering: M2-2 owns migration 5 and M2-11 owns migration 6. No other M2 task adds a migration. If M3 work starts in parallel, it takes migration 7 or later.
 
+## Task level: M3
+
+| Issue | Task | Depends on | Lane | Parallel-safe | Files owned |
+|---|---|---|---|---|---|
+| [#108](https://github.com/jash-aeio/AtlasRealm/issues/108) | world.spec hover flake | — | A | ✅ | `tests/e2e/world.spec.ts` (`src/renderer/world/*` only if the cause is there) |
+| [#61](https://github.com/jash-aeio/AtlasRealm/issues/61) | Profile/world caps on read | — | D | ✅ | `src/main/profiles/profile-service.ts`, `src/main/storage/profiles/profiles-index.ts`, `src/common/contracts/{profile,world}.ts` |
+| [#106](https://github.com/jash-aeio/AtlasRealm/issues/106) | Hidden-data combinations | — | C | ✅ | `src/common/text/hidden-characters.ts`, `profile-service.ts` (duplicate check; after #61 if both are open) |
+| M3-1 ([#111](https://github.com/jash-aeio/AtlasRealm/issues/111)) | Manifest schema + capability registry | — | A | ✅ contract, goes first | `src/common/contracts/resource-manifest.ts`, `src/common/security/capabilities.ts` |
+| M3-2 ([#112](https://github.com/jash-aeio/AtlasRealm/issues/112)) | Bundled packages + catalog loader | M3-1 | A | ❌ | `resources/packages/**`, `src/main/resources/*`, electron-builder extraResources |
+| M3-3 ([#113](https://github.com/jash-aeio/AtlasRealm/issues/113)) | Schema v7: resources + team | M3-1 | A | ❌ migration 7 | `src/main/storage/migrations/index.ts`, `src/main/storage/repositories/{resource-*,agent-instance,binding}-repository.ts` |
+| M3-4 ([#114](https://github.com/jash-aeio/AtlasRealm/issues/114)) | Readiness calculation | M3-1 | C | ✅ | `src/common/resources/readiness.ts` |
+| M3-5 ([#115](https://github.com/jash-aeio/AtlasRealm/issues/115)) | Install/enable commands | M3-2, M3-3, M3-4 | A | ❌ shared preload/channels | `src/common/contracts/resource.ts`, `src/main/services/resource-service.ts`, `src/main/ipc/commands/resource.ts` |
+| M3-6 ([#116](https://github.com/jash-aeio/AtlasRealm/issues/116)) | Recruit + bindings | M3-5 | A | ❌ shared preload/channels | `src/common/contracts/agent.ts`, `src/main/services/agent-service.ts`, `src/main/ipc/commands/agent.ts` |
+| M3-7 ([#117](https://github.com/jash-aeio/AtlasRealm/issues/117)) | Library Agents/Skills/Tools | M3-5 | C | ❌ | `src/renderer/library/{Agents,Skills,Tools}Tab.tsx`, `src/renderer/library/resource-card/*`, `tests/e2e/resources.spec.ts` |
+| M3-8 ([#118](https://github.com/jash-aeio/AtlasRealm/issues/118)) | Recruit dialog + Team panel | M3-6, M3-7 | C | ❌ | `src/renderer/projects/team/*`, `src/renderer/library/RecruitDialog.tsx`, `tests/e2e/team.spec.ts` |
+| M3-9 ([#119](https://github.com/jash-aeio/AtlasRealm/issues/119)) | Path policy | — | B | ✅ | `src/main/security/path-policy.ts` |
+| M3-10 ([#120](https://github.com/jash-aeio/AtlasRealm/issues/120)) | Schema v8 + policy evaluator | M3-1, M3-3 | B | ❌ migration 8 | `migrations/index.ts`, `repositories/{grant,approval,audit,artifact}-repository.ts`, `src/common/security/authorize.ts` |
+| M3-11 ([#121](https://github.com/jash-aeio/AtlasRealm/issues/121)) | Grant/approval/audit services | M3-10 | B | ❌ shared preload/channels | `src/common/contracts/permission.ts`, `src/main/services/{permission,audit}-service.ts`, `src/main/ipc/commands/permission.ts` |
+| M3-12 ([#122](https://github.com/jash-aeio/AtlasRealm/issues/122)) | Immutable artifact storage | M3-9, M3-10 | B | ❌ | `src/main/services/artifact-store.ts`, `src/main/storage/managed-paths.ts` |
+| M3-13 ([#123](https://github.com/jash-aeio/AtlasRealm/issues/123)) | File tools + broker | M3-11, M3-12 | B | ❌ shared preload/channels | `src/main/broker/*`, `src/main/ipc/commands/tool.ts`, `src/common/contracts/tool.ts` |
+| M3-14 ([#124](https://github.com/jash-aeio/AtlasRealm/issues/124)) | Approval card, manual run, artifacts, preview | M3-8, M3-13 | C | ❌ | `src/renderer/{projects/files,approvals,projects/activity}/*`, `tests/e2e/artifacts.spec.ts` |
+| M3-15 ([#125](https://github.com/jash-aeio/AtlasRealm/issues/125)) | Permission-aware file index | M3-13 | B | ❌ | `src/main/services/{graph,index}-service.ts`, `graph-entity-repository.ts` |
+| M3-16 ([#126](https://github.com/jash-aeio/AtlasRealm/issues/126)) | IMP-1 inventory + classifier | M3-9 | D | ✅ | `src/main/import/{inventory,exclusions}.ts`, `src/common/import/classify.ts` |
+| M3-17 ([#127](https://github.com/jash-aeio/AtlasRealm/issues/127)) | Schema v9: import sessions + inspect | M3-10, M3-11, M3-16 | D | ❌ migration 9 | `migrations/index.ts`, `repositories/import-repository.ts`, `src/main/services/import-service.ts`, `src/main/ipc/commands/import.ts`, `src/common/contracts/import.ts` |
+| M3-18 ([#128](https://github.com/jash-aeio/AtlasRealm/issues/128)) | IMP-2 commit | M3-12, M3-17, #61 | D | ❌ | `src/main/import/{commit,staging}.ts`, `import-service.ts` |
+| M3-19 ([#129](https://github.com/jash-aeio/AtlasRealm/issues/129)) | Duplicates + re-link | M3-18 | D | ❌ | `src/main/import/{duplicates,relink}.ts` |
+| M3-20 ([#130](https://github.com/jash-aeio/AtlasRealm/issues/130)) | Import wizard UI | M3-7, M3-19 | C | ❌ | `src/renderer/import/*`, `tests/e2e/import.spec.ts`, `tests/fixtures/import/**` |
+| M3-21 ([#131](https://github.com/jash-aeio/AtlasRealm/issues/131)) | Acceptance E2E + packaged smoke | all | — | ❌ integrator | `tests/e2e/m3-acceptance.spec.ts`, `tests/e2e-packaged/*` |
+
+```mermaid
+flowchart LR
+  I108[#108 Hover flake]
+  I61[#61 Read caps]
+  I106[#106 Hidden-data rules]
+  M31[M3-1 #111 Manifest + capabilities] --> M32[M3-2 #112 Bundled catalog]
+  M31 --> M33[M3-3 #113 Schema v7]
+  M31 --> M34[M3-4 #114 Readiness]
+  M32 --> M35[M3-5 #115 Install cmds]
+  M33 --> M35
+  M34 --> M35
+  M35 --> M36[M3-6 #116 Recruit cmds]
+  M35 --> M37[M3-7 #117 Library tabs]
+  M36 --> M38[M3-8 #118 Team panel]
+  M37 --> M38
+  M39[M3-9 #119 Path policy] --> M312[M3-12 #122 Artifact store]
+  M31 --> M310[M3-10 #120 Schema v8 + authorize]
+  M33 --> M310
+  M310 --> M311[M3-11 #121 Grants/approvals]
+  M310 --> M312
+  M311 --> M313[M3-13 #123 Broker + file tools]
+  M312 --> M313
+  M38 --> M314[M3-14 #124 Approval + artifacts UI]
+  M313 --> M314
+  M313 --> M315[M3-15 #125 File index]
+  M39 --> M316[M3-16 #126 Inventory]
+  M316 --> M317[M3-17 #127 Schema v9 + inspect]
+  M310 --> M317
+  M311 --> M317
+  M317 --> M318[M3-18 #128 Import commit]
+  M312 --> M318
+  I61 --> M318
+  M318 --> M319[M3-19 #129 Duplicates + re-link]
+  M319 --> M320[M3-20 #130 Wizard UI]
+  M37 --> M320
+  M314 --> M321[M3-21 #131 Acceptance]
+  M315 --> M321
+  M320 --> M321
+  I108 --> M321
+  I106 --> M321
+```
+
+**Critical path:** M3-1 → M3-3 → M3-10 → M3-11 → M3-13 → M3-14 → M3-21. The import chain M3-10 → M3-17 → M3-18 → M3-19 → M3-20 → M3-21 is about as long.
+**Parallel lanes at the start (max 3):** A = #108, then M3-1 (contract, first) → M3-3 → M3-2 · B = M3-9 (path policy) · D = #61 → M3-16 once M3-9 lands (or alongside it, since M3-16 only imports the path-policy API). Lane C (#106, M3-4) fills gaps and becomes the UI lane once M3-5 lands. M3-5, M3-6, M3-11, M3-13 and M3-17 all add IPC channels and preload methods, so they run one after another, never at the same time. Every lane uses its own git worktree from the start (M2 retro).
+> Migration numbering: M3-3 owns migration 7, M3-10 owns migration 8 and M3-17 owns migration 9. No other M3 task adds a migration. Each bumps the expected schema version in `tests/e2e/storage.spec.ts` and `tests/e2e-packaged/packaged.spec.ts`.
+
 ## Updating this file
 `/plan-milestone Mx` adds a task table and graph for each new milestone. Keep **Files owned** accurate. It's what makes parallel work safe.
