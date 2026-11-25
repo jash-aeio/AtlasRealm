@@ -45,7 +45,7 @@ the mouse.
 
 ## Decisions
 
-- Test-only, reversible fix in the issue's owned file, so no ADR.
+- Test-only, reversible fix in the issue's owned file, so no ADR. Lesson: [042](../learning/lessons/042-flaky-tests-real-vs-synthetic-input.md).
 - Moving the real OS cursor from a script was not used (it was blocked, and it would take over
   the user's mouse). The read-only cursor position plus a window restore gave the same evidence.
 
