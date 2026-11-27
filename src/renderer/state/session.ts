@@ -21,8 +21,10 @@ export interface SessionApi {
 export interface SessionData {
   readonly profiles: ProfileListOutput;
   readonly settings: ProfileSettings;
-  /** Active (unarchived) worlds of the active profile. */
+  /** Active (unarchived) worlds of the active profile, at most MAX_WORLDS. */
   readonly worlds: readonly WorldSummary[];
+  /** Active worlds that weren't listed because of the limit (#61); usually 0. */
+  readonly worldsOmitted: number;
 }
 
 export type SessionState =
@@ -102,6 +104,7 @@ export function createSession(api: SessionApi): Session {
         profiles: profiles.data,
         settings: settings.data.settings,
         worlds: worlds.data.worlds,
+        worldsOmitted: worlds.data.omittedCount,
       },
       notice,
     });

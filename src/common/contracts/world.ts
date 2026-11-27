@@ -55,8 +55,13 @@ export type WorldCreateInput = z.input<typeof WorldCreateInput>;
 export const WorldListInput = z.strictObject({ includeArchived: z.boolean() }).optional();
 export type WorldListInput = z.input<typeof WorldListInput>;
 
+/**
+ * At most MAX_WORLDS worlds, in creation order. A restored or imported database can hold more
+ * (#61): the rest stay untouched and are counted in `omittedCount`, so the app still opens.
+ */
 export const WorldListOutput = z.strictObject({
   worlds: z.array(WorldSummary).max(MAX_WORLDS),
+  omittedCount: z.int().min(0).max(Number.MAX_SAFE_INTEGER),
 });
 export type WorldListOutput = z.infer<typeof WorldListOutput>;
 

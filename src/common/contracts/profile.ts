@@ -66,9 +66,15 @@ export type ProfileSettings = z.infer<typeof ProfileSettings>;
 export const ProfileListInput = z.undefined();
 export type ProfileListInput = z.infer<typeof ProfileListInput>;
 
+/**
+ * At most MAX_PROFILES entries, the active one always among them. A restored, imported or
+ * hand-edited index can hold more (#61): the rest stay on disk untouched and are counted in
+ * `omittedCount`, so the app still opens and the UI can say what isn't shown.
+ */
 export const ProfileListOutput = z.strictObject({
   profiles: z.array(ProfileSummary).min(1).max(MAX_PROFILES),
   activeProfileId: ProfileIdText,
+  omittedCount: z.int().min(0).max(Number.MAX_SAFE_INTEGER),
 });
 export type ProfileListOutput = z.infer<typeof ProfileListOutput>;
 

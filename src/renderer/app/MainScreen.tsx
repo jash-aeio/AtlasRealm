@@ -36,6 +36,7 @@ import { ProjectsPanel } from '../projects/ProjectsPanel';
 import { createProjectSelection } from '../state/selection';
 import { DEFAULT_BUILDING_APPEARANCE } from '../../common/world/building-appearance';
 import { createStore } from '../state/store';
+import { omittedNotice } from '../state/list-limits';
 import type { Session, SessionData } from '../state/session';
 import { useStore } from '../state/use-store';
 import type { Comfort } from '../world/comfort';
@@ -180,6 +181,8 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
   const gridWidth = world?.gridWidth ?? 0;
   const gridHeight = world?.gridHeight ?? 0;
   const profileId = data.profiles.activeProfileId;
+  // A restored or imported profile can hold more worlds than are listed (#61).
+  const worldsNotice = omittedNotice('world', data.worlds.length, data.worldsOmitted);
   // Per world: its buildings, the selected project, the placement tool and its undo history.
   // Another world (or profile) starts fresh, so a project of the old world can never stay
   // selected or half-placed, and undo never reaches a change made in another world (M2-8).
@@ -352,6 +355,11 @@ function MainLayout({ session, data, notice, comfort }: MainScreenProps) {
               ) : (
                 <span>
                   World: <strong data-testid="world-name">{world.name}</strong>
+                </span>
+              )}
+              {worldsNotice !== null && (
+                <span className="muted world-omitted" data-testid="worlds-omitted">
+                  {worldsNotice}
                 </span>
               )}
             </div>

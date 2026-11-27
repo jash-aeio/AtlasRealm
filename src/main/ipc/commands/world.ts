@@ -57,9 +57,20 @@ export function createWorldCreateHandler(
 export function createWorldListHandler(
   active: ActiveProfile,
 ): CommandHandler<typeof WorldListInput, typeof WorldListOutput> {
-  return (input) => ({
-    worlds: worlds(active).list({ includeArchived: input?.includeArchived ?? false }),
-  });
+  return (input) => {
+    const all = worlds(active).list({ includeArchived: input?.includeArchived ?? false });
+    // A restored or imported database may hold more than MAX_WORLDS (#61). The first ones in
+    // creation order are listed; the rest stay untouched and are counted, never deleted.
+    const shown = all.slice(0, MAX_WORLDS);
+    const omittedCount = all.length - shown.length;
+    if (omittedCount > 0) {
+      console.warn(
+        `[worlds] listing ${String(shown.length)} of ${String(all.length)} worlds ` +
+          `(limit ${String(MAX_WORLDS)}); the rest are kept`,
+      );
+    }
+    return { worlds: shown, omittedCount };
+  };
 }
 
 export function createWorldRenameHandler(
