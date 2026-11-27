@@ -71,7 +71,7 @@ export interface CapabilityInfo {
   readonly scopes: readonly PermissionScope[];
 }
 
-export const CAPABILITIES: Readonly<Record<CapabilityId, CapabilityInfo>> = {
+const ENTRIES: Record<CapabilityId, CapabilityInfo> = {
   'project.files.list': {
     label: 'See the list of files in this project',
     riskNote: 'File names and folder structure can reveal private details.',
@@ -200,17 +200,41 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, CapabilityInfo>> = {
   },
 };
 
-/** The plain-language entry for a capability. */
-export function describeCapability(id: CapabilityId): CapabilityInfo {
-  return CAPABILITIES[id];
+// A policy table must not change at run time. `Readonly<>` only binds the compiler, so every
+// entry and its scopes list are frozen too (#111 security review L3).
+for (const info of Object.values(ENTRIES)) {
+  Object.freeze(info.scopes);
+  Object.freeze(info);
+}
+export const CAPABILITIES: Readonly<Record<CapabilityId, CapabilityInfo>> = Object.freeze(ENTRIES);
+
+/**
+ * Capabilities a package may not even ask for in this version. Running programs is exactly the
+ * executable content the declarative MVP path refuses (DATA_MODEL §10.3, SECURITY §13.4), so a
+ * manifest naming it is refused outright instead of shown as "waiting" (user decision
+ * 2026-11-27, ADR-0034). Allowing it later takes a new ADR.
+ */
+export const REFUSED_IN_PACKAGES: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
+  'process.execute',
+]);
+
+// Lookups take any string, because tool names may come from model output (§21.2). Only the
+// table's own keys count: inherited names such as `toString` or `constructor` are unknown.
+function entry(id: string): CapabilityInfo | undefined {
+  return Object.hasOwn(CAPABILITIES, id) ? CAPABILITIES[id as CapabilityId] : undefined;
 }
 
-/** True if the app can perform this capability in the current version. */
-export function isCapabilityAvailable(id: CapabilityId): boolean {
-  return CAPABILITIES[id].available;
+/** The plain-language entry for a capability, or undefined for an unknown ID. */
+export function describeCapability(id: string): CapabilityInfo | undefined {
+  return entry(id);
 }
 
-/** True if a request for `id` may name `scope`. */
-export function isScopeAllowed(id: CapabilityId, scope: PermissionScope): boolean {
-  return CAPABILITIES[id].scopes.includes(scope);
+/** True if `id` is known and the app can perform it in the current version. */
+export function isCapabilityAvailable(id: string): boolean {
+  return entry(id)?.available ?? false;
+}
+
+/** True if `id` is known and a request for it may name `scope`. */
+export function isScopeAllowed(id: string, scope: string): boolean {
+  return entry(id)?.scopes.some((allowed) => allowed === scope) ?? false;
 }

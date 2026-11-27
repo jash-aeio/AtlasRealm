@@ -13,7 +13,12 @@
 // permission broker (M3-10) decides at run time, and the user grants (SECURITY §13.2).
 import { z } from 'zod';
 
-import { CapabilityId, isScopeAllowed, PermissionScope } from '../security/capabilities';
+import {
+  CapabilityId,
+  isScopeAllowed,
+  PermissionScope,
+  REFUSED_IN_PACKAGES,
+} from '../security/capabilities';
 import { hasHiddenCharacters } from '../text/hidden-characters';
 import { DisplayName } from './display-name';
 import { TemplateVersion } from './project-template';
@@ -99,11 +104,12 @@ export const ManifestRefusalReason = z.enum([
   'not_an_object', // not a JSON object at all
   'unsupported_schema_version', // `schemaVersion` missing or not one this app reads
   'install_script', // asks to run something on install (§10.3)
-  'executable_content', // `executable: true` or an entry point to run (§10.3)
+  'executable_content', // `executable: true`, an entry point, or running programs (§10.3)
   'unknown_key', // a field this schema version doesn't define
   'unsafe_path', // a referenced file could leave the package folder
   'unknown_capability', // a capability ID the app doesn't know (§21.2)
   'permission_mismatch', // a needed capability isn't declared, or the scope doesn't fit it
+  'origin_mismatch', // claims to be bundled with the app, but wasn't found in the app's own folder
   'invalid_manifest', // anything else that fails the schema
 ]);
 export type ManifestRefusalReason = z.infer<typeof ManifestRefusalReason>;
@@ -158,7 +164,9 @@ export const PackageRelativePath = z
 /** DisplayName's character rules (no control or hidden characters) with a longer limit. */
 const Description = z
   .string()
-  .max(1100)
+  // `abort` stops here for oversized text, so the scans below never run on megabytes
+  // (#111 security review L2).
+  .max(1100, { abort: true })
   .trim()
   .min(1)
   .refine((text) => Array.from(text).length <= 500, 'description is too long')
@@ -178,10 +186,15 @@ export const LicenseId = z
   .regex(/^(?:LicenseRef-)?[A-Za-z0-9][A-Za-z0-9.+-]*$/, 'SPDX license identifier');
 
 /** A capability ID that must be in the registry. Unknown IDs get their own refusal reason. */
-const KnownCapability = z.custom<CapabilityId>(
-  (value) => CapabilityId.safeParse(value).success,
-  tagged('unknown_capability', 'unknown capability'),
-);
+const KnownCapability = z
+  .custom<CapabilityId>(
+    (value) => CapabilityId.safeParse(value).success,
+    tagged('unknown_capability', 'unknown capability'),
+  )
+  .refine(
+    (id) => !REFUSED_IN_PACKAGES.has(id),
+    tagged('executable_content', 'running programs is not allowed in packages'),
+  );
 
 /** Model features a package can need (AI_PROVIDERS §11.3). */
 export const ModelCapability = z.enum(['text', 'tool-calling', 'image-input', 'structured-output']);
@@ -366,9 +379,22 @@ function refuse(reason: ManifestRefusalReason, issues: string[] = []): ManifestP
   return { ok: false, reason, issues: issues.slice(0, MAX_REPORTED_ISSUES) };
 }
 
+/** Shows a control character as its code, e.g. a newline as `\u000a`. */
+function escapeControl(char: string): string {
+  return `\\u${(char.codePointAt(0) ?? 0).toString(16).padStart(4, '0')}`;
+}
+
+/**
+ * Messages can quote attacker-controlled text (an unknown key's name), so control and line
+ * separator characters are escaped: a manifest can't forge extra log lines or send terminal
+ * escape codes (#111 security review L1).
+ */
 function describeIssue(issue: z.core.$ZodIssue): string {
   const path = issue.path.map(String).join('.') || '(root)';
-  return `${path}: ${issue.message}`.slice(0, 200);
+  return `${path}: ${issue.message}`
+    .slice(0, 400)
+    .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, escapeControl)
+    .slice(0, 200);
 }
 
 function issueReason(issue: z.core.$ZodIssue): ManifestRefusalReason | undefined {
@@ -382,6 +408,7 @@ function issueReason(issue: z.core.$ZodIssue): ManifestRefusalReason | undefined
 
 // When several things are wrong, the most specific reason wins.
 const REASON_ORDER: readonly ManifestRefusalReason[] = [
+  'executable_content',
   'unknown_key',
   'unsafe_path',
   'unknown_capability',
@@ -389,10 +416,23 @@ const REASON_ORDER: readonly ManifestRefusalReason[] = [
 ];
 
 /**
- * Validates an already JSON-parsed manifest. Checks run in a fixed order so the reason is
- * stable: shape, schema version, install scripts, executable content, then the full schema.
+ * Where the code that found the manifest says it came from. A manifest's own `source` field
+ * is only a claim: an imported file could say anything (#111 security review M1).
+ * - `bundled`: read from the app's own resources folder
+ * - `import`: anything else, such as a package the user imports
  */
-export function parseResourceManifest(raw: unknown): ManifestParseResult {
+export type ManifestOrigin = 'bundled' | 'import';
+
+/** The `builtin` namespace belongs to packages that ship with the app. */
+const BUNDLED_NAMESPACE = 'builtin.';
+
+/**
+ * Validates an already JSON-parsed manifest. Checks run in a fixed order so the reason is
+ * stable: shape, schema version, install scripts, executable content, the full schema, and
+ * finally whether the manifest's claimed origin matches `origin`. The caller must cap the
+ * file size before `JSON.parse` (M3-2).
+ */
+export function parseResourceManifest(raw: unknown, origin: ManifestOrigin): ManifestParseResult {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     return refuse('not_an_object');
   }
@@ -420,10 +460,23 @@ export function parseResourceManifest(raw: unknown): ManifestParseResult {
   }
 
   const result = ResourceManifest.safeParse(raw);
-  if (result.success) return { ok: true, manifest: result.data };
+  if (!result.success) {
+    const issues = result.error.issues;
+    const reasons = new Set(issues.map(issueReason));
+    const reason = REASON_ORDER.find((candidate) => reasons.has(candidate)) ?? 'invalid_manifest';
+    return refuse(reason, issues.slice(0, MAX_REPORTED_ISSUES).map(describeIssue));
+  }
 
-  const issues = result.error.issues;
-  const reasons = new Set(issues.map(issueReason));
-  const reason = REASON_ORDER.find((candidate) => reasons.has(candidate)) ?? 'invalid_manifest';
-  return refuse(reason, issues.map(describeIssue));
+  const manifest = result.data;
+  // `source.type` can only be `bundled` so far, so every imported manifest claims to be bundled
+  // and stops here. When imports add their own source types, keep refusing an imported
+  // `source.type: 'bundled'` and the reserved `builtin.*` namespace: an imported
+  // `builtin.structured-brief` 9.0.0 must never pass for a newer bundled package.
+  if (origin !== 'bundled') {
+    const detail = manifest.id.startsWith(BUNDLED_NAMESPACE)
+      ? 'id: the builtin namespace is reserved for bundled packages'
+      : 'source: claims to be bundled with the app';
+    return refuse('origin_mismatch', [detail]);
+  }
+  return { ok: true, manifest };
 }

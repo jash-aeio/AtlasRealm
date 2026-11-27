@@ -73,13 +73,13 @@ function tool(): Record<string, unknown> {
 }
 
 function expectRefused(raw: unknown, reason: ManifestRefusalReason) {
-  const result = parseResourceManifest(raw);
+  const result = parseResourceManifest(raw, 'bundled');
   expect(result.ok ? 'accepted' : result.reason).toBe(reason);
 }
 
 describe('parseResourceManifest: valid manifests', () => {
   it('accepts the DATA_MODEL §10.1 example with a real license', () => {
-    const result = parseResourceManifest(specSkill());
+    const result = parseResourceManifest(specSkill(), 'bundled');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.manifest.kind).toBe('skill');
@@ -88,7 +88,7 @@ describe('parseResourceManifest: valid manifests', () => {
   });
 
   it('accepts an agent with default skill and tool references', () => {
-    const result = parseResourceManifest(agent());
+    const result = parseResourceManifest(agent(), 'bundled');
     expect(result.ok).toBe(true);
     if (result.ok && result.manifest.kind === 'agent') {
       expect(result.manifest.agent.defaultSkills[0]?.versionRange).toBe('^1.0.0');
@@ -96,12 +96,12 @@ describe('parseResourceManifest: valid manifests', () => {
   });
 
   it('accepts a tool that declares every capability it implements', () => {
-    expect(parseResourceManifest(tool()).ok).toBe(true);
+    expect(parseResourceManifest(tool(), 'bundled').ok).toBe(true);
   });
 
   it('accepts SPDX license IDs and LicenseRef-', () => {
     for (const license of ['MIT', 'Apache-2.0', 'CC-BY-4.0', 'LicenseRef-Atlas-Starter']) {
-      expect(parseResourceManifest({ ...specSkill(), license }).ok).toBe(true);
+      expect(parseResourceManifest({ ...specSkill(), license }, 'bundled').ok).toBe(true);
     }
   });
 
@@ -111,7 +111,7 @@ describe('parseResourceManifest: valid manifests', () => {
       requirements: { modelCapabilities: ['text'], toolCapabilities: ['network.fetch'] },
       declaredPermissions: [{ capability: 'network.fetch', scope: 'connection' }],
     };
-    const result = parseResourceManifest(raw);
+    const result = parseResourceManifest(raw, 'bundled');
     expect(result.ok).toBe(true);
     if (result.ok) {
       const waiting = result.manifest.declaredPermissions.filter(
@@ -312,11 +312,73 @@ describe('parseResourceManifest: named refusals', () => {
   it('keeps log lines short and bounded', () => {
     const raw: Record<string, unknown> = { ...specSkill() };
     for (let index = 0; index < 50; index += 1) raw[`extra${'x'.repeat(300)}${String(index)}`] = 1;
-    const result = parseResourceManifest(raw);
+    const result = parseResourceManifest(raw, 'bundled');
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.issues.length).toBeLessThanOrEqual(10);
     for (const line of result.issues) expect(line.length).toBeLessThanOrEqual(200);
+  });
+
+  it('escapes control characters a key name could smuggle into the log (security L1)', () => {
+    const newline = String.fromCharCode(10);
+    const escape = String.fromCharCode(27);
+    const key = `evil${newline}2026-11-27 [INFO] approved${escape}[31m`;
+    const result = parseResourceManifest({ ...specSkill(), [key]: 1 }, 'bundled');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('unknown_key');
+    const log = result.issues.join(' ');
+    expect(log).not.toMatch(/[\p{Cc}\p{Zl}\p{Zp}]/u);
+    expect(log).toContain('\\u000a');
+    expect(log).toContain('\\u001b');
+  });
+
+  it('stops checking oversized text early (security L2)', () => {
+    const huge = `${'a'.repeat(2_000_000)}${String.fromCodePoint(0x202e)}`;
+    const result = parseResourceManifest(
+      { ...specSkill(), name: huge, description: huge },
+      'bundled',
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    // One "too long" issue per field: the trim and character scans never ran.
+    expect(result.issues).toHaveLength(2);
+  });
+
+  it('refuses running programs even when declared (user decision 2026-11-27)', () => {
+    expectRefused(
+      {
+        ...specSkill(),
+        requirements: { modelCapabilities: ['text'], toolCapabilities: ['process.execute'] },
+        declaredPermissions: [{ capability: 'process.execute', scope: 'selected-project' }],
+      },
+      'executable_content',
+    );
+    expectRefused(
+      {
+        ...tool(),
+        declaredPermissions: [{ capability: 'process.execute', scope: 'selected-project' }],
+        tool: { implements: ['process.execute'] },
+      },
+      'executable_content',
+    );
+  });
+});
+
+describe('origin is decided by the loader, not the manifest (security M1)', () => {
+  it('refuses an imported manifest that claims to be bundled', () => {
+    const result = parseResourceManifest(specSkill(), 'import');
+    expect(result.ok ? 'accepted' : result.reason).toBe('origin_mismatch');
+  });
+
+  it('refuses an imported manifest in the builtin namespace', () => {
+    const result = parseResourceManifest({ ...agent(), publisher: 'Atlas Realm' }, 'import');
+    expect(result.ok ? 'accepted' : result.reason).toBe('origin_mismatch');
+  });
+
+  it('still names the schema problem first for a broken imported manifest', () => {
+    const result = parseResourceManifest({ ...specSkill(), executable: true }, 'import');
+    expect(result.ok ? 'accepted' : result.reason).toBe('executable_content');
   });
 });
 
