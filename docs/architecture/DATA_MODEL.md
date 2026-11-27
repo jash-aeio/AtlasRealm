@@ -135,6 +135,8 @@ Use one envelope with kind-specific validated configuration. Example of an instr
 
 Select the project's actual distribution license before shipping; the placeholder above is intentionally not a real license declaration. Validate that every referenced file is inside the package root. Declared permissions are requests, never grants.
 
+Implemented in `src/common/contracts/resource-manifest.ts` (M3-1 #111). Bundled packages use `"license": "UNLICENSED"` (ADR-0008). Agents add an `agent` block (`defaultSkills`, `defaultTools`) and tools add a `tool` block (`implements`). References to other packages carry a `versionRange` that is either exact (`1.2.0`) or caret (`^1.2.0`). A capability that is known but not built yet is accepted and reported as not ready. `process.execute` is refused as executable content. The loader passes where it found the manifest (`bundled` or `import`), and an imported manifest may not claim to be bundled or use the `builtin.*` namespace. Changed by ADR-0034
+
 ### 10.2 Resource lifecycle
 
 `Discovered → Downloaded/Staged → Validated → Installed → Enabled → Assigned/Connected → Ready`
