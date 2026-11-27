@@ -188,8 +188,10 @@ interface RootState {
   readonly excluded: readonly string[];
 }
 
-// Set inside the class's static block, which is the only code that can see `#state`.
+// Set inside the class's static block, which is the only code that can see `#state` and call
+// the constructor with the token. Neither is reachable from outside this module.
 let rootStateOf: (root: unknown) => RootState | undefined;
+let issueRoot: (given: string, real: string, state: RootState) => ApprovedRoot;
 const ISSUE = Symbol('ApprovedRoot.issue');
 
 /**
@@ -217,13 +219,12 @@ export class ApprovedRoot {
   static {
     rootStateOf = (root) =>
       typeof root === 'object' && root !== null && #state in root ? root.#state : undefined;
-  }
-
-  /** @internal Used by approveRoot only; the token keeps everyone else out. */
-  static issue(token: typeof ISSUE, given: string, real: string, state: RootState): ApprovedRoot {
-    return new ApprovedRoot(token, given, real, state);
+    issueRoot = (given, real, state) => new ApprovedRoot(ISSUE, given, real, state);
   }
 }
+// Nothing can be added to or replaced on the class afterwards.
+Object.freeze(ApprovedRoot);
+Object.freeze(ApprovedRoot.prototype);
 
 /**
  * Folders that are never approved without care (SECURITY §13.4: never auto-grant Documents, the
@@ -278,6 +279,15 @@ export function defaultSensitiveFolders(
     ...under(appData, 'Opera Software'),
     ...under(appData, 'Microsoft', 'Credentials'),
     ...under(appData, 'Microsoft', 'Protect'),
+    ...under(appData, 'Microsoft', 'Crypto'),
+    ...under(localAppData, 'Microsoft', 'Vault'),
+    ...under(localAppData, 'Google', 'Chrome SxS', 'User Data'),
+    ...under(appData, 'gcloud'),
+    ...under(appData, 'gnupg'),
+    ...under(appData, 'GitHub CLI'),
+    // A file here runs at the next sign-in: writing one would bypass "no scripts".
+    ...under(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup'),
+    ...under(env['ProgramData'], 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup'),
   ];
   return { broad: [...new Set(broad)], forbidden: [...new Set(forbidden)] };
 }
@@ -289,7 +299,11 @@ export interface ApproveOptions {
    * Forbidden folders inside a broad root stay refused.
    */
   readonly broad?: boolean;
-  /** Override the sensitive folders (tests). Defaults to defaultSensitiveFolders(). */
+  /**
+   * Override the sensitive folders. Defaults to defaultSensitiveFolders(). The main-process
+   * caller should add Electron's `app.getPath` folders (documents, desktop, downloads, which
+   * follow Windows folder redirection) and the app's own userData to `forbidden`.
+   */
   readonly sensitiveFolders?: SensitiveFolders;
 }
 
@@ -321,7 +335,13 @@ export async function approveRoot(
   // A root that resolves to a network share or device namespace is refused as well.
   if (pathShapeProblem(real) !== undefined) throw new PathPolicyError('root_unavailable');
 
-  const sensitive = options.sensitiveFolders ?? defaultSensitiveFolders();
+  const listed = options.sensitiveFolders ?? defaultSensitiveFolders();
+  // A sensitive folder can be reached by another name (a junction, a moved Documents folder):
+  // compare against where each one really is, too.
+  const sensitive = {
+    broad: await realForms(listed.broad),
+    forbidden: await realForms(listed.forbidden),
+  };
   const forms = [given, real];
   // Both the written and the real form count: either may be the one that reveals the problem.
   const rootIsIn = (folder: string) => forms.some((form) => isWithin(folder, form, IS_WINDOWS));
@@ -332,7 +352,7 @@ export async function approveRoot(
     throw new PathPolicyError('root_too_broad');
   }
   const excluded = await realForms(sensitive.forbidden.filter(rootContains));
-  return ApprovedRoot.issue(ISSUE, given, real, { ...identity, excluded });
+  return issueRoot(given, real, { ...identity, excluded });
 }
 
 /** Each folder as written plus, if it exists, its real location (links resolved). */
@@ -431,10 +451,12 @@ function writtenInside(root: ApprovedRoot, written: string): boolean {
 function confirmInside(root: ApprovedRoot, state: RootState, real: string): string {
   if (pathShapeProblem(real) !== undefined) throw new PathPolicyError('link_escape');
   if (!isWithin(root.real, real, false)) throw new PathPolicyError('link_escape');
-  if (state.excluded.some((folder) => isWithin(folder, real, IS_WINDOWS))) {
-    throw new PathPolicyError('sensitive_folder');
-  }
+  if (isExcluded(state, real)) throw new PathPolicyError('sensitive_folder');
   return real;
+}
+
+function isExcluded(state: RootState, real: string): boolean {
+  return state.excluded.some((folder) => isWithin(folder, real, IS_WINDOWS));
 }
 
 /**
@@ -560,6 +582,13 @@ export async function openInsideRoot(
     await verifyHandleInsideRoot(root, resolved.real, handle);
   } catch (error) {
     await handle.close().catch(() => undefined);
+    if (mode === 'create' && held !== undefined && !held.isFile()) {
+      // A link planted after the check made Windows create its target (often a folder).
+      // Known limit: Node can't open "without following links" on Windows, so this race can't
+      // be closed fully; it is refused and reported, never accepted.
+      options.onLeftover?.({ kind: 'unknown_object_created' });
+      throw new PathPolicyError('changed_during_use');
+    }
     if (mode === 'create') await removeOwnFile(resolved.real, held, options);
     throw error;
   }
@@ -577,6 +606,11 @@ async function isLink(target: string): Promise<boolean> {
 /**
  * Deletes a file this module just created, but only if `target` still leads to that exact
  * file (same volume and file ID); otherwise reports it. Used after a refused create (M1).
+ *
+ * The check and the delete both use the *real* path: every folder in it was a real folder,
+ * not a link, when it was resolved. Deleting by the path as written would re-follow any
+ * junction on the way, and a junction re-pointed between the check and the delete could
+ * redirect the delete to someone else's file.
  */
 async function removeOwnFile(
   target: string,
@@ -585,9 +619,10 @@ async function removeOwnFile(
 ): Promise<void> {
   if (held !== undefined) {
     try {
-      const now = await lstat(target, { bigint: true });
+      const real = await realpathNative(target);
+      const now = await lstat(real, { bigint: true });
       if (now.isFile() && now.dev === held.dev && now.ino === held.ino) {
-        await unlink(target);
+        await unlink(real);
         return;
       }
     } catch {
@@ -662,10 +697,17 @@ export async function ensureDirInsideRoot(
   for (const name of names) {
     const next = path.join(current, name);
     let made: BigIntStats | undefined;
+    let created = false;
     try {
       await mkdir(next);
+      created = true;
       made = await lstat(next, { bigint: true });
     } catch (error) {
+      if (created) {
+        // Made, but can't be identified any more: leave it and say so.
+        options.onLeftover?.({ kind: 'folder_left_behind' });
+        throw new PathPolicyError('changed_during_use', error);
+      }
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
         throw new PathPolicyError(refusalOf(error), error);
       }
@@ -685,16 +727,20 @@ export async function ensureDirInsideRoot(
   return current;
 }
 
-/** Removes an empty folder this module just made, if `target` still leads to it. */
+/**
+ * Removes an empty folder this module just made, if `target` still leads to it. Like
+ * removeOwnFile, it checks and removes by the real path.
+ */
 async function removeOwnFolder(
   target: string,
   made: BigIntStats,
   options: OpenOptions,
 ): Promise<void> {
   try {
-    const now = await lstat(target, { bigint: true });
+    const real = await realpathNative(target);
+    const now = await lstat(real, { bigint: true });
     if (now.isDirectory() && now.dev === made.dev && now.ino === made.ino) {
-      await rmdir(target); // only ever removes an empty folder
+      await rmdir(real); // only ever removes an empty folder
       return;
     }
   } catch {
@@ -729,6 +775,14 @@ export interface ListOptions {
 }
 
 const DEFAULT_MAX_ENTRIES = 10_000;
+const MAX_ENTRIES_CAP = 100_000;
+const DEFAULT_MAX_DEPTH = 16;
+
+/** A whole number in [0, cap]; anything else (NaN, Infinity, missing) gives the default. */
+function limit(value: number | undefined, fallback: number, cap: number): number {
+  if (value === undefined || !Number.isFinite(value)) return fallback;
+  return Math.min(Math.max(Math.floor(value), 0), cap);
+}
 
 /**
  * Lists one folder inside the root without following links. Afterwards the folder's path must
@@ -744,7 +798,8 @@ export async function listInsideRoot(
 ): Promise<DirectoryListing> {
   const resolved = await resolveInsideRoot(root, candidate);
   const state = await checkRoot(root);
-  return listReal(root, state, resolved.real, options.maxEntries ?? DEFAULT_MAX_ENTRIES);
+  const maxEntries = limit(options.maxEntries, DEFAULT_MAX_ENTRIES, MAX_ENTRIES_CAP);
+  return listReal(root, state, resolved.real, maxEntries);
 }
 
 async function listReal(
@@ -798,6 +853,7 @@ async function listReal(
     const after = await stat(now, { bigint: true });
     if (after.dev !== before.dev || after.ino !== before.ino) throw new Error('changed');
   } catch (error) {
+    if (error instanceof PathPolicyError && error.reason === 'sensitive_folder') throw error;
     throw new PathPolicyError('changed_during_use', error);
   }
   entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
@@ -832,8 +888,8 @@ export async function walkInsideRoot(
   candidate: string,
   options: WalkOptions = {},
 ): Promise<WalkResult> {
-  const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
-  const maxDepth = options.maxDepth ?? 16;
+  const maxEntries = limit(options.maxEntries, DEFAULT_MAX_ENTRIES, MAX_ENTRIES_CAP);
+  const maxDepth = limit(options.maxDepth, DEFAULT_MAX_DEPTH, MAX_MISSING_DEPTH);
   const start = await resolveInsideRoot(root, candidate);
   const state = await checkRoot(root);
 
@@ -854,15 +910,13 @@ export async function walkInsideRoot(
       const relativePath = next.relative === '' ? entry.name : `${next.relative}\\${entry.name}`;
       entries.push({ ...entry, relativePath });
       if (entry.kind !== 'folder') continue;
-      if (next.depth >= maxDepth) {
+      const childReal = path.join(listing.real, entry.name);
+      // A credential or browser folder inside a broad root is listed by name, never entered.
+      if (next.depth >= maxDepth || isExcluded(state, childReal)) {
         complete = false;
         continue;
       }
-      queue.push({
-        real: path.join(listing.real, entry.name),
-        relative: relativePath,
-        depth: next.depth + 1,
-      });
+      queue.push({ real: childReal, relative: relativePath, depth: next.depth + 1 });
     }
   }
   return { entries, complete };

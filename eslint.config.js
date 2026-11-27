@@ -6,6 +6,9 @@ import { defineConfig } from 'eslint/config';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+const FS_MESSAGE =
+  'Use src/main/security/path-policy.ts (openInsideRoot, writeFileInsideRoot, ...) for files; raw fs skips the path checks (#142).';
+
 export default defineConfig(
   {
     // Replaces the old .eslintignore file. docs/ holds no code; build output is generated.
@@ -69,7 +72,12 @@ export default defineConfig(
     ignores: [
       'src/main/**/*.test.ts',
       'src/main/security/**',
-      'src/main/storage/**',
+      // The app's own database and profile files (app-owned paths under userData).
+      'src/main/storage/app-database.ts',
+      'src/main/storage/database.ts',
+      'src/main/storage/migrate.ts',
+      'src/main/storage/profiles/profiles-index.ts',
+      'src/main/storage/profiles/startup.ts',
       'src/main/index.ts', // reads the bundled index.html
       'src/main/profiles/profile-service.ts', // makes/removes profile folders under userData
       'src/main/services/profile-session.ts', // checks the profile database exists
@@ -78,18 +86,30 @@ export default defineConfig(
       'no-restricted-imports': [
         'error',
         {
-          paths: ['fs', 'fs/promises', 'node:fs', 'node:fs/promises'].map((name) => ({
-            name,
-            message:
-              'Use src/main/security/path-policy.ts (openInsideRoot, writeFileInsideRoot, ...) for files; raw fs skips the path checks (#142).',
-          })),
           patterns: [
+            {
+              // original-fs is Electron's raw fs; module's createRequire can load fs by name.
+              group: ['fs', 'fs/*', 'node:fs', 'node:fs/*', 'original-fs', 'module', 'node:module'],
+              message: FS_MESSAGE,
+            },
             {
               group: ['pixi.js', 'pixi.js/*', '@pixi/*'],
               message: 'Import Pixi only in src/renderer/world/grid-scene.ts (ADR-0011).',
             },
           ],
         },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'ImportExpression[source.value=/^(node:)?(fs|module)([^a-z-]|$)|^original-fs$/]',
+          message: FS_MESSAGE,
+        },
+      ],
+      'no-restricted-properties': [
+        'error',
+        { object: 'process', property: 'getBuiltinModule', message: FS_MESSAGE },
       ],
     },
   },

@@ -47,6 +47,7 @@ const openHooks = vi.hoisted(() => ({
   after: undefined as (() => void) | undefined,
   beforeMkdir: undefined as ((target: string) => boolean) | undefined,
   beforeLink: undefined as (() => void) | undefined,
+  afterLstat: undefined as ((target: string) => boolean) | undefined,
 }));
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
@@ -66,6 +67,11 @@ vi.mock('node:fs/promises', async (importOriginal) => {
       if (openHooks.beforeMkdir?.(String(args[0])) === true) openHooks.beforeMkdir = undefined;
       return actual.mkdir(...args);
     },
+    lstat: (async (...args: Parameters<typeof actual.lstat>) => {
+      const result = await actual.lstat(...args);
+      if (openHooks.afterLstat?.(String(args[0])) === true) openHooks.afterLstat = undefined;
+      return result;
+    }) as typeof actual.lstat,
     link: async (...args: Parameters<typeof actual.link>) => {
       const step = openHooks.beforeLink;
       openHooks.beforeLink = undefined;
@@ -101,6 +107,7 @@ afterEach(() => {
   openHooks.after = undefined;
   openHooks.beforeMkdir = undefined;
   openHooks.beforeLink = undefined;
+  openHooks.afterLstat = undefined;
   rmSync(base, { recursive: true, force: true });
 });
 
@@ -214,10 +221,16 @@ describe('approveRoot', () => {
       expect(await refusalOf(resolveInsideRoot(asRoot, 'a.txt'))).toBe('root_unavailable');
       expect(await refusalOf(openInsideRoot(asRoot, 'a.txt', 'read'))).toBe('root_unavailable');
     }
-    // Calling the factory without the module's private token fails too.
-    expect(() =>
-      ApprovedRoot.issue(Symbol('fake') as never, root.given, root.real, {} as never),
-    ).toThrow(PathPolicyError);
+    // The constructor demands the module's private token.
+    const Ctor = ApprovedRoot as unknown as new (...args: unknown[]) => unknown;
+    expect(() => new Ctor(Symbol('fake'), root.given, root.real, {})).toThrow(PathPolicyError);
+    // The class can't be patched to intercept the token (audit finding 2).
+    expect(Object.isFrozen(ApprovedRoot)).toBe(true);
+    expect(Object.isFrozen(ApprovedRoot.prototype)).toBe(true);
+    expect(Object.getOwnPropertyNames(ApprovedRoot)).not.toContain('issue');
+    expect(() => {
+      (ApprovedRoot as unknown as Record<string, unknown>)['issue'] = () => undefined;
+    }).toThrow(TypeError);
   });
 
   it('refuses a root that was replaced by another folder after approval', async () => {
@@ -292,6 +305,42 @@ describe('approveRoot and sensitive folders (SECURITY §13.4)', () => {
     }
   });
 
+  it.skipIf(!IS_WINDOWS)(
+    'recognises a sensitive folder by its real location (audit finding 3)',
+    async () => {
+      // `.ssh` and Documents are junctions to folders elsewhere; approving those folders
+      // directly must be refused just the same.
+      const keys = path.join(base, 'keys');
+      const docs = path.join(base, 'DocsElsewhere');
+      mkdirSync(keys);
+      mkdirSync(docs);
+      const linked: SensitiveFolders = {
+        broad: [path.join(base, 'LinkedHome', 'Documents')],
+        forbidden: [path.join(base, 'LinkedHome', '.ssh')],
+      };
+      mkdirSync(path.join(base, 'LinkedHome'));
+      junction(path.join(base, 'LinkedHome', '.ssh'), keys);
+      junction(path.join(base, 'LinkedHome', 'Documents'), docs);
+      expect(await refusalOf(approveRoot(keys, { sensitiveFolders: linked, broad: true }))).toBe(
+        'sensitive_folder',
+      );
+      expect(await refusalOf(approveRoot(docs, { sensitiveFolders: linked }))).toBe(
+        'root_too_broad',
+      );
+    },
+  );
+
+  it('walks a broad root without entering a credential folder (audit finding 5)', async () => {
+    const approved = await approveRoot(home, { sensitiveFolders, broad: true });
+    const result = await walkInsideRoot(approved, '.');
+    const paths = result.entries.map((entry) => entry.relativePath);
+    expect(paths).toContain('.ssh'); // the name is listed...
+    expect(paths.some((p) => p.startsWith('.ssh\\'))).toBe(false); // ...but never entered
+    expect(paths).toContain('Projects\\p.txt');
+    expect(result.complete).toBe(false);
+    expect(await refusalOf(listInsideRoot(approved, '.ssh'))).toBe('sensitive_folder');
+  });
+
   it('keeps a credential folder refused inside a broad root', async () => {
     const approved = await approveRoot(home, { sensitiveFolders, broad: true });
     expect(await refusalOf(resolveInsideRoot(approved, '.ssh\\id_ed25519'))).toBe(
@@ -341,6 +390,9 @@ describe('approveRoot and sensitive folders (SECURITY §13.4)', () => {
         `${user}\\.ssh`,
         `${user}\\AppData\\Local\\Google\\Chrome\\User Data`,
         `${user}\\AppData\\Roaming\\Mozilla\\Firefox`,
+        `${user}\\AppData\\Roaming\\gcloud`,
+        `${user}\\AppData\\Local\\Microsoft\\Vault`,
+        `${user}\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup`,
       ]),
     );
     // Empty or missing variables add nothing.
@@ -551,6 +603,42 @@ describe('openInsideRoot', () => {
       expect(readFileSync(path.join(other, 'new.txt'), 'utf8')).toBe('not ours');
       expect(onLeftover).toHaveBeenCalledWith({ kind: 'file_left_behind' });
       expect(JSON.stringify(onLeftover.mock.calls)).not.toContain(base);
+    });
+
+    it("can't be redirected to delete someone else's file (audit finding 1)", async () => {
+      // The cleanup checks our file, then the junction is re-pointed before the delete. Deleting
+      // by the real path (not through the junction again) still hits only our own file.
+      const victim = path.join(base, 'victim');
+      mkdirSync(victim);
+      writeFileSync(path.join(victim, 'new.txt'), 'precious');
+      const ours = path.join(outsideDir, 'new.txt');
+      openHooks.before = () => {
+        swapInnerTo(outsideDir);
+      };
+      openHooks.afterLstat = (target) => {
+        if (path.basename(target) !== 'new.txt' || !existsSync(ours)) return false;
+        rmSync(path.join(rootDir, 'inner'));
+        junction(path.join(rootDir, 'inner'), victim);
+        return true;
+      };
+      expect(await refusalOf(openInsideRoot(root, 'inner\\new.txt', 'create'))).toBe(
+        'changed_during_use',
+      );
+      expect(readFileSync(path.join(victim, 'new.txt'), 'utf8')).toBe('precious');
+      expect(existsSync(ours)).toBe(false);
+    });
+
+    it('reports a link planted right before the create (audit finding 7)', async () => {
+      // A dangling junction appears after the check: Windows creates its target (a folder)
+      // outside. That race can't be closed in Node; it must be refused and reported.
+      const planted = path.join(outsideDir, 'planted.txt');
+      const onLeftover = vi.fn();
+      openHooks.before = () => {
+        junction(path.join(rootDir, 'r.md'), planted);
+      };
+      const outcome = await refusalOf(openInsideRoot(root, 'r.md', 'create', { onLeftover }));
+      expect(outcome).toBe('changed_during_use');
+      expect(onLeftover.mock.calls).toEqual([[{ kind: 'unknown_object_created' }]]);
     });
   });
 });
@@ -766,6 +854,17 @@ describe('listInsideRoot and walkInsideRoot (M4)', () => {
     expect(paths).toContain('out');
     expect(paths.some((p) => p.startsWith('loop\\') || p.startsWith('out\\'))).toBe(false);
     expect(result.complete).toBe(true);
+  });
+
+  it('treats NaN and Infinity limits as the defaults, never as "no limit"', async () => {
+    const listing = await listInsideRoot(root, '.', { maxEntries: Number.NaN });
+    expect(listing.entries.length).toBeGreaterThan(0);
+    const walk = await walkInsideRoot(root, '.', {
+      maxEntries: Number.POSITIVE_INFINITY,
+      maxDepth: Number.NaN,
+    });
+    expect(walk.complete).toBe(true);
+    expect(walk.entries.length).toBeGreaterThan(0);
   });
 
   it('says when depth or size limits stopped it', async () => {
