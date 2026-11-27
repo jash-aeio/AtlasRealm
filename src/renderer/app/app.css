@@ -768,6 +768,12 @@ kbd {
   align-items: center;
   gap: 0.5rem;
   flex: 1;
+  flex-wrap: wrap;
+}
+
+/* "Showing 100 of 101 worlds…" (#61): small, and allowed to wrap below the picker. */
+.world-omitted {
+  font-size: 0.8rem;
 }
 
 .profile-chip {

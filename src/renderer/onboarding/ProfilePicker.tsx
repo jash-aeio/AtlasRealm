@@ -3,6 +3,7 @@
 import { useId, useState } from 'react';
 
 import type { ProfileListOutput } from '../../common/contracts/profile';
+import { omittedNotice } from '../state/list-limits';
 import type { CommandOutcome } from '../state/session';
 import { commandProblem, nameProblem } from './form-messages';
 
@@ -17,6 +18,8 @@ export function ProfilePicker({ profiles, onRename, onCreate, onSwitch }: Profil
   const switchNoteId = useId();
   const active = profiles.profiles.find((profile) => profile.isActive);
   const hasOthers = profiles.profiles.length > 1;
+  // A restored or hand-edited index can hold more profiles than are listed (#61).
+  const omitted = omittedNotice('profile', profiles.profiles.length, profiles.omittedCount);
   // The profile being switched to. It stays set on success: the window is about to reload.
   const [switchingTo, setSwitchingTo] = useState<string | null>(null);
   const [switchProblem, setSwitchProblem] = useState<string | null>(null);
@@ -53,6 +56,11 @@ export function ProfilePicker({ profiles, onRename, onCreate, onSwitch }: Profil
           </li>
         ))}
       </ul>
+      {omitted !== null && (
+        <p className="muted" data-testid="profiles-omitted">
+          {omitted}
+        </p>
+      )}
       {hasOthers && (
         <p id={switchNoteId} className="muted">
           Switching opens that profile's own worlds and settings. The window reloads; nothing is
