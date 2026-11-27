@@ -47,6 +47,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 041 | [Acceptance tests, and comparing two sources of truth](lessons/041-acceptance-tests-and-two-sources-of-truth.md) | M2 | acceptance test, saved vs shown, measurement vs guarantee, forged command |
 | 042 | [Finding a flaky test's cause: real vs synthetic input](lessons/042-flaky-tests-real-vs-synthetic-input.md) | M3 | flaky test, probe spec, synthetic vs real input, setIgnoreMouseEvents |
 | 043 | [Manifests, allowlists, and "requests are not grants"](lessons/043-manifests-allowlists-and-requests-not-grants.md) | M3 | manifest, allowlist, strict schema, permission request vs grant, named refusal reasons |
+| 044 | [Real paths, junctions and re-checking at use](lessons/044-real-paths-junctions-and-re-checking-at-use.md) | M3 | real path, junction, alternate data stream, device names, TOCTOU re-check |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map
