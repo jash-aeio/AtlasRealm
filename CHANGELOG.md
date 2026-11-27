@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ## [Unreleased]
 
+### Added
+- Package descriptions and the permission list (M3-1, #111): the app now has one checked format for describing agent, skill and tool packages: their name, version, maker, license, what they need and which permissions they ask for. It also has a list of every kind of permission, each with a plain explanation and a note on what could go wrong. A package is refused, with a reason, if it tries to run a program or an install script, points at a file outside its own folder, asks for an unknown permission, or claims to come with the app when it doesn't. Asking for a permission never grants it: only you can (ADR-0034). Nothing on screen uses this yet; the bundled packages and the Installed views come later in M3.
+
 ## [0.3.0-m2] - 2026-11-25 — M2: Isometric world, placement, hotbar, library and Atlas shell
 
 ### Added

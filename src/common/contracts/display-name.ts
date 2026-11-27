@@ -17,7 +17,8 @@ const LONE_SURROGATE = /[\uD800-\uDFFF]/u;
 export const DisplayName = z
   .string()
   // Cheap bound before trimming and scanning: 80 code points are at most 160 UTF-16 units.
-  .max(DISPLAY_NAME_MAX_CHARS * 2 + 64)
+  // `abort` skips the scans below for oversized input (#111 security review L2).
+  .max(DISPLAY_NAME_MAX_CHARS * 2 + 64, { abort: true })
   .trim()
   .min(1)
   .refine((name) => Array.from(name).length <= DISPLAY_NAME_MAX_CHARS, 'name is too long')

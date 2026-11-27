@@ -2,7 +2,7 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-25 · **Branch:** chore/108-world-hover-flake (#108, on main @ bff3446)
+**Last updated:** 2026-11-27 · **Branch:** feat/111-resource-manifest (#111, on main @ 20d008f)
 
 ## Current milestone
 **M3 — Bundled resources and permission broker** (⏳ planned 2026-11-25; 24 issues: #111–#131 plus #61, #106, #108). Breakdown: `docs/pm/milestones/M3.md`; graph and lanes: `docs/pm/DEPENDENCIES.md#task-level-m3`.
@@ -218,6 +218,18 @@
   - Shortcut layer (`src/renderer/app/shortcuts.ts`): one `keydown` listener on `window`. It ignores keys from `input`/`textarea`/`select`/`contenteditable`, while a modal `<dialog>` is open, during IME composition, on key repeat, with the Windows key, and when another handler already used the key. Modifiers must match exactly, and the newest shortcut for a key wins. Components register keys with `useShortcut(key, run)` (`ShortcutLayer.tsx`).
   - `E` toggles the library (a placeholder until M2-9 #74). Escape closes the drawer, then the open panel. Closing only unmounts the view, and focus returns to what opened it (or to the entrance button if that element is gone). Escape inside a text field stays with the field: the create form uses it to cancel its draft.
   - Developer spikes moved below the shell, still collapsed and labelled as M0 mock data.
+- **M3-1 resource manifest schema + capability registry (#111, in review, ADR-0034, lesson 043):** two pure modules that the rest of M3 builds on. Nothing in the app uses them yet: no loader, no IPC, no UI.
+  - `src/common/security/capabilities.ts`: all 21 capability IDs from SECURITY §13.1. Each has a plain label, a risk note, `available` (true only for `project.files.list/read`, `project.artifacts.write`, `project.import.inspect/copy` and `graph.source.index`) and the scopes it may be requested for. The table is frozen. Lookups take any string and only match its own keys. `REFUSED_IN_PACKAGES` = `process.execute`. Nothing here can make a grant.
+  - `src/common/contracts/resource-manifest.ts`: one strict Zod envelope for skill, agent (`agent.defaultSkills/defaultTools`) and tool (`tool.implements`) packages (DATA_MODEL §10.1). `parseResourceManifest(raw, origin)` refuses with a named reason, checked in this order:
+    1. `not_an_object`, `unsupported_schema_version`, `install_script`
+    2. `executable_content`: `executable` not false, an entry-point key, or `process.execute`
+    3. `unknown_key`, `unsafe_path`, `unknown_capability`
+    4. `permission_mismatch`: a needed or implemented capability isn't declared, or the scope doesn't fit
+    5. `origin_mismatch`: an imported manifest claims to be bundled or uses `builtin.*`
+    6. `invalid_manifest`: anything else
+  - Paths: a text allowlist with forward slashes only. It refuses `..`, absolute, drive, UNC and device paths (`NUL.md`, `COM1`), alternate data streams, trailing dots or spaces, and dotfiles. The loader must still check the real file on disk (M3-2).
+  - Version ranges: exact `1.2.0` or caret `^1.2.0`, with npm's meaning before 1.0.0 (`satisfiesRange`, `compareVersions`). A known capability that isn't built yet is accepted and must be shown as waiting (ADR-0034).
+  - Refusal `issues` are for the main log only: at most 10 lines of 200 characters, with control characters escaped.
 - **M2-15 acceptance E2E and packaged smoke (#80, merged PR #109 c254355, no ADR, lesson 041):** every M2 Check and the Exit has an end-to-end test in the built app and the packaged `.exe`. Test-only; no app code changed.
   - `tests/e2e/m2-acceptance.spec.ts` (7 tests, through the UI, with restarts): create/cancel placement (§22.2 #1); no silent slot replacement through the UI and forged `hotbar.assign` (§22.2 #2); collisions refused through the preview, a click, a drag and 11 forged `placement.create/move` inputs (§22.2 #5); E, 1, 0, Ctrl+Z and Escape ignored in four text fields, with a positive control after; removing a building and unpinning leave the project record and nearby files identical across a restart (§22.2 #3); every critical action from the library with the world hidden (create, rename, goal, open, auto-place, remove, pin/unpin, archive/restore, trash/restore, add/remove a link); Exit with 14 projects (9 placed, 5 unplaced, archived in both).
   - `expectWorldMatchesSaved()` (`tests/e2e/support/m2-ui.ts`) compares what was saved with three things the user sees: the world view's building count and status line, the Atlas Map's Buildings list (name + tile) and the library's Placed / Not placed filters.
@@ -316,6 +328,7 @@
   - §22.2 #2 at command level: ten pinned projects, an 11th created, the hotbar and all 11 projects unchanged, and pinning the 11th into any slot is `slot_occupied`.
 
 ## Changed components
+- #111: `src/common/security/capabilities.ts` and `src/common/contracts/resource-manifest.ts` (new); `src/common/contracts/display-name.ts` (`.max(…, { abort: true })`, so oversized names skip the character scans). Tests: `tests/security/capabilities.test.ts`, `tests/domain/resource-manifest.test.ts` (new).
 - #80:
   - Tests: `tests/e2e/m2-acceptance.spec.ts` (new), `tests/e2e/support/m2-ui.ts` (new), `tests/e2e-packaged/packaged.spec.ts` (two tests added).
   - Docs: session log `docs/sessions/2026-11-24-m2-acceptance.md`, lesson 041, GLOSSARY (acceptance test, flaky test).
@@ -386,6 +399,7 @@
 - M0-1: root tooling config, `src/common/errors/`, `tests/domain/`, `.github/workflows/ci.yml`
 
 ## Verification
+- #111, 2026-11-27, local Windows 11, main checkout on `feat/111-resource-manifest` (main @ 20d008f): typecheck, lint, format:check pass. Unit/integration 1431/1431 (128 new). Mutation checks: removing the device-name check failed 4 tests; untagging the path refinement failed 25; skipping the "needed but not declared" check failed 1; dropping `abort` failed the oversized-input test; dropping log escaping failed the log-injection test. All were restored. No UI or IPC change, so no E2E. Reviews: invariant-reviewer clean (it re-ran the tests itself). security-auditor approved with no Critical or High findings; M1 (manifest-asserted origin) and L1–L4 were all fixed before the PR (details in `docs/sessions/2026-11-27-resource-manifest.md`).
 - #108, 2026-11-25, local Windows 11, main checkout on `chore/108-world-hover-flake` (main @ bff3446): typecheck, lint, format:check pass. Unit/integration 1303/1303. `world.spec.ts --repeat-each=20` 380/380 (before the fix the graphics tests passed 140/140 at 20 repeats: the flake couldn't be forced). Root cause shown with a throwaway probe spec (not committed): restoring the window under a still cursor delivered a `pointermove` at the real cursor's window position (screen 528,816 minus content origin 328,173 = 200,643); with `setIgnoreMouseEvents(true)` no stray event arrived and Playwright's moves still updated the readout. Covering or minimizing the window did not drop test input. Full E2E not re-run (only `world.spec.ts` changed). security-auditor not run: one test file and docs.
 - M2 close, 2026-11-25, local Windows 11, on main @ c254355 (after #80 merged; same tree as the tested branch): typecheck, lint, format:check pass. Unit/integration 1303/1303. E2E 116/116. Packaged E2E 17/17 after a fresh `pnpm package:test`. CI on main green.
 - #80, 2026-11-24, local Windows 11, main checkout on `chore/80-m2-acceptance` (main @ 9204c9c), fresh `pnpm package` + `pnpm package:test`: typecheck, lint, format:check pass. Unit/integration 1303/1303. New acceptance spec 7/7. Packaged E2E 17/17 (new: 2). Full E2E 115 passed, 1 failed: `world.spec.ts:337` (hover readout stayed idle); rerunning `world.spec.ts` 5 times passed 95/95, so it is a rare flake that predates this branch, tracked as #108. Reviews: invariant-reviewer found no violations (it re-ran the dev acceptance spec itself, 7/7). It raised two wording risks, both fixed: the Exit test title now says "more than ten in total", and the §22.2 #5 test says off-map is checked only through forged input (the map's edge is off screen at the default camera). Spec re-run 7/7. security-auditor not run: test and docs only.
@@ -567,6 +581,7 @@
 - CI: see the PR checks (first CI run with E2E on windows-latest).
 
 ## Known limitations
+- #111: the path check is text only. Links, junctions, case clashes and files swapped between check and use must be handled by the loader with `realpath` (M3-2, M3-9). `source` only allows `bundled`, so every imported manifest is refused until imports add their own source type. The scopes listed for capabilities that aren't built yet are best guesses. `manifest.json` size must be capped by the caller before `JSON.parse`.
 - #80: the list-view acceptance test doesn't cover undo, because the Undo/Redo controls (and Ctrl+Z) live in the world view; undo is covered with the world shown. §22.2 #3's "run history remains" can't be tested until runs exist (M4). Frame-gap numbers come from one machine with a ~144 Hz display.
 - #108: only `world.spec.ts` ignores the real mouse. Four other specs that use pointer input (`atlas.spec.ts`, `atlas-connections.spec.ts`, `m2-acceptance.spec.ts`, `placement.spec.ts`) can still be disturbed by someone moving the physical mouse over the test window during a run.
 - #60: older stored names and goals are not cleaned up: they load and show exactly as stored. M3 prompt building must still treat stored text as untrusted. One ideographic variation selector after a kanji (an exact glyph variant) and Mongolian free variation selectors are refused too (ADR-0033). Hidden data built from characters allowed one at a time (a selector after each letter, ZWJ/ZWNJ strings) still passes; #106 closes that before M3.
@@ -659,6 +674,7 @@
 - Graph entities (M1-4): if an entity's tombstone ever disagrees with its project (for example after a manual edit), trash and restore of that project fail with `invalid_transition`/`not_found` and change nothing. That's safe, but there's no repair path yet; an integrity check belongs with backup/restore (M7). `source_locator` is unused until imports: before it holds external paths, store a root ID plus a relative path, re-resolve it under SECURITY rules on every use, and tighten its CHECK (security review notes in the #31 PR). The tombstone methods match on the current state, not an expected revision, because entities only change with their project.
 
 ## Data/schema changes
+- #111: none (pure contract modules, no migration, no IPC).
 - #80: none.
 - #57: none.
 - #60: none. No migration, and stored rows are never rewritten.
@@ -684,6 +700,7 @@
 - `userData/profiles-index.json` (M1-2, not in SQLite): `{ schemaVersion: 1, profiles: [{ id, displayName }], lastUsedProfileId }`. Profile folders: `profiles/<default | uuid>/`.
 
 ## Decisions
+- [ADR-0034](../adr/0034-manifest-version-ranges-and-unavailable-capabilities.md) (M3-1 #111): package references use exact or caret version ranges (our own parser, no dependency); a known capability that isn't built yet is accepted and shown as waiting; `process.execute` is refused in packages; the loader, not the manifest, says whether a package is bundled
 - [ADR-0033](../adr/0033-hidden-unicode-strict-input-lenient-read.md) (#60): names and goals refuse hidden Unicode on input (one shared rule in `src/common/text/hidden-characters.ts`, including the whole U+E0100–U+E01EF range); names read back stay lenient (`normalizeStoredName` for the profile index, `StoredDisplayName` in replies) so older data never locks anyone out
 - [ADR-0032](../adr/0032-connections-ring-layout-session-positions.md) (M2-13 #78): the Connections graph uses our own deterministic ring layout (placed outside, unplaced inside, inner ring turned half a step), no layout library; dragged node positions are session-only with a "Reset layout" button, so §30.6 "preserve manual positions" holds within a session until `graph_view_states` exists
 - [ADR-0031](../adr/0031-atlas-view-preferences-and-docked-drawer.md) (M2-12 #77): Realm Atlas display choices per world live under `atlasViews` in `preferences_json` via `profile.atlasView.get/update` (no revision, max 32 worlds); `graph_view_states` waits for layout coordinates; the narrow drawer docks as a grid column so it can't cover editing controls
@@ -720,7 +737,12 @@
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- M3 is planned (2026-11-25, see `docs/sessions/2026-11-25-plan-m3.md`). **Start lanes, each in its own worktree:** A = #108 (flake; in review, PR open 2026-11-25) then M3-1 #111 (manifest contract, goes first); B = M3-9 #119 (path policy); D = #61 (read caps, gate before M3-18). Lane C (#106, M3-4 #114) fills gaps. Migrations: M3-3 #113 = 7, M3-10 #120 = 8, M3-17 #127 = 9. Tasks that add IPC channels (M3-5, M3-6, M3-11, M3-13, M3-17) run one at a time.
+- After M3-1 (#111, ADR-0034):
+  - **M3-2 #112:** call `parseResourceManifest(raw, 'bundled')` only for files in the app's own resources folder. Cap `manifest.json` at about 64 KiB before `JSON.parse`. Re-check every referenced path on disk with `realpath` and no links. Log `issues` in main only.
+  - **M3-4 #114:** a package that asks for a capability with `available: false` is waiting, never Ready. Use `satisfiesRange` for dependency versions.
+  - **M3-10 #120:** `authorize` must refuse a capability whose `available` is false even when a grant exists, and must look capabilities up through the registry helpers (they ignore inherited keys).
+  - **Imports:** pass `'import'`. When imports get their own source type, keep refusing `source: bundled` and `builtin.*`.
+- M3 is in progress (planned 2026-11-25, see `docs/sessions/2026-11-25-plan-m3.md`). **Lanes, each in its own worktree:** A = #108 (merged PR #134) then M3-1 #111 (in review); B = M3-9 #119 (path policy); D = #61 (read caps, gate before M3-18). Lane C (#106, M3-4 #114) fills gaps. Migrations: M3-3 #113 = 7, M3-10 #120 = 8, M3-17 #127 = 9. Tasks that add IPC channels (M3-5, M3-6, M3-11, M3-13, M3-17) run one at a time.
 - After #60, for M3 prompt building: new names and goals are checked by `hasHiddenCharacters` (`src/common/text/hidden-characters.ts`), but rows saved earlier are not re-checked (ADR-0033). Treat stored text as untrusted when building prompts. Use `StoredDisplayName` for any new reply field that returns a stored name; never re-check stored data with `DisplayName`. #106 (M3) adds context rules for joiners/selectors; the prompt-side re-check moved to #132 (M4, gate before the first provider call).
 - Parallel lanes must each use their own git worktree from the start (MULTI_AGENT_GUIDE). On 2026-11-22 #69 and #70 shared one checkout and a commit landed on the wrong branch; see `docs/sessions/2026-11-22-hotbar-commands.md`.
 - After M2-10 (#75), for M2-15 (#80): the hotbar lives per world in `MainScreen`'s `scope` (`createHotbar`); call `hotbar.refresh()` after anything that changes project names or statuses. E2E helpers (`createProjects`, `pinThroughApi`, `pinThroughUi`) are in `tests/e2e/hotbar.spec.ts`. A dialog with several steps needs a `key` per step so `autoFocus` applies (lesson 038). E2E that look for a "world view" button must scope to `details.developer-spikes`. #56's worker-boundary follow-up is #82 (M4).
