@@ -12,11 +12,18 @@ Review PR #138 (#61, list limits, opened by X4stra) and bring the living docs up
 - Filed **#139** (reach hidden worlds and profiles; needs a decision) and **#140** (bound the two unbounded reads). Both are in M3 and on the board, because they gate restore and import commit (M3-18).
 - Status doc: #111 marked merged; #119 gets its entries (components, verification, data, next task) plus three review points that were raised on #137 and are still in the code; #61 gets an "in review" entry with the review results.
 - M3 milestone and roadmap: 3/24 merged (#108, #111, #119), #61 in review.
+- **After-the-fact security review of #119** (you asked for it). Verdict: not ready for callers. The reviewer reproduced each finding with probe scripts on real NTFS folders (kept in the scratchpad, not the repo):
+  - High: a dangling junction inside the root makes `create` build something outside it, with no race needed. I confirmed the cause in `resolveMissing` by reading the code.
+  - Medium: the create race leaves a leftover; hard links pass `read`; `ApprovedRoot` can be forged; there are no safe mkdir, list or rename building blocks.
+  - Low: the whole drive and the home folder can be approved; error causes keep full paths; the root's identity isn't pinned.
+- Filed **#142** (path-policy hardening, M3, on the board). Commented "Depends on #142" on #122, #123, #126 and #128.
 
 ## Decisions
 | Question | Choice |
 |---|---|
 | Run the reviews, file the follow-ups, do one docs catch-up PR | You said yes |
+| Run security-auditor on #119 after merge | You asked for it |
+| File one hardening issue that M3-12 and M3-13 depend on, and add the findings to this PR | You said yes |
 
 Routine choices (no question asked):
 - #139 and #140 put in M3, because #61 was a gate before restore and import, and these finish that job. Easy to move.
@@ -28,7 +35,9 @@ Routine choices (no question asked):
 - **A display list is not an authorization list.** Switching profiles checks the full index on disk, so cutting the list for the screen can't weaken a permission check.
 - **Bound before reading.** Slicing after `SELECT *` still loads everything; `LIMIT` and `COUNT(*)` keep a huge restored file from freezing the app.
 - **Docs must not promise a feature that doesn't exist.** "Until archived" reads like a way out, but there isn't one yet.
+- **"It doesn't exist" and "it can't be resolved" are different.** A broken shortcut can't be resolved, but it is there, and Windows follows it when a file is created. Check with `lstat` (which looks at the name itself) before creating.
+- **Review before merge, not after.** #119 merged without a security review, and the problems surfaced only now. Run security-auditor on every PR that touches `src/main/security`.
 
 ## Open questions
 - #139: archive command, paging or search? Decide when the task starts.
-- #119's three open points (create race, hard links, forgeable `ApprovedRoot`) need fixing before M3-12/M3-13 call the path policy. Should security-auditor also review #137 after the fact?
+- #142: should hard links be refused outright, or allowed with a visible opt-in (pnpm's `node_modules` is full of them)? Decide when #142 starts.
