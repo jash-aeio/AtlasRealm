@@ -11,7 +11,8 @@
 //   1. Shape (no disk access): UNC and device paths, Windows device names, alternate data
 //      streams, NUL bytes and drive-relative forms are refused outright.
 //   2. Containment: the candidate must stay inside the root as written (no `..` or drive
-//      changes), and again after Windows resolves every junction and symlink.
+//      changes), and again after Windows resolves every junction and symlink. A file with more
+//      than one name (a hard link) is refused: its other name may be outside the root.
 //   3. Re-check at use (openInsideRoot): a link can be swapped between the check and the open
 //      (TOCTOU, "time of check to time of use"). After opening, we compare the identity of the
 //      file we actually hold (volume + file ID from the handle) with the file the path now
@@ -25,8 +26,8 @@
 //
 // Errors carry a reason and a fixed message, never a path: the outside path can contain the
 // Windows user name and must not reach the renderer (SECURITY §21.3).
-import { constants as fsConstants, realpath as realpathCallback } from 'node:fs';
-import { type FileHandle, open, stat } from 'node:fs/promises';
+import { type BigIntStats, constants as fsConstants, realpath as realpathCallback } from 'node:fs';
+import { type FileHandle, lstat, open, stat, unlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -49,6 +50,7 @@ export type PathRefusal =
   | 'not_found' // the file (or a parent folder) doesn't exist
   | 'inaccessible' // the OS refused to resolve it (permissions, too many links, ...)
   | 'not_a_file' // a folder or device where a file was expected
+  | 'hard_link' // the file has more than one name, so it may also live outside the root
   | 'already_exists' // create-only open, and something is already there
   | 'changed_during_use'; // the path led somewhere else by the time the file was opened
 
@@ -65,6 +67,7 @@ const MESSAGES: Readonly<Record<PathRefusal, string>> = {
   not_found: 'That file does not exist.',
   inaccessible: 'That file cannot be accessed.',
   not_a_file: 'That path is not a file.',
+  hard_link: 'That file is linked to another location and cannot be used.',
   already_exists: 'A file with that name already exists.',
   changed_during_use: 'The file changed while it was being opened. Nothing was read or written.',
 };
@@ -376,11 +379,13 @@ export async function resolveInsideRoot(
 
   // As written: no `..` and no other drive. Cheap, and gives the clearer reason.
   const written = path.resolve(root.given, candidate);
-  if (!isWithin(root.given, written, IS_WINDOWS)) throw new PathPolicyError('outside_root');
+  if (!writtenInside(root, written)) throw new PathPolicyError('outside_root');
 
   try {
-    const real = await realpathNative(written);
-    return { real: confirmInside(root, state, real), exists: true };
+    const real = confirmInside(root, state, await realpathNative(written));
+    const info = await stat(real, { bigint: true });
+    if (info.isFile() && info.nlink > 1n) throw new PathPolicyError('hard_link');
+    return { real, exists: true };
   } catch (error) {
     if (error instanceof PathPolicyError) throw error;
     if (options.allowMissing !== true || refusalOf(error) !== 'not_found') {
@@ -388,6 +393,15 @@ export async function resolveInsideRoot(
     }
   }
   return { real: await resolveMissing(root, state, written), exists: false };
+}
+
+/**
+ * True when a path as written is inside the root as given or as Windows resolved it. Both
+ * count: a root approved by its 8.3 short name (`RUNNER~1`) must accept the long form too.
+ * This is only the early check; the real-path check below is the one that decides.
+ */
+function writtenInside(root: ApprovedRoot, written: string): boolean {
+  return isWithin(root.given, written, IS_WINDOWS) || isWithin(root.real, written, IS_WINDOWS);
 }
 
 /**
@@ -405,8 +419,13 @@ function confirmInside(root: ApprovedRoot, state: RootState, real: string): stri
 
 /**
  * For a file that doesn't exist yet: finds the nearest parent folder that does, checks that
- * parent's real location, and appends the missing names (which can't be links: they don't
- * exist). openInsideRoot still checks the created file again after opening it.
+ * parent's real location, and appends the missing names. openInsideRoot still checks the
+ * created file again after opening it.
+ *
+ * `realpath` failing doesn't prove a name is free: a junction or symlink whose target is
+ * missing fails it too, and creating "through" it would build the target outside the root
+ * (H1, #142). So the first missing name is looked at with `lstat`, which doesn't follow links:
+ * only "nothing there" is accepted.
  */
 async function resolveMissing(
   root: ApprovedRoot,
@@ -418,23 +437,54 @@ async function resolveMissing(
   for (let depth = 0; depth < MAX_MISSING_DEPTH; depth += 1) {
     missing.unshift(path.basename(current));
     const parent = path.dirname(current);
-    if (parent === current || !isWithin(root.given, parent, IS_WINDOWS)) break;
+    if (parent === current || !writtenInside(root, parent)) break;
     current = parent;
+    let real: string;
     try {
-      const real = confirmInside(root, state, await realpathNative(current));
-      return path.join(real, ...missing);
+      real = confirmInside(root, state, await realpathNative(current));
     } catch (error) {
       if (error instanceof PathPolicyError) throw error;
       if (refusalOf(error) !== 'not_found') {
         throw new PathPolicyError('inaccessible', error);
       }
+      continue;
     }
+    await assertNothingAt(path.join(real, missing[0] ?? ''));
+    return path.join(real, ...missing);
   }
   throw new PathPolicyError('not_found');
 }
 
+/** Refuses unless nothing at all is at `target` (not even a link with a missing target). */
+async function assertNothingAt(target: string): Promise<void> {
+  let info;
+  try {
+    info = await lstat(target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw new PathPolicyError('inaccessible', error);
+  }
+  // Something appeared that realpath couldn't follow: a dangling link, or a race.
+  throw new PathPolicyError(info.isSymbolicLink() ? 'link_escape' : 'changed_during_use');
+}
+
 /** How a file is opened: read an existing file, or create a new one (never overwrite). */
 export type OpenMode = 'read' | 'create';
+
+/**
+ * Something a refused operation may have left behind that the module could not safely remove.
+ * Carries no path. Callers pass these to the audit log (M3-10) so a person can look.
+ */
+export interface LeftoverEvent {
+  readonly kind:
+    | 'file_left_behind' // a refused create made a file, and it couldn't be proven ours
+    | 'unknown_object_created'; // a create failed after its name became a link
+}
+
+export interface OpenOptions {
+  /** Called when a refused operation may have left something behind (see LeftoverEvent). */
+  readonly onLeftover?: (event: LeftoverEvent) => void;
+}
 
 export interface OpenedFile {
   readonly handle: FileHandle;
@@ -445,12 +495,17 @@ export interface OpenedFile {
 /**
  * Opens a file inside the root and verifies it after opening (re-check at use). `read` opens an
  * existing regular file; `create` makes a new file and fails if anything is already there
- * (artifacts are never overwritten, M3-12). The caller must close the handle.
+ * (artifacts are never overwritten, M3-12). A missing parent folder is `not_found`: make it
+ * with ensureDirInsideRoot first. The caller must close the handle.
+ *
+ * A refused create cleans up after itself: the file it made is deleted if the path still
+ * leads to that exact file (same volume and file ID); otherwise `onLeftover` is told.
  */
 export async function openInsideRoot(
   root: ApprovedRoot,
   candidate: string,
   mode: OpenMode,
+  options: OpenOptions = {},
 ): Promise<OpenedFile> {
   const resolved = await resolveInsideRoot(root, candidate, { allowMissing: mode === 'create' });
   if (mode === 'create' && resolved.exists) throw new PathPolicyError('already_exists');
@@ -468,33 +523,75 @@ export async function openInsideRoot(
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === 'EEXIST') throw new PathPolicyError('already_exists', error);
+    // A create that failed because its name became a link meanwhile may have made the link's
+    // target (Windows creates through a dangling junction). Nothing safe to delete: report it.
+    if (mode === 'create' && (await isLink(resolved.real))) {
+      options.onLeftover?.({ kind: 'unknown_object_created' });
+      throw new PathPolicyError('changed_during_use', error);
+    }
     if (code === 'EISDIR') throw new PathPolicyError('not_a_file', error);
     throw new PathPolicyError(refusalOf(error), error);
   }
 
+  let held: BigIntStats | undefined;
   try {
+    held = await handle.stat({ bigint: true });
     await verifyHandleInsideRoot(root, resolved.real, handle);
   } catch (error) {
     await handle.close().catch(() => undefined);
+    if (mode === 'create') await removeOwnFile(resolved.real, held, options);
     throw error;
   }
   return { handle, real: resolved.real };
 }
 
+async function isLink(target: string): Promise<boolean> {
+  try {
+    return (await lstat(target)).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Deletes a file this module just created, but only if `target` still leads to that exact
+ * file (same volume and file ID); otherwise reports it. Used after a refused create (M1).
+ */
+async function removeOwnFile(
+  target: string,
+  held: BigIntStats | undefined,
+  options: OpenOptions,
+): Promise<void> {
+  if (held !== undefined) {
+    try {
+      const now = await lstat(target, { bigint: true });
+      if (now.isFile() && now.dev === held.dev && now.ino === held.ino) {
+        await unlink(target);
+        return;
+      }
+    } catch {
+      // Gone or unreadable: fall through and report.
+    }
+  }
+  options.onLeftover?.({ kind: 'file_left_behind' });
+}
+
 /**
  * The re-check at use. Resolves `real` again and confirms that (1) it is still inside the root
  * and (2) it is the very file `handle` holds, by volume and file ID. A link swapped between
- * the first check and the open makes the two differ. Exported so tests can swap a link at an
- * exact moment; production code calls openInsideRoot.
+ * the first check and the open makes the two differ. A file with more than one name is
+ * refused. Returns what the handle holds. Exported so tests can swap a link at an exact
+ * moment; production code calls openInsideRoot.
  */
 export async function verifyHandleInsideRoot(
   root: ApprovedRoot,
   real: string,
   handle: FileHandle,
-): Promise<void> {
+): Promise<BigIntStats> {
   const state = await checkRoot(root);
   const held = await handle.stat({ bigint: true });
   if (!held.isFile()) throw new PathPolicyError('not_a_file');
+  if (held.nlink > 1n) throw new PathPolicyError('hard_link');
   let now: string;
   try {
     now = await realpathNative(real);
@@ -515,4 +612,5 @@ export async function verifyHandleInsideRoot(
   if (current.dev !== held.dev || current.ino !== held.ino) {
     throw new PathPolicyError('changed_during_use');
   }
+  return held;
 }

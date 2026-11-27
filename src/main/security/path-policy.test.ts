@@ -1,7 +1,10 @@
 // Path policy tests (M3-9 #119). They create real folders, junctions and symlinks in a temp
 // folder, because the point of the module is what Windows really does with links: a test with
 // fake paths couldn't show that.
+import { execFileSync } from 'node:child_process';
 import {
+  existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -15,7 +18,7 @@ import { open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   ApprovedRoot,
@@ -29,6 +32,29 @@ import {
   type SensitiveFolders,
   verifyHandleInsideRoot,
 } from './path-policy';
+
+// `open` passes through to the real one, but a test can run a step right before it (to swap a
+// folder for a junction at an exact moment, instead of hoping to win a race).
+const openHooks = vi.hoisted(() => ({
+  before: undefined as (() => void) | undefined,
+  after: undefined as (() => void) | undefined,
+}));
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    open: async (...args: Parameters<typeof actual.open>) => {
+      const step = openHooks.before;
+      openHooks.before = undefined;
+      step?.();
+      const handle = await actual.open(...args);
+      const afterStep = openHooks.after;
+      openHooks.after = undefined;
+      afterStep?.();
+      return handle;
+    },
+  };
+});
 
 const IS_WINDOWS = process.platform === 'win32';
 
@@ -52,6 +78,8 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  openHooks.before = undefined;
+  openHooks.after = undefined;
   rmSync(base, { recursive: true, force: true });
 });
 
@@ -434,6 +462,107 @@ describe('openInsideRoot', () => {
     expect(await refusalOf(openInsideRoot(root, 'jn\\planted.txt', 'create'))).toBe('link_escape');
     expect(() => readFileSync(path.join(outsideDir, 'planted.txt'))).toThrow();
   });
+
+  it.skipIf(!IS_WINDOWS)('creates nothing outside through a dangling junction (H1)', async () => {
+    // `report.md` is a junction to a target that doesn't exist yet. realpath fails on it just
+    // as on a free name; creating "through" it would build the target outside the root.
+    const target = path.join(outsideDir, 'evil.txt');
+    junction(path.join(rootDir, 'report.md'), target);
+    expect(await refusalOf(openInsideRoot(root, 'report.md', 'create'))).toBe('link_escape');
+    expect(await refusalOf(openInsideRoot(root, 'report.md\\x.txt', 'create'))).toBe('link_escape');
+    expect(existsSync(target)).toBe(false);
+  });
+
+  it('refuses a hard link, whose other name may be outside (M2)', async () => {
+    linkSync(path.join(outsideDir, 'secret.txt'), path.join(rootDir, 'hl.txt'));
+    expect(await refusalOf(resolveInsideRoot(root, 'hl.txt'))).toBe('hard_link');
+    expect(await refusalOf(openInsideRoot(root, 'hl.txt', 'read'))).toBe('hard_link');
+    // The re-check refuses it too, even if the first check were skipped.
+    const handle = await open(path.join(root.real, 'hl.txt'), 'r');
+    try {
+      expect(
+        await refusalOf(verifyHandleInsideRoot(root, path.join(root.real, 'hl.txt'), handle)),
+      ).toBe('hard_link');
+    } finally {
+      await handle.close();
+    }
+  });
+
+  describe.skipIf(!IS_WINDOWS)('a folder swapped for a junction right before the open (M1)', () => {
+    beforeEach(() => {
+      mkdirSync(path.join(rootDir, 'inner'));
+    });
+
+    function swapInnerTo(target: string): void {
+      rmSync(path.join(rootDir, 'inner'), { recursive: true });
+      junction(path.join(rootDir, 'inner'), target);
+    }
+
+    it('removes the file it created outside and refuses', async () => {
+      const onLeftover = vi.fn();
+      openHooks.before = () => {
+        swapInnerTo(outsideDir);
+      };
+      expect(
+        await refusalOf(openInsideRoot(root, 'inner\\new.txt', 'create', { onLeftover })),
+      ).toBe('changed_during_use');
+      expect(existsSync(path.join(outsideDir, 'new.txt'))).toBe(false);
+      expect(onLeftover).not.toHaveBeenCalled();
+    });
+
+    it('reports instead of deleting when the path no longer leads to its file', async () => {
+      // Swapped out before the open, then re-pointed before the cleanup could look: the path now
+      // leads to someone else's file, which must not be deleted.
+      const other = path.join(base, 'other');
+      mkdirSync(other);
+      writeFileSync(path.join(other, 'new.txt'), 'not ours');
+      const onLeftover = vi.fn();
+      openHooks.before = () => {
+        swapInnerTo(outsideDir);
+      };
+      openHooks.after = () => {
+        rmSync(path.join(rootDir, 'inner'));
+        junction(path.join(rootDir, 'inner'), other);
+      };
+      expect(
+        await refusalOf(openInsideRoot(root, 'inner\\new.txt', 'create', { onLeftover })),
+      ).toBe('changed_during_use');
+      expect(readFileSync(path.join(other, 'new.txt'), 'utf8')).toBe('not ours');
+      expect(onLeftover).toHaveBeenCalledWith({ kind: 'file_left_behind' });
+      expect(JSON.stringify(onLeftover.mock.calls)).not.toContain(base);
+    });
+  });
+});
+
+describe.skipIf(!IS_WINDOWS)('8.3 short names', () => {
+  /** The Windows short (8.3) form of a folder, or undefined if the volume has none. */
+  function shortForm(folder: string): string | undefined {
+    const out = execFileSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        '(New-Object -ComObject Scripting.FileSystemObject).GetFolder($env:ATLAS_P).ShortPath',
+      ],
+      { env: { ...process.env, ATLAS_P: folder }, encoding: 'utf8' },
+    ).trim();
+    return out !== '' && out.toLowerCase() !== folder.toLowerCase() ? out : undefined;
+  }
+
+  it('accepts a long-form candidate under a root approved by its short name', async (ctx) => {
+    const short = shortForm(rootDir);
+    if (short === undefined) ctx.skip('this volume has no 8.3 short names');
+    const shortRoot = await approveRoot(short ?? rootDir);
+    expect(shortRoot.given).toBe(path.resolve(short ?? rootDir));
+    const longCandidate = path.join(base, 'Root', 'a.txt');
+    expect((await resolveInsideRoot(shortRoot, longCandidate)).real).toBe(
+      path.join(root.real, 'a.txt'),
+    );
+    expect(await refusalOf(resolveInsideRoot(shortRoot, path.join(base, 'Root2', 'x.txt')))).toBe(
+      'outside_root',
+    );
+  });
 });
 
 // Re-check at use: these tests swap a link at an exact moment instead of hoping to win a race.
@@ -451,7 +580,9 @@ describe.skipIf(!IS_WINDOWS)(
     it('accepts the handle when nothing changed', async () => {
       const handle = await open(innerReal, 'r');
       try {
-        await expect(verifyHandleInsideRoot(root, innerReal, handle)).resolves.toBeUndefined();
+        const held = await verifyHandleInsideRoot(root, innerReal, handle);
+        expect(held.isFile()).toBe(true);
+        expect(held.nlink).toBe(1n);
       } finally {
         await handle.close();
       }
