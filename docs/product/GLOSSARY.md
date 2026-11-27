@@ -204,3 +204,7 @@ Two kinds of terms: **product terms** (what things mean inside Atlas Realm; the 
 | **Critical path** | The longest chain of tasks that each wait on the one before. It sets the shortest possible time to finish a milestone; speeding up anything off this chain doesn't finish sooner | `docs/pm/milestones/M3.md` |
 | **Default deny** | A rule style where anything not explicitly allowed is refused. A missing grant means "no", never "probably fine" | SECURITY.md §13.2, M3-10 (#120) |
 | **Capability** | A named, narrow permission such as `project.files.read`. Tools declare which capabilities they need; only a grant from the user lets them use one | SECURITY.md §13.1, M3-1 (#111) |
+| **Junction** | A Windows folder that is really a pointer to another folder; any user can create one (`mklink /J`). A path through it can look inside a folder while the file is elsewhere | `path-policy.ts` (#119), lesson 044 |
+| **Real (canonical) path** | Where a path really ends up after the OS follows every junction and symlink. Security checks compare real paths, never the text as typed | `realpath.native` in `path-policy.ts` (#119) |
+| **Alternate data stream** | Hidden extra content attached to a file on NTFS, named like `file.txt:stream`. It doesn't show in Explorer, so paths with such a colon are refused | `path-policy.ts` (#119), SECURITY §13.4 |
+| **Re-check at use** | Checking a file again after opening it (here: by its volume and file ID), so a link swapped between the check and the open is caught. The fix for TOCTOU on files | `openInsideRoot` (#119) |
