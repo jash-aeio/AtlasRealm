@@ -62,6 +62,7 @@ export type PathRefusal =
   | 'root_unavailable' // the root itself is missing, not a folder, unsafe, or not issued here
   | 'root_too_broad' // a whole drive, the home folder, Documents, AppData, ... (needs `broad`)
   | 'sensitive_folder' // browser profiles and credential folders: never readable or writable
+  | 'sensitive_file' // a file name that usually holds tokens (.npmrc, .git-credentials, ...)
   | 'not_found' // the file (or a parent folder) doesn't exist
   | 'inaccessible' // the OS refused to resolve it (permissions, too many links, ...)
   | 'not_a_file' // a folder or device where a file was expected
@@ -80,6 +81,7 @@ const MESSAGES: Readonly<Record<PathRefusal, string>> = {
   root_unavailable: 'The allowed folder is missing or cannot be used.',
   root_too_broad: 'That folder is too broad to allow without an explicit choice.',
   sensitive_folder: 'That folder holds browser or credential data and cannot be used.',
+  sensitive_file: 'That file can hold credentials and cannot be used.',
   not_found: 'That file does not exist.',
   inaccessible: 'That file cannot be accessed.',
   not_a_file: 'That path is not a file.',
@@ -233,6 +235,11 @@ Object.freeze(ApprovedRoot.prototype);
 export interface SensitiveFolders {
   /** Refused as a root, or as a folder containing one, unless the caller passes `broad: true`. */
   readonly broad: readonly string[];
+  /**
+   * Like `broad`, and every folder inside them counts too: app data and system folders, where
+   * projects don't live but settings, programs and other apps' secrets do.
+   */
+  readonly broadTrees: readonly string[];
   /** Never usable: refused as a root, and refused inside any root (even a broad one). */
   readonly forbidden: readonly string[];
 }
@@ -256,9 +263,11 @@ export function defaultSensitiveFolders(
       ...under(drive, 'Documents'),
       ...under(drive, 'Desktop'),
     ]),
+    ...under(env['PUBLIC']),
+  ];
+  const broadTrees = [
     ...under(appData),
     ...under(localAppData),
-    ...under(env['PUBLIC']),
     ...under(env['SystemRoot']),
     ...under(env['ProgramFiles']),
     ...under(env['ProgramFiles(x86)']),
@@ -289,7 +298,11 @@ export function defaultSensitiveFolders(
     ...under(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup'),
     ...under(env['ProgramData'], 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup'),
   ];
-  return { broad: [...new Set(broad)], forbidden: [...new Set(forbidden)] };
+  return {
+    broad: [...new Set(broad)],
+    broadTrees: [...new Set(broadTrees)],
+    forbidden: [...new Set(forbidden)],
+  };
 }
 
 export interface ApproveOptions {
@@ -340,6 +353,7 @@ export async function approveRoot(
   // compare against where each one really is, too.
   const sensitive = {
     broad: await realForms(listed.broad),
+    broadTrees: await realForms(listed.broadTrees),
     forbidden: await realForms(listed.forbidden),
   };
   const forms = [given, real];
@@ -348,7 +362,11 @@ export async function approveRoot(
   const rootContains = (folder: string) => forms.some((form) => isWithin(form, folder, IS_WINDOWS));
   if (sensitive.forbidden.some(rootIsIn)) throw new PathPolicyError('sensitive_folder');
   const isVolumeRoot = forms.some((form) => path.parse(form).root === form);
-  if (options.broad !== true && (isVolumeRoot || sensitive.broad.some(rootContains))) {
+  const isBroad =
+    isVolumeRoot ||
+    sensitive.broad.some(rootContains) ||
+    sensitive.broadTrees.some((tree) => rootContains(tree) || rootIsIn(tree));
+  if (options.broad !== true && isBroad) {
     throw new PathPolicyError('root_too_broad');
   }
   const excluded = await realForms(sensitive.forbidden.filter(rootContains));
@@ -420,6 +438,7 @@ export async function resolveInsideRoot(
   // As written: no `..` and no other drive. Cheap, and gives the clearer reason.
   const written = path.resolve(root.given, candidate);
   if (!writtenInside(root, written)) throw new PathPolicyError('outside_root');
+  if (isSensitiveName(written)) throw new PathPolicyError('sensitive_file');
 
   try {
     const real = confirmInside(root, state, await realpathNative(written));
@@ -452,7 +471,24 @@ function confirmInside(root: ApprovedRoot, state: RootState, real: string): stri
   if (pathShapeProblem(real) !== undefined) throw new PathPolicyError('link_escape');
   if (!isWithin(root.real, real, false)) throw new PathPolicyError('link_escape');
   if (isExcluded(state, real)) throw new PathPolicyError('sensitive_folder');
+  if (isSensitiveName(real)) throw new PathPolicyError('sensitive_file');
   return real;
+}
+
+/**
+ * File names that usually hold tokens or passwords (ADR-0035). Refused anywhere, in every root,
+ * compared without ASCII case. Listings still show the name.
+ */
+const SENSITIVE_FILE_NAMES: ReadonlySet<string> = new Set([
+  '.git-credentials',
+  '.npmrc',
+  '.netrc',
+  '_netrc',
+  '.pypirc',
+]);
+
+function isSensitiveName(target: string): boolean {
+  return SENSITIVE_FILE_NAMES.has(foldAscii(path.basename(target)));
 }
 
 function isExcluded(state: RootState, real: string): boolean {
@@ -691,6 +727,7 @@ export async function ensureDirInsideRoot(
   const base = isWithin(root.given, written, IS_WINDOWS) ? root.given : root.real;
   const relative = path.relative(base, written);
   const names = relative === '' ? [] : relative.split(path.sep);
+  if (names.some(isSensitiveName)) throw new PathPolicyError('sensitive_file');
   if (names.length > MAX_MISSING_DEPTH) throw new PathPolicyError('invalid_path');
 
   let current = root.real;

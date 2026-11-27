@@ -82,6 +82,9 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 });
 
 const IS_WINDOWS = process.platform === 'win32';
+// The temp folder lives inside %LOCALAPPDATA%, which counts as broad by default (ADR-0035).
+// Most tests approve temp folders, so they pass this empty list; one test checks the defaults.
+const NO_SENSITIVE: SensitiveFolders = { broad: [], broadTrees: [], forbidden: [] };
 
 let base: string;
 let rootDir: string;
@@ -99,7 +102,7 @@ beforeEach(async () => {
   writeFileSync(path.join(base, 'Root2', 'x.txt'), 'sibling');
   writeFileSync(path.join(rootDir, 'a.txt'), 'inside');
   writeFileSync(path.join(outsideDir, 'secret.txt'), 'secret');
-  root = await approveRoot(rootDir);
+  root = await approveRoot(rootDir, { sensitiveFolders: NO_SENSITIVE });
 });
 
 afterEach(() => {
@@ -246,7 +249,7 @@ describe('approveRoot', () => {
   it.skipIf(!IS_WINDOWS)('follows a root that is itself reached through a junction', async () => {
     const link = path.join(base, 'RootLink');
     junction(link, rootDir);
-    const viaLink = await approveRoot(link);
+    const viaLink = await approveRoot(link, { sensitiveFolders: NO_SENSITIVE });
     expect(viaLink.real).toBe(root.real);
     const resolved = await resolveInsideRoot(viaLink, 'a.txt');
     expect(resolved.real).toBe(path.join(root.real, 'a.txt'));
@@ -267,6 +270,7 @@ describe('approveRoot and sensitive folders (SECURITY §13.4)', () => {
     writeFileSync(path.join(home, 'Projects', 'p.txt'), 'project');
     sensitiveFolders = {
       broad: [home, path.join(home, 'Documents')],
+      broadTrees: [path.join(base, 'AppData')],
       forbidden: [path.join(home, '.ssh')],
     };
   });
@@ -287,9 +291,31 @@ describe('approveRoot and sensitive folders (SECURITY §13.4)', () => {
     );
   });
 
+  it('treats every folder inside app-data and system folders as broad', async () => {
+    const inside = path.join(base, 'AppData', 'Roaming', 'SomeApp');
+    mkdirSync(inside, { recursive: true });
+    for (const target of [path.join(base, 'AppData'), inside]) {
+      expect(await refusalOf(approveRoot(target, { sensitiveFolders }))).toBe('root_too_broad');
+      await expect(approveRoot(target, { sensitiveFolders, broad: true })).resolves.toBeInstanceOf(
+        ApprovedRoot,
+      );
+    }
+  });
+
+  it.skipIf(!IS_WINDOWS)(
+    'refuses a temp folder by default (it is inside LOCALAPPDATA)',
+    async (ctx) => {
+      const local = process.env['LOCALAPPDATA'];
+      const insideLocal =
+        local !== undefined && rootDir.toLowerCase().startsWith(local.toLowerCase() + path.sep);
+      if (!insideLocal) ctx.skip('the temp folder is not inside LOCALAPPDATA on this machine');
+      expect(await refusalOf(approveRoot(rootDir))).toBe('root_too_broad');
+    },
+  );
+
   it('refuses a whole drive unless the caller passes broad', async () => {
     const drive = path.parse(base).root;
-    const none: SensitiveFolders = { broad: [], forbidden: [] };
+    const none = NO_SENSITIVE;
     expect(await refusalOf(approveRoot(drive, { sensitiveFolders: none }))).toBe('root_too_broad');
     await expect(
       approveRoot(drive, { sensitiveFolders: none, broad: true }),
@@ -316,6 +342,7 @@ describe('approveRoot and sensitive folders (SECURITY §13.4)', () => {
       mkdirSync(docs);
       const linked: SensitiveFolders = {
         broad: [path.join(base, 'LinkedHome', 'Documents')],
+        broadTrees: [],
         forbidden: [path.join(base, 'LinkedHome', '.ssh')],
       };
       mkdirSync(path.join(base, 'LinkedHome'));
@@ -381,9 +408,10 @@ describe('approveRoot and sensitive folders (SECURITY §13.4)', () => {
         `${user}\\Desktop`,
         `${user}\\Downloads`,
         `${user}\\OneDrive\\Documents`,
-        `${user}\\AppData\\Roaming`,
-        `${user}\\AppData\\Local`,
       ]),
+    );
+    expect(folders.broadTrees).toEqual(
+      expect.arrayContaining([`${user}\\AppData\\Roaming`, `${user}\\AppData\\Local`]),
     );
     expect(folders.forbidden).toEqual(
       expect.arrayContaining([
@@ -397,6 +425,33 @@ describe('approveRoot and sensitive folders (SECURITY §13.4)', () => {
     );
     // Empty or missing variables add nothing.
     expect(folders.broad).not.toContain('');
+  });
+});
+
+describe('credential file names (ADR-0035)', () => {
+  const NAMES = ['.npmrc', '.git-credentials', '.netrc', '_netrc', '.pypirc'];
+
+  it.each(NAMES)('refuses %j for read, create and write, in any folder', async (name) => {
+    mkdirSync(path.join(rootDir, 'sub'));
+    writeFileSync(path.join(rootDir, 'sub', name), 'token=x');
+    expect(await refusalOf(resolveInsideRoot(root, `sub\\${name}`))).toBe('sensitive_file');
+    expect(await refusalOf(openInsideRoot(root, `sub\\${name}`, 'read'))).toBe('sensitive_file');
+    expect(await refusalOf(openInsideRoot(root, name, 'create'))).toBe('sensitive_file');
+    expect(await refusalOf(writeFileInsideRoot(root, name, 'x'))).toBe('sensitive_file');
+    expect(await refusalOf(ensureDirInsideRoot(root, name))).toBe('sensitive_file');
+    expect(existsSync(path.join(rootDir, name))).toBe(false);
+  });
+
+  it('ignores ASCII case, and still lists the name', async () => {
+    writeFileSync(path.join(rootDir, '.NPMRC'), 'token=x');
+    expect(await refusalOf(openInsideRoot(root, '.NPMRC', 'read'))).toBe('sensitive_file');
+    expect(await refusalOf(openInsideRoot(root, '.npmrc', 'read'))).toBe('sensitive_file');
+    // Listings show it, so the UI can explain why it can't be opened.
+    const { entries } = await listInsideRoot(root, '.');
+    expect(entries.map((entry) => entry.name)).toContain('.NPMRC');
+    // Similar names are fine.
+    writeFileSync(path.join(rootDir, 'npmrc.md'), 'notes');
+    await expect(resolveInsideRoot(root, 'npmrc.md')).resolves.toMatchObject({ exists: true });
   });
 });
 
@@ -644,25 +699,38 @@ describe('openInsideRoot', () => {
 });
 
 describe.skipIf(!IS_WINDOWS)('8.3 short names', () => {
-  /** The Windows short (8.3) form of a folder, or undefined if the volume has none. */
-  function shortForm(folder: string): string | undefined {
+  /** The Windows short (8.3) form of a folder or file, or undefined if it has none. */
+  function shortForm(folder: string, kind: 'Folder' | 'File' = 'Folder'): string | undefined {
     const out = execFileSync(
       'powershell.exe',
       [
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        '(New-Object -ComObject Scripting.FileSystemObject).GetFolder($env:ATLAS_P).ShortPath',
+        `(New-Object -ComObject Scripting.FileSystemObject).Get${kind}($env:ATLAS_P).ShortPath`,
       ],
       { env: { ...process.env, ATLAS_P: folder }, encoding: 'utf8' },
     ).trim();
     return out !== '' && out.toLowerCase() !== folder.toLowerCase() ? out : undefined;
   }
 
+  it('refuses a credential file reached by its short name', async (ctx) => {
+    // `.git-credentials` also has a short name such as `GIT-CR~1`. Only the real path, which
+    // Windows returns in long form, shows what the file really is.
+    const file = path.join(rootDir, '.git-credentials');
+    writeFileSync(file, 'https://user:token@example.com');
+    const short = shortForm(file, 'File');
+    if (short === undefined) ctx.skip('this volume has no 8.3 short names');
+    const shortName = path.basename(short ?? file);
+    expect(shortName.toLowerCase()).not.toBe('.git-credentials');
+    expect(await refusalOf(resolveInsideRoot(root, shortName))).toBe('sensitive_file');
+    expect(await refusalOf(openInsideRoot(root, shortName, 'read'))).toBe('sensitive_file');
+  });
+
   it('accepts a long-form candidate under a root approved by its short name', async (ctx) => {
     const short = shortForm(rootDir);
     if (short === undefined) ctx.skip('this volume has no 8.3 short names');
-    const shortRoot = await approveRoot(short ?? rootDir);
+    const shortRoot = await approveRoot(short ?? rootDir, { sensitiveFolders: NO_SENSITIVE });
     expect(shortRoot.given).toBe(path.resolve(short ?? rootDir));
     const longCandidate = path.join(base, 'Root', 'a.txt');
     expect((await resolveInsideRoot(shortRoot, longCandidate)).real).toBe(
