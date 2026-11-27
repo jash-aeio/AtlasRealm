@@ -103,10 +103,11 @@ export function createProfileListHandler(
   service: ProfileService,
 ): CommandHandler<typeof ProfileListInput, typeof ProfileListOutput> {
   return () => {
-    const { profiles, activeProfileId } = service.list();
+    const { profiles, activeProfileId, omittedCount } = service.list();
     return {
       profiles: profiles.map(({ id, displayName, isActive }) => ({ id, displayName, isActive })),
       activeProfileId,
+      omittedCount,
     };
   };
 }

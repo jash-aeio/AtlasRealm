@@ -44,6 +44,22 @@ import type { ActiveProfile } from './active-profile';
 export interface ProfileListing {
   readonly profiles: readonly (ProfileEntry & { readonly isActive: boolean })[];
   readonly activeProfileId: ProfileId;
+  /** Profiles in the index that weren't listed because of MAX_PROFILES (#61). */
+  readonly omittedCount: number;
+}
+
+/**
+ * At most MAX_PROFILES entries in index order, always including the active profile: the user
+ * must be able to see which profile they are in, even if it is the 51st.
+ */
+export function boundedProfiles(
+  all: readonly ProfileEntry[],
+  activeProfileId: string,
+): readonly ProfileEntry[] {
+  if (all.length <= MAX_PROFILES) return all;
+  const others = all.filter((entry) => entry.id !== activeProfileId).slice(0, MAX_PROFILES - 1);
+  const keep = new Set([activeProfileId, ...others.map((entry) => entry.id)]);
+  return all.filter((entry) => keep.has(entry.id));
 }
 
 /** The system's IANA timezone in canonical spelling, or `UTC` if it can't be determined. */
@@ -99,14 +115,27 @@ export class ProfileService {
     private readonly newId: () => ProfileId = newProfileId,
   ) {}
 
+  /**
+   * The profiles to show: all of them, or, if the index holds more than MAX_PROFILES (a
+   * restore, import or hand edit, #61), the active one plus the first others in index order.
+   * Nothing is removed from the index; `omittedCount` says how many weren't listed.
+   */
   list(): ProfileListing {
     const { profileId } = this.active.current();
+    const all = this.readIndex().profiles;
+    const shown = boundedProfiles(all, profileId);
+    const omittedCount = all.length - shown.length;
+    if (omittedCount > 0) {
+      // Counts only: names are user data and stay out of the log.
+      console.warn(
+        `[profiles] listing ${String(shown.length)} of ${String(all.length)} profiles ` +
+          `(limit ${String(MAX_PROFILES)}); the rest are kept on disk`,
+      );
+    }
     return {
-      profiles: this.readIndex().profiles.map((entry) => ({
-        ...entry,
-        isActive: entry.id === profileId,
-      })),
+      profiles: shown.map((entry) => ({ ...entry, isActive: entry.id === profileId })),
       activeProfileId: profileId,
+      omittedCount,
     };
   }
 

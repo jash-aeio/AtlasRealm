@@ -49,6 +49,7 @@ function fakeApi() {
         ok({
           profiles: [{ id: 'default', displayName: 'Default', isActive: true }],
           activeProfileId: 'default',
+          omittedCount: 0,
         }),
       ),
       create: vi.fn(() =>
@@ -83,7 +84,7 @@ function fakeApi() {
       },
     },
     world: {
-      list: vi.fn(() => ok({ worlds: [...worlds] })),
+      list: vi.fn(() => ok({ worlds: [...worlds], omittedCount: 0 })),
       create: vi.fn(() => {
         worlds.push(WORLD);
         return ok({ world: WORLD });
@@ -199,7 +200,7 @@ describe('session store', () => {
       () =>
         new Promise((resolve) => {
           releaseSlow = () => {
-            resolve({ ok: true, data: { worlds: [] } });
+            resolve({ ok: true, data: { worlds: [], omittedCount: 0 } });
           };
         }),
     );

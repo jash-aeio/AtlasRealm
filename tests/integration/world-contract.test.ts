@@ -126,6 +126,56 @@ describe('world.create', () => {
   });
 });
 
+// #61: a restored or imported database can hold more than MAX_WORLDS. The list must stay
+// usable (no internal_error) and delete nothing.
+describe('world.list over the limit (#61)', () => {
+  function seedWorlds(count: number): void {
+    // Straight through the repository, past world.create's limit, as a restore would.
+    const repository = new WorldRepository(opened.db);
+    for (let i = 0; i < count; i++) {
+      repository.create({ name: `W${String(i).padStart(3, '0')}`, themeId: 'meadow' });
+    }
+  }
+
+  it(`lists the first ${String(MAX_WORLDS)} of ${String(MAX_WORLDS + 1)} and keeps them all`, async () => {
+    seedWorlds(MAX_WORLDS + 1);
+
+    const result = await list();
+    if (!result.ok) throw new Error(`expected a list, got ${result.error.code}`);
+    expect(result.data.worlds).toHaveLength(MAX_WORLDS);
+    expect(result.data.omittedCount).toBe(1);
+    const all = new WorldRepository(opened.db).list({ includeArchived: true });
+    expect(all).toHaveLength(MAX_WORLDS + 1);
+    // The listed ones are the first in creation order (the list's normal order).
+    expect(result.data.worlds.map((w) => w.id)).toEqual(all.slice(0, MAX_WORLDS).map((w) => w.id));
+  });
+
+  it('counts archived worlds only when they are asked for', async () => {
+    seedWorlds(MAX_WORLDS + 1);
+    const repository = new WorldRepository(opened.db);
+    const first = repository.list()[0];
+    if (first === undefined) throw new Error('no world');
+    repository.archive(first.id, first.revision);
+
+    const activeOnly = await list();
+    expect(activeOnly.ok && activeOnly.data).toMatchObject({ omittedCount: 0 });
+    expect(activeOnly.ok && activeOnly.data.worlds).toHaveLength(MAX_WORLDS);
+    const withArchived = await list({ includeArchived: true });
+    expect(withArchived.ok && withArchived.data.omittedCount).toBe(1);
+  });
+
+  it('still refuses to create another world while over the limit', async () => {
+    seedWorlds(MAX_WORLDS + 1);
+    await expect(create({ name: 'One more' })).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'limit_reached' },
+    });
+    expect(new WorldRepository(opened.db).list({ includeArchived: true })).toHaveLength(
+      MAX_WORLDS + 1,
+    );
+  });
+});
+
 describe('world.list', () => {
   it('lists active worlds in creation order, archived ones only on request', async () => {
     // Give each world its own creation time. Created back to back, both can land in the same
@@ -212,7 +262,7 @@ describe('world.rename', () => {
       rename({ worldId: foreign.id, expectedRevision: 1, name: 'Mine now' }),
     ).resolves.toMatchObject({ ok: false, error: { code: 'not_found' } });
     const listed = await list({ includeArchived: true });
-    expect(listed).toEqual({ ok: true, data: { worlds: [] } });
+    expect(listed).toEqual({ ok: true, data: { worlds: [], omittedCount: 0 } });
     expect(new WorldRepository(other.db).get(foreign.id)?.name).toBe('Secret');
   });
 

@@ -1,7 +1,15 @@
 // Contract tests for `profile.*` and `profile.settings.*` (M1-6 #33). Every call goes through
 // the real router (sender → schema → size → handler → output schema) against real profile
 // folders in a temp directory.
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -182,6 +190,64 @@ describe('new profile names in the service (#60 review L2)', () => {
   });
 });
 
+// #61: a restored, imported or hand-edited index can hold more than MAX_PROFILES. The list
+// must stay usable (no internal_error), always show the active profile, and delete nothing.
+describe('profile.list over the limit (#61)', () => {
+  const extraId = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+  /** Writes an index with `extra` more profiles; the active one goes at `activeAt`. */
+  async function seedIndex(extra: number, activeAt: 'first' | 'last'): Promise<void> {
+    const current = readIndex();
+    const others = Array.from({ length: extra }, (_, i) => ({
+      id: toProfileId(extraId(i + 1)),
+      displayName: `Restored ${String(i + 1)}`,
+    }));
+    const profiles =
+      activeAt === 'first' ? [...current.profiles, ...others] : [...others, ...current.profiles];
+    await profilesIndex.writeProfilesIndex(userData, { ...current, profiles });
+  }
+
+  it.each([['first'], ['last']] as const)(
+    `lists ${String(MAX_PROFILES)} of ${String(MAX_PROFILES + 1)} with the active profile %s in the index`,
+    async (activeAt) => {
+      await seedIndex(MAX_PROFILES, activeAt);
+      const before = readFileSync(profilesIndex.profilesIndexPath(userData), 'utf8');
+
+      const result = await list();
+      if (!result.ok) throw new Error(`expected a list, got ${result.error.code}`);
+      expect(result.data.profiles).toHaveLength(MAX_PROFILES);
+      expect(result.data.omittedCount).toBe(1);
+      expect(result.data.profiles.filter((p) => p.isActive).map((p) => p.id)).toEqual([
+        opened.profileId,
+      ]);
+      // Index order is kept, so the list doesn't reshuffle between calls.
+      const ids = result.data.profiles.map((p) => p.id);
+      const indexOrder = readIndex().profiles.map((p) => p.id);
+      expect(ids).toEqual(indexOrder.filter((id) => ids.includes(id)));
+
+      // Nothing on disk changed: every profile is still in the index, byte for byte.
+      expect(readFileSync(profilesIndex.profilesIndexPath(userData), 'utf8')).toBe(before);
+      expect(readIndex().profiles).toHaveLength(MAX_PROFILES + 1);
+    },
+  );
+
+  it('still refuses to create another profile while over the limit', async () => {
+    await seedIndex(MAX_PROFILES, 'first');
+    await expect(create({ displayName: 'One more' })).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'limit_reached' },
+    });
+    expect(readIndex().profiles).toHaveLength(MAX_PROFILES + 1);
+  });
+
+  it('reports omittedCount 0 at exactly the limit', async () => {
+    await seedIndex(MAX_PROFILES - 1, 'first');
+    const result = await list();
+    expect(result.ok && result.data.omittedCount).toBe(0);
+    expect(result.ok && result.data.profiles).toHaveLength(MAX_PROFILES);
+  });
+});
+
 describe('profile.list', () => {
   it('lists the profiles and marks the active one', async () => {
     await expect(list()).resolves.toEqual({
@@ -189,6 +255,7 @@ describe('profile.list', () => {
       data: {
         profiles: [{ id: opened.profileId, displayName: 'Default', isActive: true }],
         activeProfileId: opened.profileId,
+        omittedCount: 0,
       },
     });
   });
