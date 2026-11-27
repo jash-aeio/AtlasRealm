@@ -61,6 +61,29 @@ See the plan in the conversation (approved before code). Slices:
   from the commit afterwards.
 - No UI change, so no E2E.
 
+## Reviews (/ship)
+
+- **invariant-reviewer:** clean. It re-ran the tests (1422/1422), typecheck and lint, and
+  confirmed nothing in the app uses these modules yet.
+- **security-auditor:** approve, no Critical or High. All findings fixed in commit 91b3eb9:
+  - **M1, self-asserted origin:** a manifest saying `source: bundled` and
+    `builtin.structured-brief` was accepted whatever its real origin.
+    `parseResourceManifest(raw, origin)` now takes the origin from the loader. An imported
+    manifest that claims bundled or `builtin.*` is `origin_mismatch`.
+  - **L1, log injection:** an unknown key's name with a newline or terminal escape code went
+    into the log lines unchanged. Control characters are now written as `\uXXXX`.
+  - **L2, oversized input:** a 50 MB description was still scanned in full (about 1.9 s).
+    `.max(…, { abort: true })` now stops at the length check, in `Description` and in the shared
+    `DisplayName`, and issues are cut to 10 before formatting.
+  - **L3, mutable registry:** `CAPABILITIES` could be changed at run time, and
+    `describeCapability('toString')` returned a function. Entries are frozen now, and lookups
+    take any string but only match the table's own keys.
+  - **L4, `process.execute` declarable:** the user chose to refuse it at parse time as
+    `executable_content` (AskUserQuestion, added to ADR-0034).
+- After the fixes: typecheck, lint and format:check pass; `pnpm test` 1431/1431. Mutation
+  checks: dropping `abort` failed the L2 test, and dropping the escaping failed the L1 test.
+  Both were restored.
+
 ## Handoffs
 
 - M3-10 (#120) broker: refuse to authorize a capability whose `available` is false, even when
@@ -68,7 +91,15 @@ See the plan in the conversation (approved before code). Slices:
 - M3-4 (#114) readiness: report a package that requests an unavailable capability as waiting,
   never Ready. Use `satisfiesRange` for version checks.
 - M3-2 (#112) loader: re-check `instructionsPath` on disk with `realpath` (M3-9 path policy).
-  Log `issues` in main only.
+  Log `issues` in main only. **Cap the `manifest.json` file size (e.g. 64 KiB) before
+  `JSON.parse`** (security L2). Call `parseResourceManifest(raw, 'bundled')` only for files
+  read from the app's own resources folder.
+- Import work (M3-17 onward, or the later community-package import): pass `'import'`. When a new
+  source type is added, keep the `builtin.*` and `source: bundled` refusal (ADR-0034).
+
+## What the user wrote
+
+- Nothing: Claude wrote all code and docs. The user made three decisions (version ranges, not-yet-built capabilities, refusing `process.execute`).
 
 ## Open questions
 
