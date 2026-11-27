@@ -61,6 +61,39 @@ export default defineConfig(
     },
   },
   {
+    // Main-process code touches user files only through security/path-policy.ts, which checks
+    // real paths, links and the root at use (SECURITY §13.4, #142). Raw `fs` stays in the policy,
+    // the app's own storage, and the few files that only touch app-owned paths.
+    // This block replaces the one above for these files, so it repeats the Pixi pattern.
+    files: ['src/main/**/*.ts'],
+    ignores: [
+      'src/main/**/*.test.ts',
+      'src/main/security/**',
+      'src/main/storage/**',
+      'src/main/index.ts', // reads the bundled index.html
+      'src/main/profiles/profile-service.ts', // makes/removes profile folders under userData
+      'src/main/services/profile-session.ts', // checks the profile database exists
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: ['fs', 'fs/promises', 'node:fs', 'node:fs/promises'].map((name) => ({
+            name,
+            message:
+              'Use src/main/security/path-policy.ts (openInsideRoot, writeFileInsideRoot, ...) for files; raw fs skips the path checks (#142).',
+          })),
+          patterns: [
+            {
+              group: ['pixi.js', 'pixi.js/*', '@pixi/*'],
+              message: 'Import Pixi only in src/renderer/world/grid-scene.ts (ADR-0011).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Plain JS files (configs, Claude hooks) aren't type-checked, so drop the type-aware rules.
     files: ['**/*.{js,mjs,cjs}'],
     extends: [tseslint.configs.disableTypeChecked],

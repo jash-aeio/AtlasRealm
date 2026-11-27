@@ -7,6 +7,7 @@ import {
   linkSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
@@ -24,6 +25,8 @@ import {
   ApprovedRoot,
   approveRoot,
   defaultSensitiveFolders,
+  ensureDirInsideRoot,
+  listInsideRoot,
   openInsideRoot,
   pathShapeProblem,
   PathPolicyError,
@@ -31,13 +34,19 @@ import {
   resolveInsideRoot,
   type SensitiveFolders,
   verifyHandleInsideRoot,
+  walkInsideRoot,
+  writeFileInsideRoot,
 } from './path-policy';
 
-// `open` passes through to the real one, but a test can run a step right before it (to swap a
-// folder for a junction at an exact moment, instead of hoping to win a race).
+// `open`, `mkdir` and `link` pass through to the real ones, but a test can run a step right
+// before or after them (to swap a folder for a junction at an exact moment, instead of hoping
+// to win a race). Each hook runs once. `beforeMkdir` sees the target and returns true when it
+// acted, so it can wait for the level it cares about.
 const openHooks = vi.hoisted(() => ({
   before: undefined as (() => void) | undefined,
   after: undefined as (() => void) | undefined,
+  beforeMkdir: undefined as ((target: string) => boolean) | undefined,
+  beforeLink: undefined as (() => void) | undefined,
 }));
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
@@ -52,6 +61,16 @@ vi.mock('node:fs/promises', async (importOriginal) => {
       openHooks.after = undefined;
       afterStep?.();
       return handle;
+    },
+    mkdir: async (...args: Parameters<typeof actual.mkdir>) => {
+      if (openHooks.beforeMkdir?.(String(args[0])) === true) openHooks.beforeMkdir = undefined;
+      return actual.mkdir(...args);
+    },
+    link: async (...args: Parameters<typeof actual.link>) => {
+      const step = openHooks.beforeLink;
+      openHooks.beforeLink = undefined;
+      step?.();
+      return actual.link(...args);
     },
   };
 });
@@ -80,6 +99,8 @@ beforeEach(async () => {
 afterEach(() => {
   openHooks.before = undefined;
   openHooks.after = undefined;
+  openHooks.beforeMkdir = undefined;
+  openHooks.beforeLink = undefined;
   rmSync(base, { recursive: true, force: true });
 });
 
@@ -631,3 +652,184 @@ describe.skipIf(!IS_WINDOWS)(
     });
   },
 );
+
+describe('ensureDirInsideRoot (M4)', () => {
+  it('makes missing folders one level at a time, and is idempotent', async () => {
+    const real = await ensureDirInsideRoot(root, 'a\\b\\c');
+    expect(real).toBe(path.join(root.real, 'a', 'b', 'c'));
+    expect(existsSync(path.join(rootDir, 'a', 'b', 'c'))).toBe(true);
+    await expect(ensureDirInsideRoot(root, 'a\\b\\c')).resolves.toBe(real);
+    await expect(ensureDirInsideRoot(root, '.')).resolves.toBe(root.real);
+  });
+
+  it('refuses escapes and a file in the way', async () => {
+    expect(await refusalOf(ensureDirInsideRoot(root, '..\\outside\\x'))).toBe('outside_root');
+    expect(await refusalOf(ensureDirInsideRoot(root, 'a.txt\\x'))).toBe('not_a_folder');
+    expect(await refusalOf(ensureDirInsideRoot(root, 'a.txt'))).toBe('not_a_folder');
+  });
+
+  describe.skipIf(!IS_WINDOWS)('links', () => {
+    it('makes nothing outside through a junction', async () => {
+      junction(path.join(rootDir, 'jn'), outsideDir);
+      expect(await refusalOf(ensureDirInsideRoot(root, 'jn\\new'))).toBe('link_escape');
+      expect(existsSync(path.join(outsideDir, 'new'))).toBe(false);
+    });
+
+    it('makes nothing outside through a dangling junction', async () => {
+      const target = path.join(outsideDir, 'planted');
+      junction(path.join(rootDir, 'dangling'), target);
+      expect(await refusalOf(ensureDirInsideRoot(root, 'dangling'))).toBe('link_escape');
+      expect(await refusalOf(ensureDirInsideRoot(root, 'dangling\\x'))).toBe('link_escape');
+      expect(existsSync(target)).toBe(false);
+    });
+
+    it('removes a folder it made outside when a parent was swapped mid-walk', async () => {
+      mkdirSync(path.join(rootDir, 'inner'));
+      const onLeftover = vi.fn();
+      openHooks.beforeMkdir = (target) => {
+        if (path.basename(target) !== 'deep') return false;
+        rmSync(path.join(rootDir, 'inner'), { recursive: true });
+        junction(path.join(rootDir, 'inner'), outsideDir);
+        return true;
+      };
+      expect(await refusalOf(ensureDirInsideRoot(root, 'inner\\deep', { onLeftover }))).toBe(
+        'link_escape',
+      );
+      expect(existsSync(path.join(outsideDir, 'deep'))).toBe(false);
+      expect(onLeftover).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('listInsideRoot and walkInsideRoot (M4)', () => {
+  beforeEach(() => {
+    mkdirSync(path.join(rootDir, 'sub', 'deeper'), { recursive: true });
+    writeFileSync(path.join(rootDir, 'sub', 'b.txt'), 'bb');
+    writeFileSync(path.join(rootDir, 'sub', 'deeper', 'c.txt'), 'ccc');
+  });
+
+  it('lists names, kinds and sizes, sorted', async () => {
+    const listing = await listInsideRoot(root, '.');
+    expect(listing.real).toBe(root.real);
+    expect(listing.omittedCount).toBe(0);
+    expect(listing.entries).toEqual([
+      { name: 'a.txt', kind: 'file', size: 6, hardLinked: false },
+      { name: 'sub', kind: 'folder', size: 0, hardLinked: false },
+    ]);
+  });
+
+  it('reports links and hard links without following them', async () => {
+    linkSync(path.join(outsideDir, 'secret.txt'), path.join(rootDir, 'hl.txt'));
+    if (IS_WINDOWS) junction(path.join(rootDir, 'jn'), outsideDir);
+    const { entries } = await listInsideRoot(root, '.');
+    expect(entries.find((entry) => entry.name === 'hl.txt')).toMatchObject({
+      kind: 'file',
+      hardLinked: true,
+    });
+    if (IS_WINDOWS) {
+      expect(entries.find((entry) => entry.name === 'jn')).toMatchObject({ kind: 'link' });
+      expect(await refusalOf(listInsideRoot(root, 'jn'))).toBe('link_escape');
+    }
+    expect(entries.map((entry) => entry.name)).not.toContain('secret.txt');
+  });
+
+  it('is bounded: the rest is counted, not returned', async () => {
+    for (let i = 0; i < 5; i += 1) writeFileSync(path.join(rootDir, `n${String(i)}.txt`), '');
+    const listing = await listInsideRoot(root, '.', { maxEntries: 3 });
+    expect(listing.entries).toHaveLength(3);
+    expect(listing.omittedCount).toBe(4); // a.txt, sub and n0..n4 = 7 entries
+  });
+
+  it('refuses a file and a path outside', async () => {
+    expect(await refusalOf(listInsideRoot(root, 'a.txt'))).toBe('not_a_folder');
+    expect(await refusalOf(listInsideRoot(root, '..\\outside'))).toBe('outside_root');
+  });
+
+  it('walks the tree with relative paths', async () => {
+    const result = await walkInsideRoot(root, '.');
+    expect(result.complete).toBe(true);
+    expect(result.entries.map((entry) => entry.relativePath)).toEqual([
+      'a.txt',
+      'sub',
+      'sub\\b.txt',
+      'sub\\deeper',
+      'sub\\deeper\\c.txt',
+    ]);
+  });
+
+  it.skipIf(!IS_WINDOWS)('never enters a junction, even one that stays inside', async () => {
+    junction(path.join(rootDir, 'loop'), rootDir); // would recurse forever if followed
+    junction(path.join(rootDir, 'out'), outsideDir);
+    const result = await walkInsideRoot(root, '.');
+    const paths = result.entries.map((entry) => entry.relativePath);
+    expect(paths).toContain('loop');
+    expect(paths).toContain('out');
+    expect(paths.some((p) => p.startsWith('loop\\') || p.startsWith('out\\'))).toBe(false);
+    expect(result.complete).toBe(true);
+  });
+
+  it('says when depth or size limits stopped it', async () => {
+    const shallow = await walkInsideRoot(root, '.', { maxDepth: 0 });
+    expect(shallow.entries.map((entry) => entry.relativePath)).toEqual(['a.txt', 'sub']);
+    expect(shallow.complete).toBe(false);
+    const small = await walkInsideRoot(root, '.', { maxEntries: 3 });
+    expect(small.entries).toHaveLength(3);
+    expect(small.complete).toBe(false);
+  });
+});
+
+describe('writeFileInsideRoot (M4)', () => {
+  beforeEach(() => {
+    mkdirSync(path.join(rootDir, 'out'));
+  });
+
+  it('writes a new file and leaves no temp file behind', async () => {
+    const real = await writeFileInsideRoot(root, 'out\\result.md', '# result');
+    expect(real).toBe(path.join(root.real, 'out', 'result.md'));
+    expect(readFileSync(path.join(rootDir, 'out', 'result.md'), 'utf8')).toBe('# result');
+    expect(readdirSync(path.join(rootDir, 'out'))).toEqual(['result.md']);
+    // The final file has one name, so it can be read back through the policy.
+    const { handle } = await openInsideRoot(root, 'out\\result.md', 'read');
+    await handle.close();
+  });
+
+  it('never overwrites, and leaves the existing file as it was', async () => {
+    writeFileSync(path.join(rootDir, 'out', 'result.md'), 'first');
+    expect(await refusalOf(writeFileInsideRoot(root, 'out\\result.md', 'second'))).toBe(
+      'already_exists',
+    );
+    expect(readFileSync(path.join(rootDir, 'out', 'result.md'), 'utf8')).toBe('first');
+    expect(readdirSync(path.join(rootDir, 'out'))).toEqual(['result.md']);
+  });
+
+  it('loses the race cleanly when the name is taken during the write', async () => {
+    openHooks.beforeLink = () => {
+      writeFileSync(path.join(rootDir, 'out', 'result.md'), 'winner');
+    };
+    expect(await refusalOf(writeFileInsideRoot(root, 'out\\result.md', 'loser'))).toBe(
+      'already_exists',
+    );
+    expect(readFileSync(path.join(rootDir, 'out', 'result.md'), 'utf8')).toBe('winner');
+    expect(readdirSync(path.join(rootDir, 'out'))).toEqual(['result.md']);
+  });
+
+  it('needs the parent folder to exist', async () => {
+    expect(await refusalOf(writeFileInsideRoot(root, 'missing\\result.md', 'x'))).toBe('not_found');
+  });
+
+  it.skipIf(!IS_WINDOWS)('removes what it made when the folder was moved outside', async () => {
+    // Right before the final link, the whole `out` folder (with the temp file) is moved
+    // outside and replaced by a junction to it, so the link lands outside the root.
+    const moved = path.join(outsideDir, 'moved');
+    const onLeftover = vi.fn();
+    openHooks.beforeLink = () => {
+      renameSync(path.join(rootDir, 'out'), moved);
+      junction(path.join(rootDir, 'out'), moved);
+    };
+    expect(
+      await refusalOf(writeFileInsideRoot(root, 'out\\result.md', 'data', { onLeftover })),
+    ).toBe('changed_during_use');
+    expect(readdirSync(moved)).toEqual([]);
+    expect(onLeftover).not.toHaveBeenCalled();
+  });
+});

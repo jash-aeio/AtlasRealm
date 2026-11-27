@@ -24,10 +24,25 @@
 // the root folder's identity, so a folder renamed away and replaced by a new one with the same
 // name is not trusted. Approve again from the database each time; never store the object.
 //
+// Callers never need `fs` on a user path: ensureDirInsideRoot, listInsideRoot, walkInsideRoot
+// and writeFileInsideRoot cover folders, listings and safe writes (M4, #142). A lint rule keeps
+// `node:fs` out of new main-process files.
+//
 // Errors carry a reason and a fixed message, never a path: the outside path can contain the
 // Windows user name and must not reach the renderer (SECURITY §21.3).
+import { randomUUID } from 'node:crypto';
 import { type BigIntStats, constants as fsConstants, realpath as realpathCallback } from 'node:fs';
-import { type FileHandle, lstat, open, stat, unlink } from 'node:fs/promises';
+import {
+  type FileHandle,
+  link,
+  lstat,
+  mkdir,
+  open,
+  opendir,
+  rmdir,
+  stat,
+  unlink,
+} from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -50,6 +65,7 @@ export type PathRefusal =
   | 'not_found' // the file (or a parent folder) doesn't exist
   | 'inaccessible' // the OS refused to resolve it (permissions, too many links, ...)
   | 'not_a_file' // a folder or device where a file was expected
+  | 'not_a_folder' // a file or device where a folder was expected
   | 'hard_link' // the file has more than one name, so it may also live outside the root
   | 'already_exists' // create-only open, and something is already there
   | 'changed_during_use'; // the path led somewhere else by the time the file was opened
@@ -67,6 +83,7 @@ const MESSAGES: Readonly<Record<PathRefusal, string>> = {
   not_found: 'That file does not exist.',
   inaccessible: 'That file cannot be accessed.',
   not_a_file: 'That path is not a file.',
+  not_a_folder: 'That path is not a folder.',
   hard_link: 'That file is linked to another location and cannot be used.',
   already_exists: 'A file with that name already exists.',
   changed_during_use: 'The file changed while it was being opened. Nothing was read or written.',
@@ -366,7 +383,10 @@ export interface ResolveOptions {
 /**
  * Resolves `candidate` (absolute, or relative to the root) and checks that it stays inside the
  * root, as written and after every link is followed. Throws PathPolicyError otherwise.
- * This is a check only: use openInsideRoot to act on the file, which checks again at use.
+ *
+ * CHECK ONLY. Never pass the result to `fs`: a link can change between this check and the use.
+ * Act through openInsideRoot, ensureDirInsideRoot, listInsideRoot, walkInsideRoot or
+ * writeFileInsideRoot, which check again at use.
  */
 export async function resolveInsideRoot(
   root: ApprovedRoot,
@@ -478,7 +498,8 @@ export type OpenMode = 'read' | 'create';
 export interface LeftoverEvent {
   readonly kind:
     | 'file_left_behind' // a refused create made a file, and it couldn't be proven ours
-    | 'unknown_object_created'; // a create failed after its name became a link
+    | 'unknown_object_created' // a create failed after its name became a link
+    | 'folder_left_behind'; // a refused ensureDirInsideRoot made a folder it couldn't remove
 }
 
 export interface OpenOptions {
@@ -613,4 +634,294 @@ export async function verifyHandleInsideRoot(
     throw new PathPolicyError('changed_during_use');
   }
   return held;
+}
+
+/**
+ * Makes `candidate` and any missing parent folders inside the root, one level at a time. Each
+ * level is checked after it exists (its real path must still be inside the root), so a folder
+ * swapped for a junction partway stops the walk. A folder this call made and then refused is
+ * removed again if it is still empty and still the same folder; otherwise `onLeftover` is told.
+ * Returns the real path of the deepest folder.
+ */
+export async function ensureDirInsideRoot(
+  root: ApprovedRoot,
+  candidate: string,
+  options: OpenOptions = {},
+): Promise<string> {
+  const shape = pathShapeProblem(candidate);
+  if (shape !== undefined) throw new PathPolicyError(shape);
+  const state = await checkRoot(root);
+  const written = path.resolve(root.given, candidate);
+  if (!writtenInside(root, written)) throw new PathPolicyError('outside_root');
+  const base = isWithin(root.given, written, IS_WINDOWS) ? root.given : root.real;
+  const relative = path.relative(base, written);
+  const names = relative === '' ? [] : relative.split(path.sep);
+  if (names.length > MAX_MISSING_DEPTH) throw new PathPolicyError('invalid_path');
+
+  let current = root.real;
+  for (const name of names) {
+    const next = path.join(current, name);
+    let made: BigIntStats | undefined;
+    try {
+      await mkdir(next);
+      made = await lstat(next, { bigint: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        throw new PathPolicyError(refusalOf(error), error);
+      }
+    }
+    try {
+      const real = confirmInside(root, state, await realpathNative(next));
+      if (!(await stat(real)).isDirectory()) throw new PathPolicyError('not_a_folder');
+      current = real;
+    } catch (error) {
+      if (made !== undefined) await removeOwnFolder(next, made, options);
+      if (error instanceof PathPolicyError) throw error;
+      // realpath failed on a name that exists: a link whose target is missing.
+      if (await isLink(next)) throw new PathPolicyError('link_escape', error);
+      throw new PathPolicyError(refusalOf(error), error);
+    }
+  }
+  return current;
+}
+
+/** Removes an empty folder this module just made, if `target` still leads to it. */
+async function removeOwnFolder(
+  target: string,
+  made: BigIntStats,
+  options: OpenOptions,
+): Promise<void> {
+  try {
+    const now = await lstat(target, { bigint: true });
+    if (now.isDirectory() && now.dev === made.dev && now.ino === made.ino) {
+      await rmdir(target); // only ever removes an empty folder
+      return;
+    }
+  } catch {
+    // Gone, not empty or unreadable: fall through and report.
+  }
+  options.onLeftover?.({ kind: 'folder_left_behind' });
+}
+
+/** One entry of a folder, as `lstat` sees it: links are reported, never followed. */
+export interface DirectoryEntry {
+  readonly name: string;
+  /** `link` covers junctions and symlinks; nothing behind a link is listed or read. */
+  readonly kind: 'file' | 'folder' | 'link' | 'other';
+  /** Size in bytes for files, 0 otherwise. */
+  readonly size: number;
+  /** True when the file has more than one name; openInsideRoot will refuse it (hard_link). */
+  readonly hardLinked: boolean;
+}
+
+export interface DirectoryListing {
+  /** The real path of the folder that was listed. */
+  readonly real: string;
+  /** Sorted by name (ordinal), at most `maxEntries`. */
+  readonly entries: readonly DirectoryEntry[];
+  /** Entries left out because of `maxEntries`. */
+  readonly omittedCount: number;
+}
+
+export interface ListOptions {
+  /** Most entries returned; the rest are counted in omittedCount. Default 10 000. */
+  readonly maxEntries?: number;
+}
+
+const DEFAULT_MAX_ENTRIES = 10_000;
+
+/**
+ * Lists one folder inside the root without following links. Afterwards the folder's path must
+ * still lead to the same folder (volume + file ID) inside the root, or the listing is refused.
+ * Known limit: Node can't list a folder by handle, so a link swapped out and back again during
+ * the listing could show names (never contents) from elsewhere; reads still go through
+ * openInsideRoot.
+ */
+export async function listInsideRoot(
+  root: ApprovedRoot,
+  candidate: string,
+  options: ListOptions = {},
+): Promise<DirectoryListing> {
+  const resolved = await resolveInsideRoot(root, candidate);
+  const state = await checkRoot(root);
+  return listReal(root, state, resolved.real, options.maxEntries ?? DEFAULT_MAX_ENTRIES);
+}
+
+async function listReal(
+  root: ApprovedRoot,
+  state: RootState,
+  dir: string,
+  maxEntries: number,
+): Promise<DirectoryListing> {
+  let before;
+  try {
+    before = await stat(dir, { bigint: true });
+  } catch (error) {
+    throw new PathPolicyError(refusalOf(error), error);
+  }
+  if (!before.isDirectory()) throw new PathPolicyError('not_a_folder');
+
+  const entries: DirectoryEntry[] = [];
+  let omittedCount = 0;
+  try {
+    for await (const dirent of await opendir(dir)) {
+      if (entries.length >= maxEntries) {
+        omittedCount += 1;
+        continue;
+      }
+      let info;
+      try {
+        info = await lstat(path.join(dir, dirent.name), { bigint: true });
+      } catch {
+        continue; // removed meanwhile
+      }
+      entries.push({
+        name: dirent.name,
+        kind: info.isSymbolicLink()
+          ? 'link'
+          : info.isDirectory()
+            ? 'folder'
+            : info.isFile()
+              ? 'file'
+              : 'other',
+        size: info.isFile() ? Number(info.size) : 0,
+        hardLinked: info.isFile() && info.nlink > 1n,
+      });
+    }
+  } catch (error) {
+    throw new PathPolicyError(refusalOf(error), error);
+  }
+
+  // Re-check at use: the folder we listed must still be this folder, inside the root.
+  try {
+    const now = confirmInside(root, state, await realpathNative(dir));
+    const after = await stat(now, { bigint: true });
+    if (after.dev !== before.dev || after.ino !== before.ino) throw new Error('changed');
+  } catch (error) {
+    throw new PathPolicyError('changed_during_use', error);
+  }
+  entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  return { real: dir, entries, omittedCount };
+}
+
+export interface WalkEntry extends DirectoryEntry {
+  /** Path relative to the folder the walk started in, with `\` separators. */
+  readonly relativePath: string;
+}
+
+export interface WalkResult {
+  readonly entries: readonly WalkEntry[];
+  /** False when `maxEntries` or `maxDepth` stopped the walk before it saw everything. */
+  readonly complete: boolean;
+}
+
+export interface WalkOptions {
+  /** Most entries returned in total. Default 10 000. */
+  readonly maxEntries?: number;
+  /** How many folder levels below the start are entered. Default 16. */
+  readonly maxDepth?: number;
+}
+
+/**
+ * Walks a folder tree inside the root, breadth first, never entering links (a link is listed as
+ * `link` and left alone). Bounded by `maxEntries` and `maxDepth`; `complete` says whether it
+ * saw everything. Each folder is listed with listInsideRoot's re-check.
+ */
+export async function walkInsideRoot(
+  root: ApprovedRoot,
+  candidate: string,
+  options: WalkOptions = {},
+): Promise<WalkResult> {
+  const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
+  const maxDepth = options.maxDepth ?? 16;
+  const start = await resolveInsideRoot(root, candidate);
+  const state = await checkRoot(root);
+
+  const entries: WalkEntry[] = [];
+  let complete = true;
+  const queue: { real: string; relative: string; depth: number }[] = [
+    { real: start.real, relative: '', depth: 0 },
+  ];
+  for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+    const remaining = maxEntries - entries.length;
+    if (remaining <= 0) {
+      complete = false;
+      break;
+    }
+    const listing = await listReal(root, state, next.real, remaining);
+    if (listing.omittedCount > 0) complete = false;
+    for (const entry of listing.entries) {
+      const relativePath = next.relative === '' ? entry.name : `${next.relative}\\${entry.name}`;
+      entries.push({ ...entry, relativePath });
+      if (entry.kind !== 'folder') continue;
+      if (next.depth >= maxDepth) {
+        complete = false;
+        continue;
+      }
+      queue.push({
+        real: path.join(listing.real, entry.name),
+        relative: relativePath,
+        depth: next.depth + 1,
+      });
+    }
+  }
+  return { entries, complete };
+}
+
+/**
+ * Writes a new file inside the root, all or nothing: the data goes to a temporary file in the
+ * same folder first, is flushed to disk, and only then gets its final name. The final name is
+ * never overwritten (`already_exists`), and a crash or refusal never leaves a half-written file
+ * under it (M3-12). The parent folder must exist (see ensureDirInsideRoot).
+ *
+ * Why a hard link and not rename? On Windows, Node's rename replaces an existing file. Linking
+ * the temp file to the final name fails if the name is taken, which is the "never overwrite"
+ * rule done by the OS itself; the temp name is then removed. Known limit: drives without hard
+ * links (FAT32, exFAT) refuse with `inaccessible`.
+ */
+export async function writeFileInsideRoot(
+  root: ApprovedRoot,
+  candidate: string,
+  data: string | Uint8Array,
+  options: OpenOptions = {},
+): Promise<string> {
+  const resolved = await resolveInsideRoot(root, candidate, { allowMissing: true });
+  if (resolved.exists) throw new PathPolicyError('already_exists');
+  const state = await checkRoot(root);
+  const tempPath = path.join(path.dirname(resolved.real), `.atlas-${randomUUID()}.tmp`);
+  const temp = await openInsideRoot(root, tempPath, 'create', options);
+
+  // The temp file's identity, taken from the handle: every later step checks against it.
+  let held: BigIntStats | undefined;
+  try {
+    held = await temp.handle.stat({ bigint: true });
+    await temp.handle.writeFile(data);
+    await temp.handle.sync();
+  } catch (error) {
+    await temp.handle.close().catch(() => undefined);
+    await removeOwnFile(temp.real, held, options);
+    throw new PathPolicyError(refusalOf(error), error);
+  }
+  await temp.handle.close();
+
+  try {
+    try {
+      await link(temp.real, resolved.real);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      throw new PathPolicyError(code === 'EEXIST' ? 'already_exists' : refusalOf(error), error);
+    }
+    // Re-check at use: the final name must lead, inside the root, to the file we wrote.
+    try {
+      const now = confirmInside(root, state, await realpathNative(resolved.real));
+      const info = await stat(now, { bigint: true });
+      if (info.dev !== held.dev || info.ino !== held.ino) throw new Error('changed');
+    } catch (error) {
+      await removeOwnFile(resolved.real, held, options);
+      throw new PathPolicyError('changed_during_use', error);
+    }
+  } finally {
+    await removeOwnFile(temp.real, held, options);
+  }
+  return resolved.real;
 }
