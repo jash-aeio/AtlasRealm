@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -17,13 +18,15 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  type ApprovedRoot,
+  ApprovedRoot,
   approveRoot,
+  defaultSensitiveFolders,
   openInsideRoot,
   pathShapeProblem,
   PathPolicyError,
   type PathRefusal,
   resolveInsideRoot,
+  type SensitiveFolders,
   verifyHandleInsideRoot,
 } from './path-policy';
 
@@ -142,6 +145,42 @@ describe('approveRoot', () => {
     expect(await refusalOf(approveRoot(make()))).toBe('root_unavailable');
   });
 
+  it('issues a frozen root that only this module can make (forged roots are refused)', async () => {
+    expect(Object.isFrozen(root)).toBe(true);
+    // Shapes a caller could build by hand: a plain object, a copy, a mismatched pair, an
+    // object with the right prototype, and the whole drive.
+    const drive = path.parse(root.real).root;
+    const forged: unknown[] = [
+      { given: root.given, real: root.real },
+      Object.fromEntries(Object.entries(root)), // a copy of its public fields
+      { given: root.given, real: path.dirname(root.real) },
+      Object.assign(Object.create(ApprovedRoot.prototype) as object, {
+        given: root.given,
+        real: root.real,
+      }),
+      { given: drive, real: drive },
+    ];
+    for (const fake of forged) {
+      const asRoot = fake as ApprovedRoot;
+      expect(await refusalOf(resolveInsideRoot(asRoot, 'a.txt'))).toBe('root_unavailable');
+      expect(await refusalOf(openInsideRoot(asRoot, 'a.txt', 'read'))).toBe('root_unavailable');
+    }
+    // Calling the factory without the module's private token fails too.
+    expect(() =>
+      ApprovedRoot.issue(Symbol('fake') as never, root.given, root.real, {} as never),
+    ).toThrow(PathPolicyError);
+  });
+
+  it('refuses a root that was replaced by another folder after approval', async () => {
+    // Same name, different folder: the root's volume + file ID no longer match.
+    renameSync(rootDir, path.join(base, 'Root-old'));
+    mkdirSync(rootDir);
+    writeFileSync(path.join(rootDir, 'a.txt'), 'impostor');
+    expect(await refusalOf(resolveInsideRoot(root, 'a.txt'))).toBe('root_unavailable');
+    expect(await refusalOf(openInsideRoot(root, 'a.txt', 'read'))).toBe('root_unavailable');
+    expect(await refusalOf(openInsideRoot(root, 'b.txt', 'create'))).toBe('root_unavailable');
+  });
+
   it.skipIf(!IS_WINDOWS)('follows a root that is itself reached through a junction', async () => {
     const link = path.join(base, 'RootLink');
     junction(link, rootDir);
@@ -149,6 +188,133 @@ describe('approveRoot', () => {
     expect(viaLink.real).toBe(root.real);
     const resolved = await resolveInsideRoot(viaLink, 'a.txt');
     expect(resolved.real).toBe(path.join(root.real, 'a.txt'));
+  });
+});
+
+describe('approveRoot and sensitive folders (SECURITY §13.4)', () => {
+  let home: string;
+  let sensitiveFolders: SensitiveFolders;
+
+  beforeEach(() => {
+    home = path.join(base, 'Home');
+    for (const dir of ['Documents', 'Projects', '.ssh'])
+      mkdirSync(path.join(home, dir), {
+        recursive: true,
+      });
+    writeFileSync(path.join(home, '.ssh', 'id_ed25519'), 'private key');
+    writeFileSync(path.join(home, 'Projects', 'p.txt'), 'project');
+    sensitiveFolders = {
+      broad: [home, path.join(home, 'Documents')],
+      forbidden: [path.join(home, '.ssh')],
+    };
+  });
+
+  it('accepts an ordinary project folder', async () => {
+    const approved = await approveRoot(path.join(home, 'Projects'), { sensitiveFolders });
+    expect((await resolveInsideRoot(approved, 'p.txt')).exists).toBe(true);
+  });
+
+  it.each([
+    ['the home folder', () => home],
+    ['Documents', () => path.join(home, 'Documents')],
+    ['a folder that contains the home folder', () => base],
+  ])('refuses %s unless the caller passes broad', async (_label, make) => {
+    expect(await refusalOf(approveRoot(make(), { sensitiveFolders }))).toBe('root_too_broad');
+    await expect(approveRoot(make(), { sensitiveFolders, broad: true })).resolves.toBeInstanceOf(
+      ApprovedRoot,
+    );
+  });
+
+  it('refuses a whole drive unless the caller passes broad', async () => {
+    const drive = path.parse(base).root;
+    const none: SensitiveFolders = { broad: [], forbidden: [] };
+    expect(await refusalOf(approveRoot(drive, { sensitiveFolders: none }))).toBe('root_too_broad');
+    await expect(
+      approveRoot(drive, { sensitiveFolders: none, broad: true }),
+    ).resolves.toBeInstanceOf(ApprovedRoot);
+  });
+
+  it('never approves a credential folder, even with broad', async () => {
+    mkdirSync(path.join(home, '.ssh', 'sub'));
+    for (const target of [path.join(home, '.ssh'), path.join(home, '.ssh', 'sub')]) {
+      expect(await refusalOf(approveRoot(target, { sensitiveFolders, broad: true }))).toBe(
+        'sensitive_folder',
+      );
+    }
+  });
+
+  it('keeps a credential folder refused inside a broad root', async () => {
+    const approved = await approveRoot(home, { sensitiveFolders, broad: true });
+    expect(await refusalOf(resolveInsideRoot(approved, '.ssh\\id_ed25519'))).toBe(
+      'sensitive_folder',
+    );
+    expect(await refusalOf(openInsideRoot(approved, '.ssh\\id_ed25519', 'read'))).toBe(
+      'sensitive_folder',
+    );
+    expect(await refusalOf(openInsideRoot(approved, '.ssh\\new.txt', 'create'))).toBe(
+      'sensitive_folder',
+    );
+    expect((await resolveInsideRoot(approved, 'Projects\\p.txt')).exists).toBe(true);
+  });
+
+  it.skipIf(!IS_WINDOWS)('keeps it refused when reached through a junction', async () => {
+    const approved = await approveRoot(home, { sensitiveFolders, broad: true });
+    junction(path.join(home, 'Projects', 'keys'), path.join(home, '.ssh'));
+    expect(await refusalOf(resolveInsideRoot(approved, 'Projects\\keys\\id_ed25519'))).toBe(
+      'sensitive_folder',
+    );
+  });
+
+  it.skipIf(!IS_WINDOWS)('lists the usual Windows folders by default', () => {
+    const user = 'C:\\Users\\u';
+    const folders = defaultSensitiveFolders(
+      {
+        APPDATA: `${user}\\AppData\\Roaming`,
+        LOCALAPPDATA: `${user}\\AppData\\Local`,
+        OneDrive: `${user}\\OneDrive`,
+        ProgramFiles: '',
+      },
+      user,
+    );
+    expect(folders.broad).toEqual(
+      expect.arrayContaining([
+        user,
+        `${user}\\Documents`,
+        `${user}\\Desktop`,
+        `${user}\\Downloads`,
+        `${user}\\OneDrive\\Documents`,
+        `${user}\\AppData\\Roaming`,
+        `${user}\\AppData\\Local`,
+      ]),
+    );
+    expect(folders.forbidden).toEqual(
+      expect.arrayContaining([
+        `${user}\\.ssh`,
+        `${user}\\AppData\\Local\\Google\\Chrome\\User Data`,
+        `${user}\\AppData\\Roaming\\Mozilla\\Firefox`,
+      ]),
+    );
+    // Empty or missing variables add nothing.
+    expect(folders.broad).not.toContain('');
+  });
+});
+
+describe('PathPolicyError', () => {
+  it('keeps only the OS error code, never the path (L2)', async () => {
+    let caught: unknown;
+    try {
+      await resolveInsideRoot(root, 'missing-folder\\nope.txt');
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(PathPolicyError);
+    const error = caught as PathPolicyError;
+    expect(error.reason).toBe('not_found');
+    expect(error.errno).toBe('ENOENT');
+    expect(error.cause).toBeUndefined();
+    const serialised = JSON.stringify(error) + String(error) + (error.stack ?? '');
+    expect(serialised).not.toContain(base);
+    expect(serialised).not.toContain('nope.txt');
   });
 });
 

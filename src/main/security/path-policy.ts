@@ -18,10 +18,16 @@
 //      leads to. Node can't ask Windows for an open handle's path, but identity gives the same
 //      guarantee: if they differ, the handle is closed and the open is refused.
 //
+// The root itself is trusted only as an ApprovedRoot that approveRoot issued (#142): the class
+// can't be built or faked elsewhere, so a caller can't hand in `{ real: 'C:\\' }`. It also pins
+// the root folder's identity, so a folder renamed away and replaced by a new one with the same
+// name is not trusted. Approve again from the database each time; never store the object.
+//
 // Errors carry a reason and a fixed message, never a path: the outside path can contain the
 // Windows user name and must not reach the renderer (SECURITY §21.3).
 import { constants as fsConstants, realpath as realpathCallback } from 'node:fs';
 import { type FileHandle, open, stat } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -37,7 +43,9 @@ export type PathRefusal =
   | 'alternate_data_stream' // `file.txt:stream`, hidden extra content on NTFS
   | 'outside_root' // `..` or another drive leaves the root as written
   | 'link_escape' // a junction or symlink leads out of the root
-  | 'root_unavailable' // the root itself is missing, not a folder, or unsafe
+  | 'root_unavailable' // the root itself is missing, not a folder, unsafe, or not issued here
+  | 'root_too_broad' // a whole drive, the home folder, Documents, AppData, ... (needs `broad`)
+  | 'sensitive_folder' // browser profiles and credential folders: never readable or writable
   | 'not_found' // the file (or a parent folder) doesn't exist
   | 'inaccessible' // the OS refused to resolve it (permissions, too many links, ...)
   | 'not_a_file' // a folder or device where a file was expected
@@ -52,6 +60,8 @@ const MESSAGES: Readonly<Record<PathRefusal, string>> = {
   outside_root: 'That file is outside the allowed folder.',
   link_escape: 'That path follows a link out of the allowed folder.',
   root_unavailable: 'The allowed folder is missing or cannot be used.',
+  root_too_broad: 'That folder is too broad to allow without an explicit choice.',
+  sensitive_folder: 'That folder holds browser or credential data and cannot be used.',
   not_found: 'That file does not exist.',
   inaccessible: 'That file cannot be accessed.',
   not_a_file: 'That path is not a file.',
@@ -59,14 +69,23 @@ const MESSAGES: Readonly<Record<PathRefusal, string>> = {
   changed_during_use: 'The file changed while it was being opened. Nothing was read or written.',
 };
 
-/** A refused path. `message` is fixed text, safe to show; it never contains a path. */
+/**
+ * A refused path. `message` is fixed text, safe to show; it never contains a path. The OS error
+ * behind a refusal is kept only as its code (`errno`, e.g. `ENOENT`), never as `cause`: Node's
+ * errors carry the full path in `message` and `path`, which would leak if the error were logged
+ * or serialised.
+ */
 export class PathPolicyError extends Error {
   override readonly name = 'PathPolicyError';
+  /** The OS error code behind the refusal, if any. Never a path. */
+  readonly errno: string | undefined;
   constructor(
     readonly reason: PathRefusal,
-    options?: ErrorOptions,
+    osError?: unknown,
   ) {
-    super(MESSAGES[reason], options);
+    super(MESSAGES[reason]);
+    const code = (osError as NodeJS.ErrnoException | undefined)?.code;
+    this.errno = typeof code === 'string' && /^[A-Z0-9_]{1,32}$/.test(code) ? code : undefined;
   }
 }
 
@@ -140,35 +159,192 @@ function refusalOf(error: unknown): PathRefusal {
   return code === 'ENOENT' || code === 'ENOTDIR' ? 'not_found' : 'inaccessible';
 }
 
-/** A root folder that passed the checks: `real` is the OS-resolved path. */
-export interface ApprovedRoot {
-  /** The root as given, made absolute. Candidates written against it are checked against it. */
-  readonly given: string;
-  /** Where the root really is, after Windows resolved every link. */
-  readonly real: string;
+/** What approveRoot remembers about a root, out of reach of callers. */
+interface RootState {
+  /** Volume and file ID of the root folder when it was approved (L3: a replaced root fails). */
+  readonly dev: bigint;
+  readonly ino: bigint;
+  /** Sensitive folders inside this root (only possible for a `broad` root): always refused. */
+  readonly excluded: readonly string[];
+}
+
+// Set inside the class's static block, which is the only code that can see `#state`.
+let rootStateOf: (root: unknown) => RootState | undefined;
+const ISSUE = Symbol('ApprovedRoot.issue');
+
+/**
+ * A root folder that passed approveRoot. Only approveRoot can make one: the constructor demands
+ * a module-private token, and every function here checks the private `#state` field, which a
+ * copied or hand-built object can't have. Instances are frozen.
+ */
+export class ApprovedRoot {
+  readonly #state: RootState;
+  /**
+   * @param given The root as given, made absolute.
+   * @param real Where the root really is, after Windows resolved every link.
+   */
+  private constructor(
+    token: typeof ISSUE,
+    readonly given: string,
+    readonly real: string,
+    state: RootState,
+  ) {
+    if (token !== ISSUE) throw new PathPolicyError('root_unavailable');
+    this.#state = state;
+    Object.freeze(this);
+  }
+
+  static {
+    rootStateOf = (root) =>
+      typeof root === 'object' && root !== null && #state in root ? root.#state : undefined;
+  }
+
+  /** @internal Used by approveRoot only; the token keeps everyone else out. */
+  static issue(token: typeof ISSUE, given: string, real: string, state: RootState): ApprovedRoot {
+    return new ApprovedRoot(token, given, real, state);
+  }
 }
 
 /**
- * Checks a root folder: an absolute local path with a safe shape that exists and is a folder.
- * A root may itself be reached through a link (for example a redirected Documents folder);
- * from here on its real location is what counts.
+ * Folders that are never approved without care (SECURITY §13.4: never auto-grant Documents, the
+ * home folder, browser profiles, credential folders or the whole disk).
  */
-export async function approveRoot(root: string): Promise<ApprovedRoot> {
+export interface SensitiveFolders {
+  /** Refused as a root, or as a folder containing one, unless the caller passes `broad: true`. */
+  readonly broad: readonly string[];
+  /** Never usable: refused as a root, and refused inside any root (even a broad one). */
+  readonly forbidden: readonly string[];
+}
+
+/** The default sensitive folders for this user, from the home folder and Windows variables. */
+export function defaultSensitiveFolders(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  home: string = homedir(),
+): SensitiveFolders {
+  const under = (base: string | undefined, ...parts: string[]): string[] =>
+    base !== undefined && base !== '' && path.isAbsolute(base) ? [path.join(base, ...parts)] : [];
+  const oneDrives = [env['OneDrive'], env['OneDriveConsumer'], env['OneDriveCommercial']];
+  const appData = env['APPDATA'];
+  const localAppData = env['LOCALAPPDATA'];
+  const broad = [
+    ...under(home),
+    ...under(env['USERPROFILE']),
+    ...['Documents', 'Desktop', 'Downloads'].flatMap((name) => under(home, name)),
+    ...oneDrives.flatMap((drive) => [
+      ...under(drive),
+      ...under(drive, 'Documents'),
+      ...under(drive, 'Desktop'),
+    ]),
+    ...under(appData),
+    ...under(localAppData),
+    ...under(env['PUBLIC']),
+    ...under(env['SystemRoot']),
+    ...under(env['ProgramFiles']),
+    ...under(env['ProgramFiles(x86)']),
+    ...under(env['ProgramData']),
+  ];
+  const forbidden = [
+    ...['.ssh', '.aws', '.azure', '.gnupg', '.kube', '.docker'].flatMap((name) =>
+      under(home, name),
+    ),
+    ...under(home, '.config', 'gcloud'),
+    ...under(localAppData, 'Google', 'Chrome', 'User Data'),
+    ...under(localAppData, 'Microsoft', 'Edge', 'User Data'),
+    ...under(localAppData, 'BraveSoftware', 'Brave-Browser', 'User Data'),
+    ...under(localAppData, 'Vivaldi', 'User Data'),
+    ...under(localAppData, 'Chromium', 'User Data'),
+    ...under(localAppData, 'Microsoft', 'Credentials'),
+    ...under(appData, 'Mozilla', 'Firefox'),
+    ...under(appData, 'Opera Software'),
+    ...under(appData, 'Microsoft', 'Credentials'),
+    ...under(appData, 'Microsoft', 'Protect'),
+  ];
+  return { broad: [...new Set(broad)], forbidden: [...new Set(forbidden)] };
+}
+
+export interface ApproveOptions {
+  /**
+   * Allow a broad root (a whole drive, the home folder, Documents, AppData, ...). Only for a
+   * screen where the user knowingly picks such a folder; never set it automatically.
+   * Forbidden folders inside a broad root stay refused.
+   */
+  readonly broad?: boolean;
+  /** Override the sensitive folders (tests). Defaults to defaultSensitiveFolders(). */
+  readonly sensitiveFolders?: SensitiveFolders;
+}
+
+/**
+ * Checks a root folder: an absolute local path with a safe shape that exists and is a folder,
+ * and isn't a sensitive folder (see SensitiveFolders). A root may itself be reached through a
+ * link (for example a redirected Documents folder); from here on its real location is what
+ * counts. The result is only valid for the current operation: approve again next time.
+ */
+export async function approveRoot(
+  root: string,
+  options: ApproveOptions = {},
+): Promise<ApprovedRoot> {
   if (pathShapeProblem(root) !== undefined || !path.isAbsolute(root)) {
     throw new PathPolicyError('root_unavailable');
   }
   const given = path.resolve(root);
   let real: string;
+  let identity: { dev: bigint; ino: bigint };
   try {
     real = await realpathNative(given);
-    if (!(await stat(real)).isDirectory()) throw new PathPolicyError('root_unavailable');
+    const info = await stat(real, { bigint: true });
+    if (!info.isDirectory()) throw new PathPolicyError('root_unavailable');
+    identity = { dev: info.dev, ino: info.ino };
   } catch (error) {
     if (error instanceof PathPolicyError) throw error;
-    throw new PathPolicyError('root_unavailable', { cause: error });
+    throw new PathPolicyError('root_unavailable', error);
   }
   // A root that resolves to a network share or device namespace is refused as well.
   if (pathShapeProblem(real) !== undefined) throw new PathPolicyError('root_unavailable');
-  return { given, real };
+
+  const sensitive = options.sensitiveFolders ?? defaultSensitiveFolders();
+  const forms = [given, real];
+  // Both the written and the real form count: either may be the one that reveals the problem.
+  const rootIsIn = (folder: string) => forms.some((form) => isWithin(folder, form, IS_WINDOWS));
+  const rootContains = (folder: string) => forms.some((form) => isWithin(form, folder, IS_WINDOWS));
+  if (sensitive.forbidden.some(rootIsIn)) throw new PathPolicyError('sensitive_folder');
+  const isVolumeRoot = forms.some((form) => path.parse(form).root === form);
+  if (options.broad !== true && (isVolumeRoot || sensitive.broad.some(rootContains))) {
+    throw new PathPolicyError('root_too_broad');
+  }
+  const excluded = await realForms(sensitive.forbidden.filter(rootContains));
+  return ApprovedRoot.issue(ISSUE, given, real, { ...identity, excluded });
+}
+
+/** Each folder as written plus, if it exists, its real location (links resolved). */
+async function realForms(folders: readonly string[]): Promise<string[]> {
+  const forms = new Set(folders);
+  for (const folder of folders) {
+    try {
+      forms.add(await realpathNative(folder));
+    } catch {
+      // A sensitive folder that doesn't exist yet is still refused by its written form.
+    }
+  }
+  return [...forms];
+}
+
+/**
+ * Confirms that `root` was issued by approveRoot and that its folder is still the same one
+ * (same volume and file ID): a root renamed away and replaced by a new folder is refused.
+ */
+async function checkRoot(root: ApprovedRoot): Promise<RootState> {
+  const state = rootStateOf(root);
+  if (state === undefined) throw new PathPolicyError('root_unavailable');
+  let info;
+  try {
+    info = await stat(root.real, { bigint: true });
+  } catch (error) {
+    throw new PathPolicyError('root_unavailable', error);
+  }
+  if (!info.isDirectory() || info.dev !== state.dev || info.ino !== state.ino) {
+    throw new PathPolicyError('root_unavailable');
+  }
+  return state;
 }
 
 /** A path that passed the checks. */
@@ -196,6 +372,7 @@ export async function resolveInsideRoot(
 ): Promise<ResolvedPath> {
   const shape = pathShapeProblem(candidate);
   if (shape !== undefined) throw new PathPolicyError(shape);
+  const state = await checkRoot(root);
 
   // As written: no `..` and no other drive. Cheap, and gives the clearer reason.
   const written = path.resolve(root.given, candidate);
@@ -203,20 +380,26 @@ export async function resolveInsideRoot(
 
   try {
     const real = await realpathNative(written);
-    return { real: confirmInside(root, real), exists: true };
+    return { real: confirmInside(root, state, real), exists: true };
   } catch (error) {
     if (error instanceof PathPolicyError) throw error;
     if (options.allowMissing !== true || refusalOf(error) !== 'not_found') {
-      throw new PathPolicyError(refusalOf(error), { cause: error });
+      throw new PathPolicyError(refusalOf(error), error);
     }
   }
-  return { real: await resolveMissing(root, written), exists: false };
+  return { real: await resolveMissing(root, state, written), exists: false };
 }
 
-/** The real path, if it is inside the root's real location; otherwise a link led out. */
-function confirmInside(root: ApprovedRoot, real: string): string {
+/**
+ * The real path, if it is inside the root's real location (otherwise a link led out) and not in
+ * a sensitive folder inside a broad root.
+ */
+function confirmInside(root: ApprovedRoot, state: RootState, real: string): string {
   if (pathShapeProblem(real) !== undefined) throw new PathPolicyError('link_escape');
   if (!isWithin(root.real, real, false)) throw new PathPolicyError('link_escape');
+  if (state.excluded.some((folder) => isWithin(folder, real, IS_WINDOWS))) {
+    throw new PathPolicyError('sensitive_folder');
+  }
   return real;
 }
 
@@ -225,7 +408,11 @@ function confirmInside(root: ApprovedRoot, real: string): string {
  * parent's real location, and appends the missing names (which can't be links: they don't
  * exist). openInsideRoot still checks the created file again after opening it.
  */
-async function resolveMissing(root: ApprovedRoot, written: string): Promise<string> {
+async function resolveMissing(
+  root: ApprovedRoot,
+  state: RootState,
+  written: string,
+): Promise<string> {
   const missing: string[] = [];
   let current = written;
   for (let depth = 0; depth < MAX_MISSING_DEPTH; depth += 1) {
@@ -234,12 +421,12 @@ async function resolveMissing(root: ApprovedRoot, written: string): Promise<stri
     if (parent === current || !isWithin(root.given, parent, IS_WINDOWS)) break;
     current = parent;
     try {
-      const real = confirmInside(root, await realpathNative(current));
+      const real = confirmInside(root, state, await realpathNative(current));
       return path.join(real, ...missing);
     } catch (error) {
       if (error instanceof PathPolicyError) throw error;
       if (refusalOf(error) !== 'not_found') {
-        throw new PathPolicyError('inaccessible', { cause: error });
+        throw new PathPolicyError('inaccessible', error);
       }
     }
   }
@@ -280,9 +467,9 @@ export async function openInsideRoot(
           );
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'EEXIST') throw new PathPolicyError('already_exists', { cause: error });
-    if (code === 'EISDIR') throw new PathPolicyError('not_a_file', { cause: error });
-    throw new PathPolicyError(refusalOf(error), { cause: error });
+    if (code === 'EEXIST') throw new PathPolicyError('already_exists', error);
+    if (code === 'EISDIR') throw new PathPolicyError('not_a_file', error);
+    throw new PathPolicyError(refusalOf(error), error);
   }
 
   try {
@@ -305,22 +492,25 @@ export async function verifyHandleInsideRoot(
   real: string,
   handle: FileHandle,
 ): Promise<void> {
+  const state = await checkRoot(root);
   const held = await handle.stat({ bigint: true });
   if (!held.isFile()) throw new PathPolicyError('not_a_file');
   let now: string;
   try {
     now = await realpathNative(real);
   } catch (error) {
-    throw new PathPolicyError('changed_during_use', { cause: error });
+    throw new PathPolicyError('changed_during_use', error);
   }
-  if (!isWithin(root.real, now, false) || pathShapeProblem(now) !== undefined) {
+  try {
+    confirmInside(root, state, now);
+  } catch {
     throw new PathPolicyError('changed_during_use');
   }
   let current;
   try {
     current = await stat(now, { bigint: true });
   } catch (error) {
-    throw new PathPolicyError('changed_during_use', { cause: error });
+    throw new PathPolicyError('changed_during_use', error);
   }
   if (current.dev !== held.dev || current.ino !== held.ino) {
     throw new PathPolicyError('changed_during_use');
