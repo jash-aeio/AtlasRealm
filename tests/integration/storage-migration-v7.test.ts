@@ -446,4 +446,30 @@ describe('schema v7 constraints (raw SQL, no repository)', () => {
       /FOREIGN KEY/,
     );
   });
+
+  it('keeps the builtin.* namespace for bundled packages only (security review M1)', () => {
+    expect(() => {
+      pkg({ id: 'acme.writer', source: 'bundled', review: 'trusted' });
+    }).toThrow(/CHECK/);
+    expect(() => {
+      pkg({ source: 'local', review: 'unreviewed' });
+    }).toThrow(/CHECK/);
+    pkg({ id: 'acme.writer', source: 'local', review: 'unreviewed' });
+  });
+
+  it('refuses a source revision that looks like a URL (security review L3)', () => {
+    const insert = db.prepare(
+      `INSERT INTO resource_packages (package_id, version, kind, name, publisher, source,
+                                      source_revision, digest_sha256, license, review_state,
+                                      created_at, updated_at)
+       VALUES ('acme.writer', ?, 'agent', 'Writer', 'Acme', 'github', ?, ?, 'MIT', 'unreviewed',
+               ?, ?)`,
+    );
+    expect(() => insert.run('1.0.0', 'https://user:ghp_x@github.com/a/b', DIGEST, T, T)).toThrow(
+      /CHECK/,
+    );
+    expect(() => insert.run('1.0.0', 'user@host', DIGEST, T, T)).toThrow(/CHECK/);
+    insert.run('1.0.0', '0123456789abcdef0123456789abcdef01234567', DIGEST, T, T);
+    insert.run('1.1.0', 'v1.1.0', DIGEST, T, T);
+  });
 });

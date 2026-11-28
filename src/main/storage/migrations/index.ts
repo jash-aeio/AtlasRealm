@@ -441,11 +441,12 @@ const m0007ResourcesAndTeam: Migration = {
                         publisher = trim(publisher, char(9, 10, 13, 32))),
       -- Wide enough for imports (M6), so adding them needs no rebuild of this referenced table.
       source          TEXT    NOT NULL CHECK (source IN ('bundled', 'local', 'github')),
-      -- E.g. a git commit for a GitHub source; NULL for bundled packages.
+      -- A git commit or tag for a GitHub source; NULL for bundled packages. Never a URL: no
+      -- ":" or "@", so a clone URL with a credential in it can't be stored (SECURITY §21).
       source_revision TEXT    CHECK (
                         source_revision IS NULL OR
                         (length(source_revision) BETWEEN 1 AND 200 AND
-                         instr(source_revision, char(0)) = 0)),
+                         source_revision NOT GLOB '*[^A-Za-z0-9._/-]*')),
       digest_sha256   TEXT    NOT NULL CHECK (
                         length(digest_sha256) = 64 AND digest_sha256 NOT GLOB '*[^0-9a-f]*'),
       license         TEXT    NOT NULL CHECK (    -- SPDX identifier, e.g. UNLICENSED
@@ -457,8 +458,11 @@ const m0007ResourcesAndTeam: Migration = {
       updated_at      TEXT    NOT NULL,
       revision        INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
       PRIMARY KEY (package_id, version),
-      -- "trusted" means bundled with the app, and only bundled packages are trusted.
-      CHECK ((source = 'bundled') = (review_state = 'trusted'))
+      -- "trusted" means bundled with the app, and only bundled packages are trusted. The
+      -- builtin.* namespace belongs to bundled packages only (ADR-0034), so an imported package
+      -- can't take a bundled package's name or pose as one.
+      CHECK ((source = 'bundled') = (review_state = 'trusted')),
+      CHECK ((source = 'bundled') = (package_id GLOB 'builtin.*'))
     ) STRICT;
 
     -- The foreign key target that carries the kind (see the note above).

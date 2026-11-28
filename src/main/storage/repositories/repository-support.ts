@@ -123,6 +123,18 @@ export function normalizeText(value: string, field: string, maxChars: number): s
   return text;
 }
 
+/**
+ * A key the caller passes to look something up (an ID). It is only checked to be a short
+ * string here, so a forged object or number fails as `invalid_input` instead of a raw error;
+ * the lookup itself decides whether it exists.
+ */
+export function assertKey(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 128) {
+    throw new RepositoryError('invalid_input', `${field} must be an ID.`);
+  }
+  return value;
+}
+
 const SLUG = /^[a-z0-9-]+$/;
 
 /** A lowercase slug ID such as `generic` or `content-campaign`. */

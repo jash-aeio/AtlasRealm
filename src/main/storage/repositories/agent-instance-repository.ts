@@ -5,12 +5,14 @@
 // taken from the caller. Creating an instance starts no work (PRD §5.3): nothing here writes
 // runs, jobs or events. Dismissing deletes the instance and, through the foreign key, its
 // skill bindings; the project, its artifacts and the installed packages are never touched.
-// Whether an archived or trashed project may recruit is a service rule (M3-6). Trashing a
+// Whether an archived or trashed project may recruit is a service rule (M3-6). A blocked
+// template is refused; a disabled one may still be recruited and shows as not ready (M3-4). Trashing a
 // project keeps its agents, like its links (ADR-0029).
 import { randomUUID } from 'node:crypto';
 
 import type { Database } from '../database';
 import {
+  assertKey,
   guardedDelete,
   guardedUpdate,
   integer,
@@ -58,6 +60,8 @@ const APPEARANCE_MAX_CHARS = 100;
 
 function cleanNickname(value: string | null | undefined): string | null {
   if (value === undefined || value === null) return null;
+  if (typeof value !== 'string')
+    throw new RepositoryError('invalid_input', 'Nickname must be text.');
   return normalizeName(value, 'Nickname');
 }
 
@@ -96,8 +100,9 @@ export class AgentInstanceRepository {
   /**
    * Recruits an idle agent into a project from the agent package installed in its world.
    * Refuses with `not_found` for an unknown project, or when that world has no agent package
-   * with this ID installed (a skill or tool ID counts as not installed), and with
-   * `invalid_input` for a bad nickname or appearance. Nothing is written on refusal.
+   * with this ID installed (a skill or tool ID counts as not installed), `invalid_transition`
+   * when that package is blocked, and `invalid_input` for a bad nickname or appearance.
+   * Nothing is written on refusal.
    */
   create(input: {
     readonly projectId: string;
@@ -105,6 +110,8 @@ export class AgentInstanceRepository {
     readonly nickname?: string | null;
     readonly appearanceId?: string | null;
   }): AgentInstance {
+    assertKey(input.projectId, 'Project ID');
+    assertKey(input.templateId, 'Template ID');
     const nickname = cleanNickname(input.nickname);
     const appearanceId = cleanAppearance(input.appearanceId);
     const project = this.db
@@ -114,12 +121,16 @@ export class AgentInstanceRepository {
     const worldId = text(project, 'world_id');
     const template = this.db
       .prepare(
-        `SELECT package_version FROM world_resources
-         WHERE world_id = ? AND package_id = ? AND kind = 'agent'`,
+        `SELECT w.package_version, p.review_state FROM world_resources w
+         JOIN resource_packages p ON p.package_id = w.package_id AND p.version = w.package_version
+         WHERE w.world_id = ? AND w.package_id = ? AND w.kind = 'agent'`,
       )
       .get(worldId, input.templateId);
     if (template === undefined) {
       throw new RepositoryError('not_found', 'That agent is not installed in this world.');
+    }
+    if (text(template, 'review_state') === 'blocked') {
+      throw new RepositoryError('invalid_transition', 'That agent package is blocked.');
     }
 
     const at = this.now().toISOString();

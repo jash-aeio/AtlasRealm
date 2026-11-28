@@ -566,3 +566,155 @@ describe('trashing a project (PRODUCT_RULES §3.1)', () => {
     expect(bindings.listTools(launch.id)).toHaveLength(1);
   });
 });
+
+describe('security review fixes (#113)', () => {
+  const ACME: NewResourcePackage = {
+    ...WRITER,
+    packageId: 'acme.writer',
+    source: 'local',
+    reviewState: 'unreviewed',
+    license: 'MIT',
+    dependencies: [],
+  };
+
+  it('keeps builtin.* for bundled packages and refuses URL-like source revisions', () => {
+    expectCode(
+      () => packages.record({ ...WRITER, source: 'local', reviewState: 'unreviewed' }),
+      'invalid_input',
+    );
+    expectCode(
+      () => packages.record({ ...ACME, source: 'bundled', reviewState: 'trusted' }),
+      'invalid_input',
+    );
+    for (const sourceRevision of ['https://user:ghp_x@github.com/a/b', 'user@host', 'a b']) {
+      expectCode(
+        () => packages.record({ ...ACME, source: 'github', sourceRevision }),
+        'invalid_input',
+      );
+    }
+    expect(count('resource_packages')).toBe(0);
+  });
+
+  it('never returns an existing record to a caller with other provenance', () => {
+    packages.record(ACME);
+    expectCode(() => packages.record({ ...ACME, reviewState: 'approved' }), 'already_exists');
+    expectCode(() => packages.record({ ...ACME, source: 'github' }), 'already_exists');
+    expect(packages.get('acme.writer', '1.0.0')?.reviewState).toBe('unreviewed');
+  });
+
+  it('refuses installing, recruiting and binding blocked packages', () => {
+    packages.record({ ...ACME, reviewState: 'blocked' });
+    expectCode(
+      () =>
+        installed.install({
+          worldId: home.id,
+          packageId: 'acme.writer',
+          packageVersion: '1.0.0',
+          enabled: true,
+        }),
+      'invalid_transition',
+    );
+    expect(count('world_resources')).toBe(0);
+
+    // Blocked after installing (a later review): recruiting and binding are refused.
+    installTeam(home);
+    const agent = agents.create({ projectId: launch.id, templateId: 'builtin.writer' });
+    db.prepare(
+      `UPDATE resource_packages SET review_state = 'blocked' WHERE source <> 'bundled'`,
+    ).run();
+    db.exec(`
+      INSERT INTO resource_packages (package_id, version, kind, name, publisher, source,
+                                     digest_sha256, license, review_state, created_at, updated_at)
+      VALUES ('acme.brief', '1.0.0', 'skill', 'Brief', 'Acme', 'local', '${DIGEST}', 'MIT',
+              'unreviewed', 'x', 'x'),
+             ('acme.files', '1.0.0', 'tool', 'Files', 'Acme', 'local', '${DIGEST}', 'MIT',
+              'unreviewed', 'x', 'x'),
+             ('acme.agent', '1.0.0', 'agent', 'Agent', 'Acme', 'local', '${DIGEST}', 'MIT',
+              'unreviewed', 'x', 'x');
+    `);
+    for (const id of ['acme.brief', 'acme.files', 'acme.agent']) {
+      installed.install({
+        worldId: home.id,
+        packageId: id,
+        packageVersion: '1.0.0',
+        enabled: true,
+      });
+    }
+    db.prepare(
+      `UPDATE resource_packages SET review_state = 'blocked' WHERE package_id LIKE 'acme.%'`,
+    ).run();
+    expectCode(
+      () => agents.create({ projectId: launch.id, templateId: 'acme.agent' }),
+      'invalid_transition',
+    );
+    expectCode(
+      () => bindings.bindSkill({ agentInstanceId: agent.id, skillId: 'acme.brief', enabled: true }),
+      'invalid_transition',
+    );
+    expectCode(
+      () =>
+        bindings.bindTool({ projectId: launch.id, toolId: 'acme.files', enabledCapabilities: [] }),
+      'invalid_transition',
+    );
+  });
+
+  it('still lets a disabled package be assigned (readiness reports it, DATA_MODEL §10.2)', () => {
+    installTeam(home);
+    installed.setEnabled(home.id, 'builtin.writer', false, 1);
+    installed.setEnabled(home.id, 'builtin.brief', false, 1);
+    const agent = agents.create({ projectId: launch.id, templateId: 'builtin.writer' });
+    expect(
+      bindings.bindSkill({ agentInstanceId: agent.id, skillId: 'builtin.brief', enabled: true })
+        .enabled,
+    ).toBe(true);
+  });
+
+  it('drops refused and repeated capabilities when reading (fail closed)', () => {
+    installTeam(home);
+    bindings.bindTool({ projectId: launch.id, toolId: 'builtin.files', enabledCapabilities: [] });
+    db.prepare(
+      `UPDATE project_tool_bindings
+       SET enabled_capabilities = '["process.execute","project.files.read","project.files.read"]'`,
+    ).run();
+    expect(bindings.getTool(launch.id, 'builtin.files')?.enabledCapabilities).toEqual([
+      'project.files.read',
+    ]);
+  });
+
+  it('turns forged non-string input into invalid_input', () => {
+    installTeam(home);
+    const forged = { id: 1 } as never;
+    expectCode(
+      () => agents.create({ projectId: forged, templateId: 'builtin.writer' }),
+      'invalid_input',
+    );
+    expectCode(
+      () => agents.create({ projectId: launch.id, templateId: 'builtin.writer', nickname: forged }),
+      'invalid_input',
+    );
+    expectCode(
+      () =>
+        bindings.bindSkill({ agentInstanceId: forged, skillId: 'builtin.brief', enabled: true }),
+      'invalid_input',
+    );
+    expectCode(
+      () => bindings.bindTool({ projectId: launch.id, toolId: forged, enabledCapabilities: [] }),
+      'invalid_input',
+    );
+    expectCode(
+      () =>
+        installed.install({
+          worldId: forged,
+          packageId: 'builtin.writer',
+          packageVersion: '1.0.0',
+          enabled: true,
+        }),
+      'invalid_input',
+    );
+    expectCode(() => packages.record({ ...WRITER, dependencies: forged }), 'invalid_input');
+    expectCode(
+      () => packages.record({ ...WRITER, dependencies: [null as never] }),
+      'invalid_input',
+    );
+  });
+});

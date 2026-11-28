@@ -6,6 +6,10 @@
 // One content per id@version per profile: recording the same id@version again is fine when it
 // is the same package (another world installs it), and refused when the digest or kind differ.
 // Nothing here touches projects, artifacts or grants, and no column holds a secret.
+//
+// Provenance (`source`, `reviewState`, `digestSha256`) must always be set by main: the
+// catalog loader or importer hashes the bytes itself. Never pass these from an IPC payload: a
+// digest you were handed proves nothing (#113 security review M1).
 import {
   LicenseId,
   ResourceId,
@@ -80,8 +84,10 @@ export interface NewResourcePackage {
 const MAX_DEPENDENCIES = 60;
 const SOURCE_REVISION_MAX_CHARS = 200;
 const SHA256_HEX = /^[0-9a-f]{64}$/;
-// A source revision is a git commit, tag or similar: one printable ASCII line.
-const SOURCE_REVISION = /^[\x21-\x7e]+$/;
+// A source revision is a git commit or tag. No ":" or "@", so never a URL that could carry a
+// credential (SECURITY §21).
+const SOURCE_REVISION = /^[A-Za-z0-9._/-]+$/;
+const BUILTIN_NAMESPACE = 'builtin.';
 
 export function oneOf<T extends string>(row: Row, column: string, allowed: readonly T[]): T {
   const value = text(row, column);
@@ -142,6 +148,11 @@ function validate(input: NewResourcePackage): NewResourcePackage & {
   readonly sourceRevision: string | null;
   readonly dependencies: readonly ResourceDependency[];
 } {
+  // Values may come from outside TypeScript; check the shape before reading fields.
+  const raw: unknown = input;
+  if (typeof raw !== 'object' || raw === null) {
+    throw new RepositoryError('invalid_input', 'Package must be an object.');
+  }
   assertResourceId(input.packageId, 'Package ID');
   assertResourceVersion(input.version, 'Package version');
   if (!isOneOf(input.kind, RESOURCE_KINDS)) {
@@ -159,29 +170,45 @@ function validate(input: NewResourcePackage): NewResourcePackage & {
       'Only packages bundled with the app are trusted, and bundled packages always are.',
     );
   }
+  if ((input.source === 'bundled') !== input.packageId.startsWith(BUILTIN_NAMESPACE)) {
+    throw new RepositoryError(
+      'invalid_input',
+      'The builtin.* namespace is for packages bundled with the app, and only for them.',
+    );
+  }
   const sourceRevision = input.sourceRevision ?? null;
   if (
     sourceRevision !== null &&
-    (charCount(sourceRevision) > SOURCE_REVISION_MAX_CHARS || !SOURCE_REVISION.test(sourceRevision))
+    (typeof sourceRevision !== 'string' ||
+      charCount(sourceRevision) > SOURCE_REVISION_MAX_CHARS ||
+      !SOURCE_REVISION.test(sourceRevision))
   ) {
     throw new RepositoryError(
       'invalid_input',
-      `Source revision must be 1–${String(SOURCE_REVISION_MAX_CHARS)} printable characters without spaces.`,
+      `Source revision must be a commit or tag: 1–${String(SOURCE_REVISION_MAX_CHARS)} of A-Z, a-z, 0-9, ".", "_", "/" and "-".`,
     );
   }
-  if (!SHA256_HEX.test(input.digestSha256)) {
+  if (typeof input.digestSha256 !== 'string' || !SHA256_HEX.test(input.digestSha256)) {
     throw new RepositoryError('invalid_input', 'Digest must be 64 lowercase hex characters.');
   }
   if (!LicenseId.safeParse(input.license).success) {
     throw new RepositoryError('invalid_input', 'License must be an SPDX identifier.');
   }
 
-  const dependencies = input.dependencies ?? [];
+  const rawList: unknown = input.dependencies ?? [];
+  if (!Array.isArray(rawList)) {
+    throw new RepositoryError('invalid_input', 'Dependencies must be a list.');
+  }
+  const dependencies: readonly ResourceDependency[] = input.dependencies ?? [];
   if (dependencies.length > MAX_DEPENDENCIES) {
     throw new RepositoryError('invalid_input', 'Too many dependencies.');
   }
   const seen = new Set<string>();
   for (const dependency of dependencies) {
+    const rawDependency: unknown = dependency;
+    if (typeof rawDependency !== 'object' || rawDependency === null) {
+      throw new RepositoryError('invalid_input', 'Each dependency must be an object.');
+    }
     if (!isOneOf(dependency.requirementKind, REQUIREMENT_KINDS)) {
       throw new RepositoryError('invalid_input', 'Unknown requirement kind.');
     }
@@ -246,16 +273,22 @@ export class ResourcePackageRepository {
 
   /**
    * Records a package version with its dependencies, all or nothing. If the same id@version is
-   * already recorded with the same digest and kind, returns that record unchanged (installing a
-   * package in a second world). Refuses with `already_exists` when the digest or kind differ
-   * (one content per id@version, ADR-0036) and `invalid_input` for malformed values.
+   * already recorded with the same digest, kind, source and review state, returns that record
+   * unchanged (installing a package in a second world). Refuses with `already_exists` when any
+   * of those differ (one content per id@version, ADR-0036; a caller can't inherit a trusted
+   * record by naming its digest) and `invalid_input` for malformed values.
    */
   record(input: NewResourcePackage): ResourcePackage {
     const clean = validate(input);
     return withSavepoint(this.db, () => {
       const existing = this.get(clean.packageId, clean.version);
       if (existing !== undefined) {
-        if (existing.digestSha256 !== clean.digestSha256 || existing.kind !== clean.kind) {
+        if (
+          existing.digestSha256 !== clean.digestSha256 ||
+          existing.kind !== clean.kind ||
+          existing.source !== clean.source ||
+          existing.reviewState !== clean.reviewState
+        ) {
           throw new RepositoryError(
             'already_exists',
             `A different ${clean.packageId} ${clean.version} is already recorded. ` +

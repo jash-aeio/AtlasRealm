@@ -7,10 +7,12 @@
 // caller. A tool binding is NOT a permission grant (SECURITY §13.2): the broker (M3-10) checks
 // grants, and nothing here writes one. Removing a binding deletes only that row. Whether a
 // capability belongs to the tool's manifest is a service rule (M3-6), because the manifest is
-// not in the database.
+// not in the database. A blocked skill or tool is refused; a disabled one may still be bound
+// and shows as not ready (M3-4).
 import { CapabilityId, REFUSED_IN_PACKAGES } from '../../../common/security/capabilities';
 import type { Database, SQLInputValue } from '../database';
 import {
+  assertKey,
   assertRevision,
   explainUnchanged,
   integer,
@@ -35,7 +37,11 @@ export interface ToolBinding {
   readonly worldId: string;
   readonly toolId: string;
   readonly toolVersion: string;
-  /** What the user switched on. Not a grant. */
+  /**
+   * What the user switched on. NOT a grant: the broker (M3-10) authorizes only from grant
+   * records, and may use this list only to narrow them further (binding ∩ grant), never as a
+   * source of permission. M3-6 must limit it to the tool manifest's declared capabilities.
+   */
   readonly enabledCapabilities: readonly CapabilityId[];
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -56,16 +62,19 @@ function toSkillBinding(row: Row): SkillBinding {
 }
 
 /**
- * Reads the stored list leniently (ADR-0033): a capability the app no longer knows is dropped,
- * so it can never count as switched on, and one old value can't break the whole list.
+ * Reads the stored list leniently and fail-closed (ADR-0033): a capability the app no longer
+ * knows, or one packages may never use, is dropped so it can never count as switched on, and
+ * duplicates collapse. One odd value can't break the whole list.
  */
 function readCapabilities(row: Row): CapabilityId[] {
   const parsed: unknown = JSON.parse(text(row, 'enabled_capabilities'));
   if (!Array.isArray(parsed)) throw new Error('Column enabled_capabilities is not an array.');
-  return parsed.flatMap((value) => {
+  const kept = new Set<CapabilityId>();
+  for (const value of parsed) {
     const result = CapabilityId.safeParse(value);
-    return result.success ? [result.data] : [];
-  });
+    if (result.success && !REFUSED_IN_PACKAGES.has(result.data)) kept.add(result.data);
+  }
+  return [...kept];
 }
 
 function toToolBinding(row: Row): ToolBinding {
@@ -146,6 +155,8 @@ export class BindingRepository {
     readonly skillId: string;
     readonly enabled: boolean;
   }): SkillBinding {
+    assertKey(input.agentInstanceId, 'Agent ID');
+    assertKey(input.skillId, 'Skill ID');
     assertBoolean(input.enabled);
     const agent = this.db
       .prepare('SELECT world_id FROM agent_instances WHERE id = ?')
@@ -241,6 +252,8 @@ export class BindingRepository {
     readonly toolId: string;
     readonly enabledCapabilities: readonly CapabilityId[];
   }): ToolBinding {
+    assertKey(input.projectId, 'Project ID');
+    assertKey(input.toolId, 'Tool ID');
     const capabilities = capabilitiesJson(input.enabledCapabilities);
     const project = this.db
       .prepare('SELECT world_id FROM projects WHERE id = ?')
@@ -310,16 +323,23 @@ export class BindingRepository {
 
   // ---- Shared ------------------------------------------------------------------------------
 
-  /** The version of `packageId` installed in the world, if it is installed with that kind. */
+  /**
+   * The version of `packageId` installed in the world with that kind. `not_found` if it isn't,
+   * `invalid_transition` if its package is blocked.
+   */
   private installedVersion(worldId: string, packageId: string, kind: 'skill' | 'tool'): string {
     const row = this.db
       .prepare(
-        `SELECT package_version FROM world_resources
-         WHERE world_id = ? AND package_id = ? AND kind = ?`,
+        `SELECT w.package_version, p.review_state FROM world_resources w
+         JOIN resource_packages p ON p.package_id = w.package_id AND p.version = w.package_version
+         WHERE w.world_id = ? AND w.package_id = ? AND w.kind = ?`,
       )
       .get(worldId, packageId, kind);
     if (row === undefined) {
       throw new RepositoryError('not_found', `That ${kind} is not installed in this world.`);
+    }
+    if (text(row, 'review_state') === 'blocked') {
+      throw new RepositoryError('invalid_transition', `That ${kind} package is blocked.`);
     }
     return text(row, 'package_version');
   }

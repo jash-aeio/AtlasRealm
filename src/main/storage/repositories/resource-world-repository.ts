@@ -2,12 +2,16 @@
 //
 // A package installed in a world (ADR-0036): one version per package per world. Installed and
 // enabled are different (DATA_MODEL §10.2), and installing never grants access (SECURITY
-// §13.2): nothing here writes a grant. Uninstalling deletes only the installed row, and is
-// refused while an agent instance or binding uses the package; the package record, projects
-// and artifacts stay. Whether an archived world may change is a service rule (M3-5).
+// §13.2): nothing here writes a grant. A blocked package can't be installed. A disabled one
+// stays installed and can still be assigned: readiness (M3-4) reports it as not ready, and the
+// broker (M3-10) must treat it as unavailable at dispatch time. Uninstalling deletes only the
+// installed row, and is refused while an agent instance or binding uses the package; the
+// package record, projects and artifacts stay. Whether an archived world may change is a
+// service rule (M3-5).
 import type { Database } from '../database';
 import { oneOf, RESOURCE_KINDS, type ResourceKind } from './resource-package-repository';
 import {
+  assertKey,
   assertRevision,
   explainUnchanged,
   integer,
@@ -86,8 +90,9 @@ export class WorldResourceRepository {
 
   /**
    * Installs a recorded package version in a world. The kind comes from the package record.
-   * Refuses with `not_found` for a missing world or package record, and `already_exists` if
-   * the world already has any version of that package (one per world, ADR-0036).
+   * Refuses with `not_found` for a missing world or package record, `invalid_transition` for a
+   * blocked package, and `already_exists` if the world already has any version of that package
+   * (one per world, ADR-0036).
    */
   install(input: {
     readonly worldId: string;
@@ -95,15 +100,23 @@ export class WorldResourceRepository {
     readonly packageVersion: string;
     readonly enabled: boolean;
   }): WorldResource {
+    assertKey(input.worldId, 'World ID');
+    assertKey(input.packageId, 'Package ID');
+    assertKey(input.packageVersion, 'Package version');
     assertBoolean(input.enabled);
     if (this.db.prepare('SELECT 1 FROM worlds WHERE id = ?').get(input.worldId) === undefined) {
       throw new RepositoryError('not_found', 'No world with that ID.');
     }
     const record = this.db
-      .prepare('SELECT kind FROM resource_packages WHERE package_id = ? AND version = ?')
+      .prepare(
+        'SELECT kind, review_state FROM resource_packages WHERE package_id = ? AND version = ?',
+      )
       .get(input.packageId, input.packageVersion);
     if (record === undefined) {
       throw new RepositoryError('not_found', 'No package record with that ID and version.');
+    }
+    if (text(record, 'review_state') === 'blocked') {
+      throw new RepositoryError('invalid_transition', 'That package is blocked.');
     }
     const installed = this.get(input.worldId, input.packageId);
     if (installed !== undefined) {
