@@ -49,13 +49,13 @@ Secrets are stored through the vault; the database holds opaque references. Prof
 | `projects` | ID, world ID, name, goal, template ID/version (namespaced ID such as `builtin.generic`, schema v4, changed by ADR-0020), status, settings revision |
 | `building_placements` | ID, world ID, project ID nullable (composite FK to the project in the same world), service kind nullable, appearance ID, tile position, rotation (0/90/180/270); exactly one target; unique placed project. Schema v5; changed by ADR-0023. The tile is the footprint's north corner and rotation turns in place (ADR-0024) |
 | `hotbar_slots` | World ID, slot 0–9, target type, target as typed columns (project ID with composite FK, or service kind); unique world/slot; each target pinned at most once per world. Schema v5; changed by ADR-0023 |
-| `resource_packages` | ID, kind, version, source, source revision, digest, license metadata, review state |
-| `resource_dependencies` | Package/version, dependency ID/range, requirement kind |
-| `world_resources` | World ID, installed package/version, enablement settings |
-| `agent_templates` | Package/version reference, role instructions, default capability references |
-| `agent_instances` | ID, project ID, template/version, nickname, appearance, configuration revision |
-| `agent_skill_bindings` | Agent instance ID, skill package/version, enabled state |
-| `project_tool_bindings` | Project ID, installed tool/integration ID, enabled capabilities |
+| `resource_packages` | Package ID + version (the primary key), kind, name, publisher, source, source revision, SHA-256 digest, license, review state (`trusted` = bundled only); one content per id@version. Schema v7; changed by ADR-0036 |
+| `resource_dependencies` | Package/version, dependency ID/range, requirement kind (`requires`, `default_skill`, `default_tool`); deleted with the package. Schema v7 (ADR-0036) |
+| `world_resources` | World ID, installed package/version/kind, enabled; one installed version per package per world; uninstall refused while used. Schema v7 (ADR-0036) |
+| ~~`agent_templates`~~ | Not a table: the installed `kind = 'agent'` package is the template; defaults live in `resource_dependencies` (ADR-0036) |
+| `agent_instances` | ID, project ID (composite FK with world), template/version (FK to the world's installed agent package), nickname (DisplayName rules, optional), appearance, configuration revision; dismiss deletes the row. Schema v7 (ADR-0036) |
+| `agent_skill_bindings` | Agent instance ID, skill package/version (installed in the same world), enabled state; deleted with the instance. Schema v7 (ADR-0036) |
+| `project_tool_bindings` | Project ID, installed tool package/version, enabled capabilities (JSON array); not a permission grant. Schema v7 (ADR-0036) |
 | `provider_connections` | ID, provider kind, auth method, model defaults, endpoint policy, vault reference, last health status |
 | `model_profiles` | Connection ID, model ID, capability flags, limits, price metadata timestamp and source |
 | `integration_connections` | ID, adapter ID/version, account label, vault reference, readiness |
