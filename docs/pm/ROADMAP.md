@@ -3,7 +3,7 @@
 > This is the **Markdown mirror** of the GitHub Milestones and [Project board](https://github.com/users/jash-aeio/projects/1). GitHub is the source of truth for issue status. Run `/sync-pm` to refresh this file.
 > Full milestone specs (build, checks, exit criteria): [ROADMAP_SPEC.md](ROADMAP_SPEC.md) · Task-level dependency graphs: [DEPENDENCIES.md](DEPENDENCIES.md)
 
-**Last synced:** 2026-11-27 · **Current milestone:** M3 (planned 2026-11-25, 24 issues). M2 closed 2026-11-25 as `v0.3.0-m2`; M1 closed 2026-11-20 as `v0.2.0-m1`; M0 closed 2026-11-10 as `v0.1.0-m0`.
+**Last synced:** 2026-11-28 · **Current milestone:** M3 (planned 2026-11-25 with 24 issues; 29 with follow-ups #135, #139, #140, #142, #145). M2 closed 2026-11-25 as `v0.3.0-m2`; M1 closed 2026-11-20 as `v0.2.0-m1`; M0 closed 2026-11-10 as `v0.1.0-m0`.
 
 ## Progress overview
 
@@ -13,12 +13,12 @@
 | **M0** | Foundation and risk spikes: packaged Electron app with SQLite, IPC, Pixi, React Flow | Setup | ✅ Done | 9/9 (#20 moved to M1) | [v0.1.0-m0](https://github.com/jash-aeio/AtlasRealm/releases/tag/v0.1.0-m0) |
 | **M1** | Profiles, worlds, project persistence (list UI, no canvas) | M0 | ✅ Done | 11/11 (#20, #29–#38) | [v0.2.0-m1](https://github.com/jash-aeio/AtlasRealm/releases/tag/v0.2.0-m1) |
 | **M2** | Isometric world, placement, hotbar, library, Atlas shell | M1 | ✅ Done | 21/21 (#56–#60, #62, #66–#80) | [v0.3.0-m2](https://github.com/jash-aeio/AtlasRealm/releases/tag/v0.3.0-m2) |
-| **M3** | Bundled resources, permission broker, artifacts, import inspect + commit | M1 (∥ M2) | 🔨 In progress | 4/24 (#108, #111, #119, #61 merged; follow-up #142 path-policy hardening in review) | — |
-| **M4** | Durable runtime, mock + Ollama + Anthropic adapter | M3 | 📋 Backlog | — | — |
+| **M3** | Bundled resources, permission broker, artifacts, import inspect + commit | M1 (∥ M2) | 🔨 In progress | 5/29 (#61, #108, #111, #119, #142 merged; open follow-ups #135, #139, #140, #145) | — |
+| **M4** | Durable runtime, mock + Ollama + Anthropic adapter | M3 | 📋 Backlog | 0/3 pre-filed (#63, #82, #132) | — |
 | **⭐ Alpha** | *Checkpoint:* packaged app runs one real workflow → real artifact | M2, M4 | 📋 Backlog | — | — |
 | **M5** | Full project experience, interiors, starter packages, art pipeline proof | M4 | 📋 Backlog | — | — |
 | **M6** | Automations and background runner | M4 + core M5 | 📋 Backlog | — | — |
-| **M7** | Backup/restore, recovery, packaging hardening, Obsidian O1 | M5, M6 | 📋 Backlog | — | — |
+| **M7** | Backup/restore, recovery, packaging hardening, Obsidian O1 | M5, M6 | 📋 Backlog | 0/2 pre-filed (#64, #65) | — |
 | **M8** | UI/UX polish and art integration (full PixelLab asset batch) | M7 | 📋 Backlog | — | — |
 | **M9** | Provider breadth → **MVP complete** | M8 | 📋 Backlog | — | — |
 | M10–M12 | Post-MVP: discovery, integrations, team/business | MVP | 🔭 Later | — | — |
