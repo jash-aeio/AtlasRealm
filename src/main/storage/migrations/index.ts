@@ -405,6 +405,200 @@ const m0006ProjectRelations: Migration = {
   `,
 };
 
+// Resource packages and the agent team (M3-3 #113, ADR-0036, DATA_MODEL §9.3). A package
+// version is identified by (package_id, version); there is no agent_templates table, the
+// installed agent package is the template. Nothing here holds a secret: credentials live in
+// the vault and are referenced from provider/integration tables later (SECURITY §21).
+//
+// "Kind inside the foreign key": a CHECK only sees its own row, so each user of an installed
+// package carries a fixed kind column ('agent', 'skill', 'tool') and points at
+// world_resources (world_id, package_id, package_version, kind). The database then refuses a
+// package that isn't installed in *this* world, or one of the wrong kind, even via raw SQL.
+//
+// Deletion behavior: package records and installed packages are RESTRICT while used;
+// dependency rows go with their package and skill bindings with their agent (CASCADE).
+// Projects and worlds are never deleted here (RESTRICT, as everywhere else).
+const m0007ResourcesAndTeam: Migration = {
+  version: 7,
+  name: 'create_resource_packages_agent_instances_bindings',
+  up: `
+    -- One known package version. Rows are recorded when a world installs the package; the
+    -- repository refuses the same id@version with a different digest (ADR-0036).
+    CREATE TABLE resource_packages (
+      -- Namespaced ID such as builtin.structured-brief. Shape only; the exact rule is
+      -- ResourceId in src/common/contracts/resource-manifest.ts, checked by the repository.
+      package_id      TEXT    NOT NULL CHECK (
+                        length(package_id) BETWEEN 3 AND 100 AND instr(package_id, '.') > 0 AND
+                        package_id NOT GLOB '*[^a-z0-9.-]*'),
+      version         TEXT    NOT NULL CHECK (    -- MAJOR.MINOR.PATCH
+                        length(version) BETWEEN 5 AND 14 AND version NOT GLOB '*[^0-9.]*'),
+      kind            TEXT    NOT NULL CHECK (kind IN ('agent', 'skill', 'tool')),
+      name            TEXT    NOT NULL CHECK (
+                        length(name) BETWEEN 1 AND 80 AND instr(name, char(0)) = 0 AND
+                        name = trim(name, char(9, 10, 13, 32))),
+      publisher       TEXT    NOT NULL CHECK (
+                        length(publisher) BETWEEN 1 AND 80 AND instr(publisher, char(0)) = 0 AND
+                        publisher = trim(publisher, char(9, 10, 13, 32))),
+      -- Wide enough for imports (M6), so adding them needs no rebuild of this referenced table.
+      source          TEXT    NOT NULL CHECK (source IN ('bundled', 'local', 'github')),
+      -- E.g. a git commit for a GitHub source; NULL for bundled packages.
+      source_revision TEXT    CHECK (
+                        source_revision IS NULL OR
+                        (length(source_revision) BETWEEN 1 AND 200 AND
+                         instr(source_revision, char(0)) = 0)),
+      digest_sha256   TEXT    NOT NULL CHECK (
+                        length(digest_sha256) = 64 AND digest_sha256 NOT GLOB '*[^0-9a-f]*'),
+      license         TEXT    NOT NULL CHECK (    -- SPDX identifier, e.g. UNLICENSED
+                        length(license) BETWEEN 1 AND 64 AND
+                        license NOT GLOB '*[^A-Za-z0-9.+-]*'),
+      review_state    TEXT    NOT NULL
+                      CHECK (review_state IN ('trusted', 'unreviewed', 'approved', 'blocked')),
+      created_at      TEXT    NOT NULL,
+      updated_at      TEXT    NOT NULL,
+      revision        INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+      PRIMARY KEY (package_id, version),
+      -- "trusted" means bundled with the app, and only bundled packages are trusted.
+      CHECK ((source = 'bundled') = (review_state = 'trusted'))
+    ) STRICT;
+
+    -- The foreign key target that carries the kind (see the note above).
+    CREATE UNIQUE INDEX resource_packages_id_version_kind
+      ON resource_packages (package_id, version, kind);
+
+    -- What a package version needs. Part of the immutable package record: never edited,
+    -- deleted with the package.
+    CREATE TABLE resource_dependencies (
+      package_id       TEXT    NOT NULL,
+      package_version  TEXT    NOT NULL,
+      -- requires: manifest requirements.packages; default_skill / default_tool: the skills
+      -- and tools a new instance of this agent starts with.
+      requirement_kind TEXT    NOT NULL
+                       CHECK (requirement_kind IN ('requires', 'default_skill', 'default_tool')),
+      dependency_id    TEXT    NOT NULL CHECK (
+                         length(dependency_id) BETWEEN 3 AND 100 AND instr(dependency_id, '.') > 0 AND
+                         dependency_id NOT GLOB '*[^a-z0-9.-]*'),
+      -- "1.2.0" (exactly) or "^1.2.0" (compatible), ADR-0034.
+      version_range    TEXT    NOT NULL CHECK (
+                         length(version_range) BETWEEN 5 AND 15 AND
+                         version_range NOT GLOB '*[^0-9.^]*'),
+      created_at       TEXT    NOT NULL,
+      PRIMARY KEY (package_id, package_version, requirement_kind, dependency_id),
+      FOREIGN KEY (package_id, package_version) REFERENCES resource_packages (package_id, version)
+        ON DELETE CASCADE,
+      CHECK (dependency_id <> package_id)
+    ) STRICT;
+
+    -- "Who needs this package?" (readiness, uninstall messages).
+    CREATE INDEX resource_dependencies_by_dependency ON resource_dependencies (dependency_id);
+
+    -- A package installed in a world. One version per package per world (ADR-0036).
+    -- Installed and enabled are different (DATA_MODEL §10.2); installing never grants access.
+    CREATE TABLE world_resources (
+      world_id        TEXT    NOT NULL REFERENCES worlds (id) ON DELETE RESTRICT,
+      package_id      TEXT    NOT NULL,
+      package_version TEXT    NOT NULL,
+      kind            TEXT    NOT NULL CHECK (kind IN ('agent', 'skill', 'tool')),
+      enabled         INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+      created_at      TEXT    NOT NULL,
+      updated_at      TEXT    NOT NULL,
+      revision        INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+      PRIMARY KEY (world_id, package_id),
+      -- A package record can't be removed while a world has it installed.
+      FOREIGN KEY (package_id, package_version, kind)
+        REFERENCES resource_packages (package_id, version, kind) ON DELETE RESTRICT
+    ) STRICT;
+
+    CREATE UNIQUE INDEX world_resources_installed
+      ON world_resources (world_id, package_id, package_version, kind);
+    -- Finding the worlds that use a package record (and the FK check when one is deleted).
+    CREATE INDEX world_resources_by_package ON world_resources (package_id, package_version);
+
+    -- A recruited agent: one project's member, made from an installed agent package.
+    -- Recruiting starts no work (PRD §5.3). Dismissing deletes the row (ADR-0036).
+    CREATE TABLE agent_instances (
+      id               TEXT    PRIMARY KEY CHECK (
+                         id GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
+      world_id         TEXT    NOT NULL REFERENCES worlds (id) ON DELETE RESTRICT,
+      project_id       TEXT    NOT NULL,
+      template_id      TEXT    NOT NULL,
+      template_version TEXT    NOT NULL,
+      template_kind    TEXT    NOT NULL DEFAULT 'agent' CHECK (template_kind = 'agent'),
+      -- NULL: shown with the template's name. Same rule as other display names.
+      nickname         TEXT    CHECK (
+                         nickname IS NULL OR
+                         (length(nickname) BETWEEN 1 AND 80 AND instr(nickname, char(0)) = 0 AND
+                          nickname = trim(nickname, char(9, 10, 13, 32)))),
+      -- A versioned asset ID; NULL: the template's default look.
+      appearance_id    TEXT    CHECK (
+                         appearance_id IS NULL OR
+                         (length(appearance_id) BETWEEN 1 AND 100 AND
+                          appearance_id NOT GLOB '*[^a-z0-9.-]*')),
+      created_at       TEXT    NOT NULL,
+      updated_at       TEXT    NOT NULL,
+      revision         INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),  -- configuration revision
+      FOREIGN KEY (project_id, world_id) REFERENCES projects (id, world_id) ON DELETE RESTRICT,
+      FOREIGN KEY (world_id, template_id, template_version, template_kind)
+        REFERENCES world_resources (world_id, package_id, package_version, kind)
+        ON DELETE RESTRICT
+    ) STRICT;
+
+    -- The target for bindings, which must stay in the agent's world.
+    CREATE UNIQUE INDEX agent_instances_id_world ON agent_instances (id, world_id);
+    -- The team panel: a project's agents in recruit order.
+    CREATE INDEX agent_instances_by_project ON agent_instances (project_id, created_at, id);
+    CREATE INDEX agent_instances_by_template
+      ON agent_instances (world_id, template_id, template_version, template_kind);
+
+    -- A skill an agent uses. Deleted with the agent.
+    CREATE TABLE agent_skill_bindings (
+      agent_instance_id TEXT    NOT NULL,
+      world_id          TEXT    NOT NULL,
+      skill_id          TEXT    NOT NULL,
+      skill_version     TEXT    NOT NULL,
+      skill_kind        TEXT    NOT NULL DEFAULT 'skill' CHECK (skill_kind = 'skill'),
+      enabled           INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+      created_at        TEXT    NOT NULL,
+      updated_at        TEXT    NOT NULL,
+      revision          INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+      PRIMARY KEY (agent_instance_id, skill_id),
+      FOREIGN KEY (agent_instance_id, world_id) REFERENCES agent_instances (id, world_id)
+        ON DELETE CASCADE,
+      FOREIGN KEY (world_id, skill_id, skill_version, skill_kind)
+        REFERENCES world_resources (world_id, package_id, package_version, kind)
+        ON DELETE RESTRICT
+    ) STRICT;
+
+    CREATE INDEX agent_skill_bindings_by_skill
+      ON agent_skill_bindings (world_id, skill_id, skill_version, skill_kind);
+
+    -- A tool a project may use, with the capabilities the user switched on. This is NOT a
+    -- permission grant (SECURITY §13.2): grants are their own table (M3-10).
+    CREATE TABLE project_tool_bindings (
+      project_id           TEXT    NOT NULL,
+      world_id             TEXT    NOT NULL,
+      tool_id              TEXT    NOT NULL,
+      tool_version         TEXT    NOT NULL,
+      tool_kind            TEXT    NOT NULL DEFAULT 'tool' CHECK (tool_kind = 'tool'),
+      -- JSON array of capability IDs; the repository checks each against the registry.
+      enabled_capabilities TEXT    NOT NULL DEFAULT '[]' CHECK (
+                             length(enabled_capabilities) <= 4096 AND
+                             json_valid(enabled_capabilities) AND
+                             json_type(enabled_capabilities) = 'array'),
+      created_at           TEXT    NOT NULL,
+      updated_at           TEXT    NOT NULL,
+      revision             INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+      PRIMARY KEY (project_id, tool_id),
+      FOREIGN KEY (project_id, world_id) REFERENCES projects (id, world_id) ON DELETE RESTRICT,
+      FOREIGN KEY (world_id, tool_id, tool_version, tool_kind)
+        REFERENCES world_resources (world_id, package_id, package_version, kind)
+        ON DELETE RESTRICT
+    ) STRICT;
+
+    CREATE INDEX project_tool_bindings_by_tool
+      ON project_tool_bindings (world_id, tool_id, tool_version, tool_kind);
+  `,
+};
+
 export const MIGRATIONS: readonly Migration[] = [
   m0001AppMeta,
   m0002ProfileWorldsProjects,
@@ -412,4 +606,5 @@ export const MIGRATIONS: readonly Migration[] = [
   m0004TemplateIdNamespaces,
   m0005PlacementsAndHotbar,
   m0006ProjectRelations,
+  m0007ResourcesAndTeam,
 ];
