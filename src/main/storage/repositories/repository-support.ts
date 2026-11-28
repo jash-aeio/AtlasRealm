@@ -223,7 +223,8 @@ export function integer(row: Row, column: string): number {
 // --- Expected-revision update -----------------------------------------------------------------
 
 /** Tables with a single-column key. Compile-time constants: they are interpolated into SQL. */
-export type GuardedTable = 'profile_settings' | 'worlds' | 'projects' | 'building_placements';
+export type GuardedTable =
+  'profile_settings' | 'worlds' | 'projects' | 'building_placements' | 'agent_instances';
 
 export interface GuardedUpdate {
   /** Compile-time constants only: they are interpolated into the SQL. */
@@ -278,9 +279,10 @@ export function guardedUpdate(db: Database, update: GuardedUpdate): Row {
 export interface GuardedDelete {
   /**
    * Representations and manual links only: product records are never deleted (PRODUCT_RULES
-   * §3.1). Deleting a manual link removes the relation only (GRAPH_MODEL §30.5).
+   * §3.1). Deleting a manual link removes the relation only (GRAPH_MODEL §30.5). Dismissing
+   * an agent deletes the instance and its skill bindings, never the project (ADR-0036).
    */
-  readonly table: 'building_placements' | 'project_relations';
+  readonly table: 'building_placements' | 'project_relations' | 'agent_instances';
   readonly keyColumn: 'profile_id' | 'id';
   readonly key: string;
   readonly expectedRevision: number;
