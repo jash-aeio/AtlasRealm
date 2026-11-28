@@ -13,7 +13,7 @@
 | **M0** | Foundation and risk spikes: packaged Electron app with SQLite, IPC, Pixi, React Flow | Setup | ✅ Done | 9/9 (#20 moved to M1) | [v0.1.0-m0](https://github.com/jash-aeio/AtlasRealm/releases/tag/v0.1.0-m0) |
 | **M1** | Profiles, worlds, project persistence (list UI, no canvas) | M0 | ✅ Done | 11/11 (#20, #29–#38) | [v0.2.0-m1](https://github.com/jash-aeio/AtlasRealm/releases/tag/v0.2.0-m1) |
 | **M2** | Isometric world, placement, hotbar, library, Atlas shell | M1 | ✅ Done | 21/21 (#56–#60, #62, #66–#80) | [v0.3.0-m2](https://github.com/jash-aeio/AtlasRealm/releases/tag/v0.3.0-m2) |
-| **M3** | Bundled resources, permission broker, artifacts, import inspect + commit | M1 (∥ M2) | 🔨 In progress | 4/24 (#108, #111, #119, #61 merged) | — |
+| **M3** | Bundled resources, permission broker, artifacts, import inspect + commit | M1 (∥ M2) | 🔨 In progress | 4/24 (#108, #111, #119, #61 merged; follow-up #142 path-policy hardening in review) | — |
 | **M4** | Durable runtime, mock + Ollama + Anthropic adapter | M3 | 📋 Backlog | — | — |
 | **⭐ Alpha** | *Checkpoint:* packaged app runs one real workflow → real artifact | M2, M4 | 📋 Backlog | — | — |
 | **M5** | Full project experience, interiors, starter packages, art pipeline proof | M4 | 📋 Backlog | — | — |

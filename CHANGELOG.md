@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ## [Unreleased]
 
+### Security
+- Safer file access for agents, artifacts and imports (#142, hardening of M3-9 #119): the one gate that decides whether a path is inside an allowed folder now also refuses files that are linked to somewhere else (hard links), and shortcuts that point to nothing yet. Before, creating a file through such a shortcut could make something outside the folder. If a refused save already made a file, the app removes it again, but only when it can prove the file is its own. Otherwise it records that something was left behind. A whole drive, your home folder, Documents, Desktop, Downloads, AppData and system folders can no longer be used as a project folder without an explicit choice. Browser profiles, credential folders (such as `.ssh`), the Startup folders and files like `.npmrc` or `.git-credentials` are never readable or writable (ADR-0035). The gate also gained safe ways to make folders, list them and save files without ever overwriting one. Nothing on screen uses this yet; artifact storage and file tools come later in M3.
+
 ### Added
 - Package descriptions and the permission list (M3-1, #111): the app now has one checked format for describing agent, skill and tool packages: their name, version, maker, license, what they need and which permissions they ask for. It also has a list of every kind of permission, each with a plain explanation and a note on what could go wrong. A package is refused, with a reason, if it tries to run a program or an install script, points at a file outside its own folder, asks for an unknown permission, or claims to come with the app when it doesn't. Asking for a permission never grants it: only you can (ADR-0034). Nothing on screen uses this yet; the bundled packages and the Installed views come later in M3.
 
