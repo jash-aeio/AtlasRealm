@@ -2,7 +2,7 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-28 · **Branch:** fix/142-path-policy-hardening (on main @ 673489d)
+**Last updated:** 2026-11-28 · **Branch:** feat/113-resource-schema-v7 (on main @ bcc5e29)
 
 ## Current milestone
 **M3 — Bundled resources and permission broker** (⏳ planned 2026-11-25; 24 issues: #111–#131 plus #61, #106, #108). Breakdown: `docs/pm/milestones/M3.md`; graph and lanes: `docs/pm/DEPENDENCIES.md#task-level-m3`.
@@ -234,7 +234,14 @@
   - `pathShapeProblem` refuses, before touching the disk: `..`, relative or other-drive paths, UNC, device paths (`\\.\`, `\\?\`, `CON`, `NUL.txt`), alternate data streams (`a.txt:hid`), trailing dots or spaces, and paths over 4096 characters.
   - `approveRoot` resolves the root with `realpath.native` and keeps both the given and the real path. `resolveInsideRoot` checks containment twice: on the path as written (ASCII case-insensitive) and on the real path Windows resolves (junctions and symlinks followed, compared per segment, so `Root2` is not inside `Root`).
   - `openInsideRoot(root, path, 'read' | 'create')`: `create` never overwrites (`O_EXCL`). After opening, `verifyHandleInsideRoot` re-resolves the path and compares volume + file ID with the open handle, so a link swapped between check and open is refused (`changed_during_use`).
-- **#142 path-policy hardening (in review, branch `fix/142-path-policy-hardening`, ADR-0035, lesson 045):** fixes every finding of the after-merge security review of #119. The module is now ready for callers (M3-12, M3-13, M3-16, M3-18).
+- **M3-3 schema v7: resource packages and the agent team (#113, in review, branch `feat/113-resource-schema-v7`, ADR-0036, lesson 046):** storage only. Nothing calls it yet: install/enable commands are M3-5 (#115), recruiting and bindings M3-6 (#116).
+  - Migration 7 adds six STRICT tables: `resource_packages` (key = package ID + version, SHA-256 digest, license, source, review state; `trusted` only for bundled), `resource_dependencies` (`requires` / `default_skill` / `default_tool`), `world_resources` (one installed version per package per world, `enabled`), `agent_instances`, `agent_skill_bindings`, `project_tool_bindings` (`enabled_capabilities` JSON array). There is no `agent_templates` table: the installed agent package is the template.
+  - Kind-carrying composite foreign keys: an agent must come from an *agent* package installed in its project's world, and a skill or tool binding from a *skill* or *tool* installed in the same world. This holds even for raw SQL.
+  - Deletion: uninstalling, or deleting a package record, is refused while something uses it (RESTRICT). Dismissing an agent deletes it and its skill bindings (CASCADE). Trashing a project keeps everything.
+  - Repositories (`src/main/storage/repositories/{resource-package,resource-world,agent-instance,binding}-repository.ts`) return typed rows and stable codes. The installed version is read from `world_resources`, never taken from the caller. `usersOf` names what blocks an uninstall. A tool binding writes no grant and refuses `process.execute`. Capabilities the app no longer knows are dropped on read.
+  - No secret, token, credential or vault column in any of the six tables (a test reads the schema).
+  - Security review fixes: `builtin.*` IDs are bundled-only (database CHECK + repository); re-recording must match provenance; blocked packages can't be installed, recruited or bound (disabled ones can, and show as not ready); `source_revision` can't hold a URL; refused and repeated capabilities are dropped on read; forged non-string input is `invalid_input`.
+- **#142 path-policy hardening (merged PR #146 133ea48, ADR-0035, lesson 045):** fixes every finding of the after-merge security review of #119. The module is now ready for callers (M3-12, M3-13, M3-16, M3-18).
   - **Roots:** `ApprovedRoot` is a frozen class that only `approveRoot` can make (private `#state` plus a module-private token), so hand-built or copied roots are refused (`root_unavailable`). The root folder's volume + file ID are pinned, so a replaced root is refused.
   - **Broad and sensitive folders (ADR-0035):**
     - Need `approveRoot(root, { broad: true })`: a drive, home, Documents/Desktop/Downloads, OneDrive, Public, any folder containing one of those, and any folder inside AppData, LocalAppData, ProgramData, Windows or Program Files (`root_too_broad`).
@@ -356,7 +363,8 @@
 
 ## Changed components
 - #61 (PR #138): `src/common/contracts/{profile,world}.ts` (`omittedCount`), `src/main/profiles/profile-service.ts` (`boundedProfiles`), `src/main/ipc/commands/{profile,world}.ts`, `src/renderer/state/{list-limits,session}.ts` (new / changed), `src/renderer/app/MainScreen.tsx`, `src/renderer/onboarding/ProfilePicker.tsx`, `app.css`. Tests: `tests/e2e/list-limits.spec.ts`, `tests/domain/list-limits.test.ts` (new); profile/world contract tests extended.
-- #142 (in review): `src/main/security/path-policy.ts`, `src/main/security/path-policy.test.ts`, `eslint.config.js` (main-process `fs` ban).
+- #113 (in review): `src/main/storage/migrations/index.ts` (migration 7), `src/main/storage/repositories/{resource-package,resource-world,agent-instance,binding}-repository.ts` (new), `repository-support.ts` (`agent_instances` added to the guarded update/delete tables). Tests: `tests/integration/storage-migration-v7.test.ts`, `tests/integration/storage-resource-repositories.test.ts` (new); `tests/e2e/storage.spec.ts` and `tests/e2e-packaged/packaged.spec.ts` expect schema v7.
+- #142 (PR #146): `src/main/security/path-policy.ts`, `src/main/security/path-policy.test.ts`, `eslint.config.js` (main-process `fs` ban).
 - #119: `src/main/security/path-policy.ts` and `src/main/security/path-policy.test.ts` (new; the tests sit next to the module, as the issue named them).
 - #111: `src/common/security/capabilities.ts` and `src/common/contracts/resource-manifest.ts` (new); `src/common/contracts/display-name.ts` (`.max(…, { abort: true })`, so oversized names skip the character scans). Tests: `tests/security/capabilities.test.ts`, `tests/domain/resource-manifest.test.ts` (new).
 - #80:
@@ -430,7 +438,8 @@
 
 ## Verification
 - #61 (PR #138), 2026-11-27, per the PR: typecheck, lint, format:check pass. Unit/integration 1440/1440. Full E2E 117/117 locally (new: `list-limits.spec.ts`). CI green on the PR (includes E2E and packaged E2E). Reviews on 2026-11-27 (after the PR was opened): security-auditor found nothing blocking (two Low items, unbounded reads, filed as #140); invariant-reviewer re-ran typecheck, lint, 1440/1440, build and `list-limits.spec.ts` (1/1) on the branch: no code violations; the PR body and session log wrongly say omitted worlds can be reached "until others are archived" (no world archive command exists), wording fix requested on the PR but not made before merge; corrected on main afterwards (the session log keeps a dated correction).
-- #142, 2026-11-28, local Windows 11 (NTFS, no Developer Mode), branch `fix/142-path-policy-hardening` (main @ 1985bee):
+- #113, 2026-11-28, local Windows 11, branch `feat/113-resource-schema-v7` (main @ bcc5e29): typecheck, lint, format:check pass. Unit/integration 1580 passed, 1 skipped (35 new: 16 raw-SQL constraint tests, 19 repository tests). E2E 117/117 (the first run failed 1: the storage spec's list of applied migrations needed v7; fixed and re-run). Packaged E2E 17/17. A failing test found that tool bindings accepted `process.execute`; the repository now refuses it. Reviews: invariant-reviewer found no violations. security-auditor: approve with changes, no High or Critical. M1 (builtin namespace / inherited trust), M2 (blocked packages) and L1, L3, L4 were fixed on the branch; L2 and L5 are caller rules (below and in ADR-0036). After the fixes: unit/integration 1588 passed, 1 skipped (8 more tests); mutation checks (blocked check removed, namespace check removed) each failed a test; storage and M1 acceptance E2E re-run 6/6 on a fresh build.
+- #142 (merged PR #146), 2026-11-28, local Windows 11 (NTFS, no Developer Mode), branch `fix/142-path-policy-hardening` (main @ 1985bee):
   - Checks: typecheck, lint and format:check pass. Unit/integration 1545 passed, 1 skipped.
   - Path-policy tests: 105 passed, 1 skipped (the file-symlink test needs Developer Mode). The 8.3 tests ran on this machine.
   - Mutation checks: 22 mutations, one per fix. All were caught except two that end in the same state anyway (the NaN limit clamp, and `ensureDirInsideRoot`'s upfront name check, whose cleanup gives the same result).
@@ -621,7 +630,8 @@
 
 ## Known limitations
 - #61: worlds past the first 100 and profiles past the first 50 can't be opened or switched to from the UI (there is no world archive or profile delete yet), and the newest worlds are the ones cut off. Follow-up #139. `world.list` still reads every row before slicing, and `profiles-index.json` is read with no size cap (security Low items, follow-up #140). The over-limit warning is logged on every list call.
-- #119: the findings of its after-merge security review are fixed in #142 (in review). Until #142 merges, nothing should call the module.
+- #113: storage only, with no IPC or UI yet. Archived-world and archived/trashed-project rules belong to the services (M3-5, M3-6). There is no upgrade path between package versions: changing an installed version under its users is refused, and a future upgrade must move them in one transaction with `PRAGMA defer_foreign_keys = ON` (ADR-0036). Package records are never cleaned up when no world uses them. Package files are not copied to `packages/<id>/<version>/`, so an app update that drops a bundled version still in use must show as missing in readiness (M3-4/M3-5). Whether a bound capability belongs to the tool's manifest is not checked by the database (M3-6 service rule).
+- #119: the findings of its after-merge security review are fixed in #142 (merged PR #146).
 - #142:
   - **Windows race:** a junction planted between the check and a create-only open can still make Windows create its target outside the root. Node can't open "without following links" on Windows. The call is refused (`changed_during_use`) and reported (`unknown_object_created`).
   - **Listings:** folders can't be listed by handle, so a link swapped out and back during a listing could show names (never contents) from elsewhere.
@@ -725,6 +735,7 @@
 
 ## Data/schema changes
 - #61: none (IPC output contracts gain `omittedCount`; no migration, nothing on disk changes).
+- #113: **schema v7** (migration 7: six new tables, nothing copied; pre-migration backup as usual). Data/fixture test `tests/integration/storage-migration-v7.test.ts` (v6 → v7 keeps every row).
 - #142: none.
 - #119: none.
 - #111: none (pure contract modules, no migration, no IPC).
@@ -753,6 +764,7 @@
 - `userData/profiles-index.json` (M1-2, not in SQLite): `{ schemaVersion: 1, profiles: [{ id, displayName }], lastUsedProfileId }`. Profile folders: `profiles/<default | uuid>/`.
 
 ## Decisions
+- [ADR-0036](../adr/0036-resource-package-and-agent-team-tables.md) (M3-3 #113): package versions keyed by ID + version (one content per id@version); the installed agent package is the template (no `agent_templates`); one installed version per package per world; dismissing an agent deletes the row and its skill bindings; kind-carrying foreign keys
 - [ADR-0035](../adr/0035-path-policy-hard-links-and-broad-roots.md) (#142): the path policy always refuses hard links; broad roots (drive, home, Documents, anything inside AppData/system folders) need an explicit `broad: true`; credential/browser/Startup folders and credential file names (`.npmrc`, `.git-credentials`, ...) are never usable
 - [ADR-0034](../adr/0034-manifest-version-ranges-and-unavailable-capabilities.md) (M3-1 #111): package references use exact or caret version ranges (our own parser, no dependency); a known capability that isn't built yet is accepted and shown as waiting; `process.execute` is refused in packages; the loader, not the manifest, says whether a package is bundled
 - [ADR-0033](../adr/0033-hidden-unicode-strict-input-lenient-read.md) (#60): names and goals refuse hidden Unicode on input (one shared rule in `src/common/text/hidden-characters.ts`, including the whole U+E0100–U+E01EF range); names read back stay lenient (`normalizeStoredName` for the profile index, `StoredDisplayName` in replies) so older data never locks anyone out
@@ -791,6 +803,15 @@
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
+- After M3-3 (#113, ADR-0036), for M3-5 #115 and M3-6 #116:
+  - **Install (M3-5):** `ResourcePackageRepository.record` (from the catalog manifest, with its digest and `requirements.packages` / `agent.defaultSkills` / `agent.defaultTools` as dependencies), then `WorldResourceRepository.install`, in one `withTransaction`. Record bundled packages as `source: 'bundled'`, `reviewState: 'trusted'`.
+  - **Uninstall (M3-5):** `invalid_transition` means in use. Use `usersOf` to name the agents and projects in the message.
+  - **Recruit (M3-6):** check the project is active and the world not archived first (the repository doesn't). Bind the template's default skills/tools in the same transaction if the plan wants that.
+  - **Tool bindings (M3-6):** check that every enabled capability is in the tool's `tool.implements`. The repository only checks the capability registry.
+  - **Provenance:** `source`, `reviewState` and `digestSha256` come from main (the catalog loader hashes the bytes), never from an IPC payload.
+  - **M3-10 broker:** authorize from grants only; a tool binding can only narrow a grant (binding ∩ grant). Treat disabled or blocked packages as unavailable at dispatch.
+  - **M4 runs:** snapshot the agent, never CASCADE from `agent_instances`, and refuse dismissing an agent with an active run.
+  - Map `RepositoryError` codes to IPC errors as existing services do.
 - After #142 (ADR-0035), for M3-12 #122, M3-13 #123, M3-16 #126 and M3-18 #128:
   - **Use the building blocks, never raw `fs`:** `openInsideRoot`, `writeFileInsideRoot`, `ensureDirInsideRoot`, `listInsideRoot` and `walkInsideRoot`. `resolveInsideRoot` is check-only, and the lint rule bans `fs` in new main files.
   - **Approve on every operation:** call `approveRoot` from the stored root each time and never store the `ApprovedRoot`.

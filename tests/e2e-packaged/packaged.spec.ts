@@ -191,7 +191,7 @@ test('launches from a path with spaces and non-ASCII characters and keeps data a
     // A fresh install starts with first launch (M1-9), driven through its real UI here.
     await onboardThroughUi(first.page, 'Default', 'Packaged Vale');
     await openDeveloperSpikes(first.page);
-    await expect(first.page.getByTestId('launch-info')).toHaveText(/^Launch #1 · .* · schema v6$/);
+    await expect(first.page.getByTestId('launch-info')).toHaveText(/^Launch #1 · .* · schema v7$/);
   } finally {
     expect(await quit(first)).toBe(0);
   }
@@ -203,7 +203,7 @@ test('launches from a path with spaces and non-ASCII characters and keeps data a
     await expect(screen(second.page, 'main')).toBeVisible();
     await expect(second.page.getByTestId('world-name')).toHaveText('Packaged Vale');
     await openDeveloperSpikes(second.page);
-    await expect(second.page.getByTestId('launch-info')).toHaveText(/^Launch #2 · .* · schema v6$/);
+    await expect(second.page.getByTestId('launch-info')).toHaveText(/^Launch #2 · .* · schema v7$/);
   } finally {
     expect(await quit(second)).toBe(0);
   }
