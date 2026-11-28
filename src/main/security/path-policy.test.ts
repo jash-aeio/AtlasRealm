@@ -1,11 +1,16 @@
 // Path policy tests (M3-9 #119). They create real folders, junctions and symlinks in a temp
 // folder, because the point of the module is what Windows really does with links: a test with
 // fake paths couldn't show that.
+import { execFileSync } from 'node:child_process';
 import {
+  existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -14,20 +19,72 @@ import { open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  type ApprovedRoot,
+  ApprovedRoot,
   approveRoot,
+  defaultSensitiveFolders,
+  ensureDirInsideRoot,
+  listInsideRoot,
   openInsideRoot,
   pathShapeProblem,
   PathPolicyError,
   type PathRefusal,
   resolveInsideRoot,
+  type SensitiveFolders,
   verifyHandleInsideRoot,
+  walkInsideRoot,
+  writeFileInsideRoot,
 } from './path-policy';
 
+// `open`, `mkdir` and `link` pass through to the real ones, but a test can run a step right
+// before or after them (to swap a folder for a junction at an exact moment, instead of hoping
+// to win a race). Each hook runs once. `beforeMkdir` sees the target and returns true when it
+// acted, so it can wait for the level it cares about.
+const openHooks = vi.hoisted(() => ({
+  before: undefined as (() => void) | undefined,
+  after: undefined as (() => void) | undefined,
+  beforeMkdir: undefined as ((target: string) => boolean) | undefined,
+  beforeLink: undefined as (() => void) | undefined,
+  afterLstat: undefined as ((target: string) => boolean) | undefined,
+}));
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    open: async (...args: Parameters<typeof actual.open>) => {
+      const step = openHooks.before;
+      openHooks.before = undefined;
+      step?.();
+      const handle = await actual.open(...args);
+      const afterStep = openHooks.after;
+      openHooks.after = undefined;
+      afterStep?.();
+      return handle;
+    },
+    mkdir: async (...args: Parameters<typeof actual.mkdir>) => {
+      if (openHooks.beforeMkdir?.(String(args[0])) === true) openHooks.beforeMkdir = undefined;
+      return actual.mkdir(...args);
+    },
+    lstat: (async (...args: Parameters<typeof actual.lstat>) => {
+      const result = await actual.lstat(...args);
+      if (openHooks.afterLstat?.(String(args[0])) === true) openHooks.afterLstat = undefined;
+      return result;
+    }) as typeof actual.lstat,
+    link: async (...args: Parameters<typeof actual.link>) => {
+      const step = openHooks.beforeLink;
+      openHooks.beforeLink = undefined;
+      step?.();
+      return actual.link(...args);
+    },
+  };
+});
+
 const IS_WINDOWS = process.platform === 'win32';
+// The temp folder lives inside %LOCALAPPDATA%, which counts as broad by default (ADR-0035).
+// Most tests approve temp folders, so they pass this empty list; one test checks the defaults.
+const NO_SENSITIVE: SensitiveFolders = { broad: [], broadTrees: [], forbidden: [] };
 
 let base: string;
 let rootDir: string;
@@ -45,10 +102,15 @@ beforeEach(async () => {
   writeFileSync(path.join(base, 'Root2', 'x.txt'), 'sibling');
   writeFileSync(path.join(rootDir, 'a.txt'), 'inside');
   writeFileSync(path.join(outsideDir, 'secret.txt'), 'secret');
-  root = await approveRoot(rootDir);
+  root = await approveRoot(rootDir, { sensitiveFolders: NO_SENSITIVE });
 });
 
 afterEach(() => {
+  openHooks.before = undefined;
+  openHooks.after = undefined;
+  openHooks.beforeMkdir = undefined;
+  openHooks.beforeLink = undefined;
+  openHooks.afterLstat = undefined;
   rmSync(base, { recursive: true, force: true });
 });
 
@@ -142,13 +204,278 @@ describe('approveRoot', () => {
     expect(await refusalOf(approveRoot(make()))).toBe('root_unavailable');
   });
 
+  it('issues a frozen root that only this module can make (forged roots are refused)', async () => {
+    expect(Object.isFrozen(root)).toBe(true);
+    // Shapes a caller could build by hand: a plain object, a copy, a mismatched pair, an
+    // object with the right prototype, and the whole drive.
+    const drive = path.parse(root.real).root;
+    const forged: unknown[] = [
+      { given: root.given, real: root.real },
+      Object.fromEntries(Object.entries(root)), // a copy of its public fields
+      { given: root.given, real: path.dirname(root.real) },
+      Object.assign(Object.create(ApprovedRoot.prototype) as object, {
+        given: root.given,
+        real: root.real,
+      }),
+      { given: drive, real: drive },
+    ];
+    for (const fake of forged) {
+      const asRoot = fake as ApprovedRoot;
+      expect(await refusalOf(resolveInsideRoot(asRoot, 'a.txt'))).toBe('root_unavailable');
+      expect(await refusalOf(openInsideRoot(asRoot, 'a.txt', 'read'))).toBe('root_unavailable');
+    }
+    // The constructor demands the module's private token.
+    const Ctor = ApprovedRoot as unknown as new (...args: unknown[]) => unknown;
+    expect(() => new Ctor(Symbol('fake'), root.given, root.real, {})).toThrow(PathPolicyError);
+    // The class can't be patched to intercept the token (audit finding 2).
+    expect(Object.isFrozen(ApprovedRoot)).toBe(true);
+    expect(Object.isFrozen(ApprovedRoot.prototype)).toBe(true);
+    expect(Object.getOwnPropertyNames(ApprovedRoot)).not.toContain('issue');
+    expect(() => {
+      (ApprovedRoot as unknown as Record<string, unknown>)['issue'] = () => undefined;
+    }).toThrow(TypeError);
+  });
+
+  it('refuses a root that was replaced by another folder after approval', async () => {
+    // Same name, different folder: the root's volume + file ID no longer match.
+    renameSync(rootDir, path.join(base, 'Root-old'));
+    mkdirSync(rootDir);
+    writeFileSync(path.join(rootDir, 'a.txt'), 'impostor');
+    expect(await refusalOf(resolveInsideRoot(root, 'a.txt'))).toBe('root_unavailable');
+    expect(await refusalOf(openInsideRoot(root, 'a.txt', 'read'))).toBe('root_unavailable');
+    expect(await refusalOf(openInsideRoot(root, 'b.txt', 'create'))).toBe('root_unavailable');
+  });
+
   it.skipIf(!IS_WINDOWS)('follows a root that is itself reached through a junction', async () => {
     const link = path.join(base, 'RootLink');
     junction(link, rootDir);
-    const viaLink = await approveRoot(link);
+    const viaLink = await approveRoot(link, { sensitiveFolders: NO_SENSITIVE });
     expect(viaLink.real).toBe(root.real);
     const resolved = await resolveInsideRoot(viaLink, 'a.txt');
     expect(resolved.real).toBe(path.join(root.real, 'a.txt'));
+  });
+});
+
+describe('approveRoot and sensitive folders (SECURITY §13.4)', () => {
+  let home: string;
+  let sensitiveFolders: SensitiveFolders;
+
+  beforeEach(() => {
+    home = path.join(base, 'Home');
+    for (const dir of ['Documents', 'Projects', '.ssh'])
+      mkdirSync(path.join(home, dir), {
+        recursive: true,
+      });
+    writeFileSync(path.join(home, '.ssh', 'id_ed25519'), 'private key');
+    writeFileSync(path.join(home, 'Projects', 'p.txt'), 'project');
+    sensitiveFolders = {
+      broad: [home, path.join(home, 'Documents')],
+      broadTrees: [path.join(base, 'AppData')],
+      forbidden: [path.join(home, '.ssh')],
+    };
+  });
+
+  it('accepts an ordinary project folder', async () => {
+    const approved = await approveRoot(path.join(home, 'Projects'), { sensitiveFolders });
+    expect((await resolveInsideRoot(approved, 'p.txt')).exists).toBe(true);
+  });
+
+  it.each([
+    ['the home folder', () => home],
+    ['Documents', () => path.join(home, 'Documents')],
+    ['a folder that contains the home folder', () => base],
+  ])('refuses %s unless the caller passes broad', async (_label, make) => {
+    expect(await refusalOf(approveRoot(make(), { sensitiveFolders }))).toBe('root_too_broad');
+    await expect(approveRoot(make(), { sensitiveFolders, broad: true })).resolves.toBeInstanceOf(
+      ApprovedRoot,
+    );
+  });
+
+  it('treats every folder inside app-data and system folders as broad', async () => {
+    const inside = path.join(base, 'AppData', 'Roaming', 'SomeApp');
+    mkdirSync(inside, { recursive: true });
+    for (const target of [path.join(base, 'AppData'), inside]) {
+      expect(await refusalOf(approveRoot(target, { sensitiveFolders }))).toBe('root_too_broad');
+      await expect(approveRoot(target, { sensitiveFolders, broad: true })).resolves.toBeInstanceOf(
+        ApprovedRoot,
+      );
+    }
+  });
+
+  it.skipIf(!IS_WINDOWS)(
+    'refuses a temp folder by default (it is inside LOCALAPPDATA)',
+    async (ctx) => {
+      // Compared in real (long) form: on CI the temp path is written as C:UsersRUNNER~1...
+      const local = process.env['LOCALAPPDATA'];
+      const insideLocal =
+        local !== undefined &&
+        realpathSync
+          .native(rootDir)
+          .toLowerCase()
+          .startsWith(realpathSync.native(local).toLowerCase() + path.sep);
+      if (!insideLocal) ctx.skip('the temp folder is not inside LOCALAPPDATA on this machine');
+      expect(await refusalOf(approveRoot(rootDir))).toBe('root_too_broad');
+    },
+  );
+
+  it('refuses a whole drive unless the caller passes broad', async () => {
+    const drive = path.parse(base).root;
+    const none = NO_SENSITIVE;
+    expect(await refusalOf(approveRoot(drive, { sensitiveFolders: none }))).toBe('root_too_broad');
+    await expect(
+      approveRoot(drive, { sensitiveFolders: none, broad: true }),
+    ).resolves.toBeInstanceOf(ApprovedRoot);
+  });
+
+  it('never approves a credential folder, even with broad', async () => {
+    mkdirSync(path.join(home, '.ssh', 'sub'));
+    for (const target of [path.join(home, '.ssh'), path.join(home, '.ssh', 'sub')]) {
+      expect(await refusalOf(approveRoot(target, { sensitiveFolders, broad: true }))).toBe(
+        'sensitive_folder',
+      );
+    }
+  });
+
+  it.skipIf(!IS_WINDOWS)(
+    'recognises a sensitive folder by its real location (audit finding 3)',
+    async () => {
+      // `.ssh` and Documents are junctions to folders elsewhere; approving those folders
+      // directly must be refused just the same.
+      const keys = path.join(base, 'keys');
+      const docs = path.join(base, 'DocsElsewhere');
+      mkdirSync(keys);
+      mkdirSync(docs);
+      const linked: SensitiveFolders = {
+        broad: [path.join(base, 'LinkedHome', 'Documents')],
+        broadTrees: [],
+        forbidden: [path.join(base, 'LinkedHome', '.ssh')],
+      };
+      mkdirSync(path.join(base, 'LinkedHome'));
+      junction(path.join(base, 'LinkedHome', '.ssh'), keys);
+      junction(path.join(base, 'LinkedHome', 'Documents'), docs);
+      expect(await refusalOf(approveRoot(keys, { sensitiveFolders: linked, broad: true }))).toBe(
+        'sensitive_folder',
+      );
+      expect(await refusalOf(approveRoot(docs, { sensitiveFolders: linked }))).toBe(
+        'root_too_broad',
+      );
+    },
+  );
+
+  it('walks a broad root without entering a credential folder (audit finding 5)', async () => {
+    const approved = await approveRoot(home, { sensitiveFolders, broad: true });
+    const result = await walkInsideRoot(approved, '.');
+    const paths = result.entries.map((entry) => entry.relativePath);
+    expect(paths).toContain('.ssh'); // the name is listed...
+    expect(paths.some((p) => p.startsWith('.ssh\\'))).toBe(false); // ...but never entered
+    expect(paths).toContain('Projects\\p.txt');
+    expect(result.complete).toBe(false);
+    expect(await refusalOf(listInsideRoot(approved, '.ssh'))).toBe('sensitive_folder');
+  });
+
+  it('keeps a credential folder refused inside a broad root', async () => {
+    const approved = await approveRoot(home, { sensitiveFolders, broad: true });
+    expect(await refusalOf(resolveInsideRoot(approved, '.ssh\\id_ed25519'))).toBe(
+      'sensitive_folder',
+    );
+    expect(await refusalOf(openInsideRoot(approved, '.ssh\\id_ed25519', 'read'))).toBe(
+      'sensitive_folder',
+    );
+    expect(await refusalOf(openInsideRoot(approved, '.ssh\\new.txt', 'create'))).toBe(
+      'sensitive_folder',
+    );
+    expect((await resolveInsideRoot(approved, 'Projects\\p.txt')).exists).toBe(true);
+  });
+
+  it.skipIf(!IS_WINDOWS)('keeps it refused when reached through a junction', async () => {
+    const approved = await approveRoot(home, { sensitiveFolders, broad: true });
+    junction(path.join(home, 'Projects', 'keys'), path.join(home, '.ssh'));
+    expect(await refusalOf(resolveInsideRoot(approved, 'Projects\\keys\\id_ed25519'))).toBe(
+      'sensitive_folder',
+    );
+  });
+
+  it.skipIf(!IS_WINDOWS)('lists the usual Windows folders by default', () => {
+    const user = 'C:\\Users\\u';
+    const folders = defaultSensitiveFolders(
+      {
+        APPDATA: `${user}\\AppData\\Roaming`,
+        LOCALAPPDATA: `${user}\\AppData\\Local`,
+        OneDrive: `${user}\\OneDrive`,
+        ProgramFiles: '',
+      },
+      user,
+    );
+    expect(folders.broad).toEqual(
+      expect.arrayContaining([
+        user,
+        `${user}\\Documents`,
+        `${user}\\Desktop`,
+        `${user}\\Downloads`,
+        `${user}\\OneDrive\\Documents`,
+      ]),
+    );
+    expect(folders.broadTrees).toEqual(
+      expect.arrayContaining([`${user}\\AppData\\Roaming`, `${user}\\AppData\\Local`]),
+    );
+    expect(folders.forbidden).toEqual(
+      expect.arrayContaining([
+        `${user}\\.ssh`,
+        `${user}\\AppData\\Local\\Google\\Chrome\\User Data`,
+        `${user}\\AppData\\Roaming\\Mozilla\\Firefox`,
+        `${user}\\AppData\\Roaming\\gcloud`,
+        `${user}\\AppData\\Local\\Microsoft\\Vault`,
+        `${user}\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup`,
+      ]),
+    );
+    // Empty or missing variables add nothing.
+    expect(folders.broad).not.toContain('');
+  });
+});
+
+describe('credential file names (ADR-0035)', () => {
+  const NAMES = ['.npmrc', '.git-credentials', '.netrc', '_netrc', '.pypirc'];
+
+  it.each(NAMES)('refuses %j for read, create and write, in any folder', async (name) => {
+    mkdirSync(path.join(rootDir, 'sub'));
+    writeFileSync(path.join(rootDir, 'sub', name), 'token=x');
+    expect(await refusalOf(resolveInsideRoot(root, `sub\\${name}`))).toBe('sensitive_file');
+    expect(await refusalOf(openInsideRoot(root, `sub\\${name}`, 'read'))).toBe('sensitive_file');
+    expect(await refusalOf(openInsideRoot(root, name, 'create'))).toBe('sensitive_file');
+    expect(await refusalOf(writeFileInsideRoot(root, name, 'x'))).toBe('sensitive_file');
+    expect(await refusalOf(ensureDirInsideRoot(root, name))).toBe('sensitive_file');
+    expect(existsSync(path.join(rootDir, name))).toBe(false);
+  });
+
+  it('ignores ASCII case, and still lists the name', async () => {
+    writeFileSync(path.join(rootDir, '.NPMRC'), 'token=x');
+    expect(await refusalOf(openInsideRoot(root, '.NPMRC', 'read'))).toBe('sensitive_file');
+    expect(await refusalOf(openInsideRoot(root, '.npmrc', 'read'))).toBe('sensitive_file');
+    // Listings show it, so the UI can explain why it can't be opened.
+    const { entries } = await listInsideRoot(root, '.');
+    expect(entries.map((entry) => entry.name)).toContain('.NPMRC');
+    // Similar names are fine.
+    writeFileSync(path.join(rootDir, 'npmrc.md'), 'notes');
+    await expect(resolveInsideRoot(root, 'npmrc.md')).resolves.toMatchObject({ exists: true });
+  });
+});
+
+describe('PathPolicyError', () => {
+  it('keeps only the OS error code, never the path (L2)', async () => {
+    let caught: unknown;
+    try {
+      await resolveInsideRoot(root, 'missing-folder\\nope.txt');
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(PathPolicyError);
+    const error = caught as PathPolicyError;
+    expect(error.reason).toBe('not_found');
+    expect(error.errno).toBe('ENOENT');
+    expect(error.cause).toBeUndefined();
+    const serialised = JSON.stringify(error) + String(error) + (error.stack ?? '');
+    expect(serialised).not.toContain(base);
+    expect(serialised).not.toContain('nope.txt');
   });
 });
 
@@ -268,6 +595,161 @@ describe('openInsideRoot', () => {
     expect(await refusalOf(openInsideRoot(root, 'jn\\planted.txt', 'create'))).toBe('link_escape');
     expect(() => readFileSync(path.join(outsideDir, 'planted.txt'))).toThrow();
   });
+
+  it.skipIf(!IS_WINDOWS)('creates nothing outside through a dangling junction (H1)', async () => {
+    // `report.md` is a junction to a target that doesn't exist yet. realpath fails on it just
+    // as on a free name; creating "through" it would build the target outside the root.
+    const target = path.join(outsideDir, 'evil.txt');
+    junction(path.join(rootDir, 'report.md'), target);
+    expect(await refusalOf(openInsideRoot(root, 'report.md', 'create'))).toBe('link_escape');
+    expect(await refusalOf(openInsideRoot(root, 'report.md\\x.txt', 'create'))).toBe('link_escape');
+    expect(existsSync(target)).toBe(false);
+  });
+
+  it('refuses a hard link, whose other name may be outside (M2)', async () => {
+    linkSync(path.join(outsideDir, 'secret.txt'), path.join(rootDir, 'hl.txt'));
+    expect(await refusalOf(resolveInsideRoot(root, 'hl.txt'))).toBe('hard_link');
+    expect(await refusalOf(openInsideRoot(root, 'hl.txt', 'read'))).toBe('hard_link');
+    // The re-check refuses it too, even if the first check were skipped.
+    const handle = await open(path.join(root.real, 'hl.txt'), 'r');
+    try {
+      expect(
+        await refusalOf(verifyHandleInsideRoot(root, path.join(root.real, 'hl.txt'), handle)),
+      ).toBe('hard_link');
+    } finally {
+      await handle.close();
+    }
+  });
+
+  describe.skipIf(!IS_WINDOWS)('a folder swapped for a junction right before the open (M1)', () => {
+    beforeEach(() => {
+      mkdirSync(path.join(rootDir, 'inner'));
+    });
+
+    function swapInnerTo(target: string): void {
+      rmSync(path.join(rootDir, 'inner'), { recursive: true });
+      junction(path.join(rootDir, 'inner'), target);
+    }
+
+    it('removes the file it created outside and refuses', async () => {
+      const onLeftover = vi.fn();
+      openHooks.before = () => {
+        swapInnerTo(outsideDir);
+      };
+      expect(
+        await refusalOf(openInsideRoot(root, 'inner\\new.txt', 'create', { onLeftover })),
+      ).toBe('changed_during_use');
+      expect(existsSync(path.join(outsideDir, 'new.txt'))).toBe(false);
+      expect(onLeftover).not.toHaveBeenCalled();
+    });
+
+    it('reports instead of deleting when the path no longer leads to its file', async () => {
+      // Swapped out before the open, then re-pointed before the cleanup could look: the path now
+      // leads to someone else's file, which must not be deleted.
+      const other = path.join(base, 'other');
+      mkdirSync(other);
+      writeFileSync(path.join(other, 'new.txt'), 'not ours');
+      const onLeftover = vi.fn();
+      openHooks.before = () => {
+        swapInnerTo(outsideDir);
+      };
+      openHooks.after = () => {
+        rmSync(path.join(rootDir, 'inner'));
+        junction(path.join(rootDir, 'inner'), other);
+      };
+      expect(
+        await refusalOf(openInsideRoot(root, 'inner\\new.txt', 'create', { onLeftover })),
+      ).toBe('changed_during_use');
+      expect(readFileSync(path.join(other, 'new.txt'), 'utf8')).toBe('not ours');
+      expect(onLeftover).toHaveBeenCalledWith({ kind: 'file_left_behind' });
+      expect(JSON.stringify(onLeftover.mock.calls)).not.toContain(base);
+    });
+
+    it('is not redirected by re-pointing the written-path junction (audit finding 1)', async () => {
+      // The cleanup checks our file, then the junction is re-pointed before the delete. Deleting
+      // by the real path (not through the junction again) still hits only our own file.
+      const victim = path.join(base, 'victim');
+      mkdirSync(victim);
+      writeFileSync(path.join(victim, 'new.txt'), 'precious');
+      const ours = path.join(outsideDir, 'new.txt');
+      openHooks.before = () => {
+        swapInnerTo(outsideDir);
+      };
+      openHooks.afterLstat = (target) => {
+        if (path.basename(target) !== 'new.txt' || !existsSync(ours)) return false;
+        rmSync(path.join(rootDir, 'inner'));
+        junction(path.join(rootDir, 'inner'), victim);
+        return true;
+      };
+      expect(await refusalOf(openInsideRoot(root, 'inner\\new.txt', 'create'))).toBe(
+        'changed_during_use',
+      );
+      expect(readFileSync(path.join(victim, 'new.txt'), 'utf8')).toBe('precious');
+      expect(existsSync(ours)).toBe(false);
+    });
+
+    it('reports a link planted right before the create (audit finding 7)', async () => {
+      // A dangling junction appears after the check: Windows creates its target (a folder)
+      // outside. That race can't be closed in Node; it must be refused and reported.
+      const planted = path.join(outsideDir, 'planted.txt');
+      const onLeftover = vi.fn();
+      openHooks.before = () => {
+        junction(path.join(rootDir, 'r.md'), planted);
+      };
+      const outcome = await refusalOf(openInsideRoot(root, 'r.md', 'create', { onLeftover }));
+      expect(outcome).toBe('changed_during_use');
+      expect(onLeftover.mock.calls).toEqual([[{ kind: 'unknown_object_created' }]]);
+    });
+  });
+});
+
+// Asking PowerShell for a short name can take over 15 s the first time on a CI runner.
+describe.skipIf(!IS_WINDOWS)('8.3 short names', { timeout: 60_000 }, () => {
+  /** The Windows short (8.3) form of a folder or file, or undefined if it has none. */
+  function shortForm(folder: string, kind: 'Folder' | 'File' = 'Folder'): string | undefined {
+    const out = execFileSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        `(New-Object -ComObject Scripting.FileSystemObject).Get${kind}($env:ATLAS_P).ShortPath`,
+      ],
+      { env: { ...process.env, ATLAS_P: folder }, encoding: 'utf8' },
+    ).trim();
+    return out !== '' && out.toLowerCase() !== folder.toLowerCase() ? out : undefined;
+  }
+
+  it('refuses a credential file reached by its short name', async (ctx) => {
+    // `.git-credentials` also has a short name such as `GIT-CR~1`. Only the real path, which
+    // Windows returns in long form, shows what the file really is.
+    const file = path.join(rootDir, '.git-credentials');
+    writeFileSync(file, 'https://user:token@example.com');
+    const short = shortForm(file, 'File');
+    if (short === undefined) ctx.skip('this volume has no 8.3 short names');
+    const shortName = path.basename(short ?? file);
+    expect(shortName.toLowerCase()).not.toBe('.git-credentials');
+    expect(await refusalOf(resolveInsideRoot(root, shortName))).toBe('sensitive_file');
+    expect(await refusalOf(openInsideRoot(root, shortName, 'read'))).toBe('sensitive_file');
+  });
+
+  it('accepts a long-form candidate under a root approved by its short name', async (ctx) => {
+    const short = shortForm(rootDir);
+    if (short === undefined) ctx.skip('this volume has no 8.3 short names');
+    const shortRoot = await approveRoot(short ?? rootDir, { sensitiveFolders: NO_SENSITIVE });
+    expect(shortRoot.given).toBe(path.resolve(short ?? rootDir));
+    // The fully long form. `base` itself may be partly short: on CI the temp folder is
+    // C:UsersRUNNER~1..., and a mixed short/long path is refused (as written it matches
+    // neither form of the root; safe, and a known limit).
+    const longBase = realpathSync.native(base);
+    const longCandidate = path.join(longBase, 'Root', 'a.txt');
+    expect((await resolveInsideRoot(shortRoot, longCandidate)).real).toBe(
+      path.join(root.real, 'a.txt'),
+    );
+    expect(
+      await refusalOf(resolveInsideRoot(shortRoot, path.join(longBase, 'Root2', 'x.txt'))),
+    ).toBe('outside_root');
+  });
 });
 
 // Re-check at use: these tests swap a link at an exact moment instead of hoping to win a race.
@@ -285,7 +767,9 @@ describe.skipIf(!IS_WINDOWS)(
     it('accepts the handle when nothing changed', async () => {
       const handle = await open(innerReal, 'r');
       try {
-        await expect(verifyHandleInsideRoot(root, innerReal, handle)).resolves.toBeUndefined();
+        const held = await verifyHandleInsideRoot(root, innerReal, handle);
+        expect(held.isFile()).toBe(true);
+        expect(held.nlink).toBe(1n);
       } finally {
         await handle.close();
       }
@@ -334,3 +818,195 @@ describe.skipIf(!IS_WINDOWS)(
     });
   },
 );
+
+describe('ensureDirInsideRoot (M4)', () => {
+  it('makes missing folders one level at a time, and is idempotent', async () => {
+    const real = await ensureDirInsideRoot(root, 'a\\b\\c');
+    expect(real).toBe(path.join(root.real, 'a', 'b', 'c'));
+    expect(existsSync(path.join(rootDir, 'a', 'b', 'c'))).toBe(true);
+    await expect(ensureDirInsideRoot(root, 'a\\b\\c')).resolves.toBe(real);
+    await expect(ensureDirInsideRoot(root, '.')).resolves.toBe(root.real);
+  });
+
+  it('refuses escapes and a file in the way', async () => {
+    expect(await refusalOf(ensureDirInsideRoot(root, '..\\outside\\x'))).toBe('outside_root');
+    expect(await refusalOf(ensureDirInsideRoot(root, 'a.txt\\x'))).toBe('not_a_folder');
+    expect(await refusalOf(ensureDirInsideRoot(root, 'a.txt'))).toBe('not_a_folder');
+  });
+
+  describe.skipIf(!IS_WINDOWS)('links', () => {
+    it('makes nothing outside through a junction', async () => {
+      junction(path.join(rootDir, 'jn'), outsideDir);
+      expect(await refusalOf(ensureDirInsideRoot(root, 'jn\\new'))).toBe('link_escape');
+      expect(existsSync(path.join(outsideDir, 'new'))).toBe(false);
+    });
+
+    it('makes nothing outside through a dangling junction', async () => {
+      const target = path.join(outsideDir, 'planted');
+      junction(path.join(rootDir, 'dangling'), target);
+      expect(await refusalOf(ensureDirInsideRoot(root, 'dangling'))).toBe('link_escape');
+      expect(await refusalOf(ensureDirInsideRoot(root, 'dangling\\x'))).toBe('link_escape');
+      expect(existsSync(target)).toBe(false);
+    });
+
+    it('removes a folder it made outside when a parent was swapped mid-walk', async () => {
+      mkdirSync(path.join(rootDir, 'inner'));
+      const onLeftover = vi.fn();
+      openHooks.beforeMkdir = (target) => {
+        if (path.basename(target) !== 'deep') return false;
+        rmSync(path.join(rootDir, 'inner'), { recursive: true });
+        junction(path.join(rootDir, 'inner'), outsideDir);
+        return true;
+      };
+      expect(await refusalOf(ensureDirInsideRoot(root, 'inner\\deep', { onLeftover }))).toBe(
+        'link_escape',
+      );
+      expect(existsSync(path.join(outsideDir, 'deep'))).toBe(false);
+      expect(onLeftover).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('listInsideRoot and walkInsideRoot (M4)', () => {
+  beforeEach(() => {
+    mkdirSync(path.join(rootDir, 'sub', 'deeper'), { recursive: true });
+    writeFileSync(path.join(rootDir, 'sub', 'b.txt'), 'bb');
+    writeFileSync(path.join(rootDir, 'sub', 'deeper', 'c.txt'), 'ccc');
+  });
+
+  it('lists names, kinds and sizes, sorted', async () => {
+    const listing = await listInsideRoot(root, '.');
+    expect(listing.real).toBe(root.real);
+    expect(listing.omittedCount).toBe(0);
+    expect(listing.entries).toEqual([
+      { name: 'a.txt', kind: 'file', size: 6, hardLinked: false },
+      { name: 'sub', kind: 'folder', size: 0, hardLinked: false },
+    ]);
+  });
+
+  it('reports links and hard links without following them', async () => {
+    linkSync(path.join(outsideDir, 'secret.txt'), path.join(rootDir, 'hl.txt'));
+    if (IS_WINDOWS) junction(path.join(rootDir, 'jn'), outsideDir);
+    const { entries } = await listInsideRoot(root, '.');
+    expect(entries.find((entry) => entry.name === 'hl.txt')).toMatchObject({
+      kind: 'file',
+      hardLinked: true,
+    });
+    if (IS_WINDOWS) {
+      expect(entries.find((entry) => entry.name === 'jn')).toMatchObject({ kind: 'link' });
+      expect(await refusalOf(listInsideRoot(root, 'jn'))).toBe('link_escape');
+    }
+    expect(entries.map((entry) => entry.name)).not.toContain('secret.txt');
+  });
+
+  it('is bounded: the rest is counted, not returned', async () => {
+    for (let i = 0; i < 5; i += 1) writeFileSync(path.join(rootDir, `n${String(i)}.txt`), '');
+    const listing = await listInsideRoot(root, '.', { maxEntries: 3 });
+    expect(listing.entries).toHaveLength(3);
+    expect(listing.omittedCount).toBe(4); // a.txt, sub and n0..n4 = 7 entries
+  });
+
+  it('refuses a file and a path outside', async () => {
+    expect(await refusalOf(listInsideRoot(root, 'a.txt'))).toBe('not_a_folder');
+    expect(await refusalOf(listInsideRoot(root, '..\\outside'))).toBe('outside_root');
+  });
+
+  it('walks the tree with relative paths', async () => {
+    const result = await walkInsideRoot(root, '.');
+    expect(result.complete).toBe(true);
+    expect(result.entries.map((entry) => entry.relativePath)).toEqual([
+      'a.txt',
+      'sub',
+      'sub\\b.txt',
+      'sub\\deeper',
+      'sub\\deeper\\c.txt',
+    ]);
+  });
+
+  it.skipIf(!IS_WINDOWS)('never enters a junction, even one that stays inside', async () => {
+    junction(path.join(rootDir, 'loop'), rootDir); // would recurse forever if followed
+    junction(path.join(rootDir, 'out'), outsideDir);
+    const result = await walkInsideRoot(root, '.');
+    const paths = result.entries.map((entry) => entry.relativePath);
+    expect(paths).toContain('loop');
+    expect(paths).toContain('out');
+    expect(paths.some((p) => p.startsWith('loop\\') || p.startsWith('out\\'))).toBe(false);
+    expect(result.complete).toBe(true);
+  });
+
+  it('treats NaN and Infinity limits as the defaults, never as "no limit"', async () => {
+    const listing = await listInsideRoot(root, '.', { maxEntries: Number.NaN });
+    expect(listing.entries.length).toBeGreaterThan(0);
+    const walk = await walkInsideRoot(root, '.', {
+      maxEntries: Number.POSITIVE_INFINITY,
+      maxDepth: Number.NaN,
+    });
+    expect(walk.complete).toBe(true);
+    expect(walk.entries.length).toBeGreaterThan(0);
+  });
+
+  it('says when depth or size limits stopped it', async () => {
+    const shallow = await walkInsideRoot(root, '.', { maxDepth: 0 });
+    expect(shallow.entries.map((entry) => entry.relativePath)).toEqual(['a.txt', 'sub']);
+    expect(shallow.complete).toBe(false);
+    const small = await walkInsideRoot(root, '.', { maxEntries: 3 });
+    expect(small.entries).toHaveLength(3);
+    expect(small.complete).toBe(false);
+  });
+});
+
+describe('writeFileInsideRoot (M4)', () => {
+  beforeEach(() => {
+    mkdirSync(path.join(rootDir, 'out'));
+  });
+
+  it('writes a new file and leaves no temp file behind', async () => {
+    const real = await writeFileInsideRoot(root, 'out\\result.md', '# result');
+    expect(real).toBe(path.join(root.real, 'out', 'result.md'));
+    expect(readFileSync(path.join(rootDir, 'out', 'result.md'), 'utf8')).toBe('# result');
+    expect(readdirSync(path.join(rootDir, 'out'))).toEqual(['result.md']);
+    // The final file has one name, so it can be read back through the policy.
+    const { handle } = await openInsideRoot(root, 'out\\result.md', 'read');
+    await handle.close();
+  });
+
+  it('never overwrites, and leaves the existing file as it was', async () => {
+    writeFileSync(path.join(rootDir, 'out', 'result.md'), 'first');
+    expect(await refusalOf(writeFileInsideRoot(root, 'out\\result.md', 'second'))).toBe(
+      'already_exists',
+    );
+    expect(readFileSync(path.join(rootDir, 'out', 'result.md'), 'utf8')).toBe('first');
+    expect(readdirSync(path.join(rootDir, 'out'))).toEqual(['result.md']);
+  });
+
+  it('loses the race cleanly when the name is taken during the write', async () => {
+    openHooks.beforeLink = () => {
+      writeFileSync(path.join(rootDir, 'out', 'result.md'), 'winner');
+    };
+    expect(await refusalOf(writeFileInsideRoot(root, 'out\\result.md', 'loser'))).toBe(
+      'already_exists',
+    );
+    expect(readFileSync(path.join(rootDir, 'out', 'result.md'), 'utf8')).toBe('winner');
+    expect(readdirSync(path.join(rootDir, 'out'))).toEqual(['result.md']);
+  });
+
+  it('needs the parent folder to exist', async () => {
+    expect(await refusalOf(writeFileInsideRoot(root, 'missing\\result.md', 'x'))).toBe('not_found');
+  });
+
+  it.skipIf(!IS_WINDOWS)('removes what it made when the folder was moved outside', async () => {
+    // Right before the final link, the whole `out` folder (with the temp file) is moved
+    // outside and replaced by a junction to it, so the link lands outside the root.
+    const moved = path.join(outsideDir, 'moved');
+    const onLeftover = vi.fn();
+    openHooks.beforeLink = () => {
+      renameSync(path.join(rootDir, 'out'), moved);
+      junction(path.join(rootDir, 'out'), moved);
+    };
+    expect(
+      await refusalOf(writeFileInsideRoot(root, 'out\\result.md', 'data', { onLeftover })),
+    ).toBe('changed_during_use');
+    expect(readdirSync(moved)).toEqual([]);
+    expect(onLeftover).not.toHaveBeenCalled();
+  });
+});

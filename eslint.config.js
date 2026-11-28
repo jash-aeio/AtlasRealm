@@ -6,6 +6,9 @@ import { defineConfig } from 'eslint/config';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+const FS_MESSAGE =
+  'Use src/main/security/path-policy.ts (openInsideRoot, writeFileInsideRoot, ...) for files; raw fs skips the path checks (#142).';
+
 export default defineConfig(
   {
     // Replaces the old .eslintignore file. docs/ holds no code; build output is generated.
@@ -22,7 +25,7 @@ export default defineConfig(
     ],
   },
   {
-    files: ['**/*.{ts,tsx,js,mjs,cjs}'],
+    files: ['**/*.{ts,tsx,mts,cts,js,mjs,cjs}'],
     extends: [js.configs.recommended, tseslint.configs.strictTypeChecked],
     languageOptions: {
       globals: globals.node,
@@ -56,6 +59,67 @@ export default defineConfig(
               message: 'Import Pixi only in src/renderer/world/grid-scene.ts (ADR-0011).',
             },
           ],
+        },
+      ],
+    },
+  },
+  {
+    // Main-process code touches user files only through security/path-policy.ts, which checks
+    // real paths, links and the root at use (SECURITY §13.4, #142). Raw `fs` stays in the policy,
+    // the app's own storage, and the few files that only touch app-owned paths.
+    // This block replaces the one above for these files, so it repeats the Pixi pattern.
+    files: ['src/main/**/*.{ts,tsx,mts,cts}'],
+    ignores: [
+      'src/main/**/*.test.{ts,tsx,mts,cts}',
+      'src/main/security/**',
+      // The app's own database and profile files (app-owned paths under userData).
+      'src/main/storage/app-database.ts',
+      'src/main/storage/database.ts',
+      'src/main/storage/migrate.ts',
+      'src/main/storage/profiles/profiles-index.ts',
+      'src/main/storage/profiles/startup.ts',
+      'src/main/index.ts', // reads the bundled index.html
+      'src/main/profiles/profile-service.ts', // makes/removes profile folders under userData
+      'src/main/services/profile-session.ts', // checks the profile database exists
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              // original-fs is Electron's raw fs; module's createRequire can load fs by name.
+              group: ['fs', 'fs/*', 'node:fs', 'node:fs/*', 'original-fs', 'module', 'node:module'],
+              message: FS_MESSAGE,
+            },
+            {
+              group: ['pixi.js', 'pixi.js/*', '@pixi/*'],
+              message: 'Import Pixi only in src/renderer/world/grid-scene.ts (ADR-0011).',
+            },
+          ],
+        },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'ImportExpression[source.value=/^(node:)?(fs|module)([^a-z-]|$)|^original-fs$/]',
+          message: FS_MESSAGE,
+        },
+        {
+          // A computed import (template, concatenation, variable) can't be checked by name.
+          selector: "ImportExpression[source.type!='Literal']",
+          message: 'Main-process code imports modules by a fixed name only (#142).',
+        },
+        {
+          // process.getBuiltinModule('fs') however process is reached (alias, globalThis, ['x']).
+          selector:
+            "MemberExpression[property.name='getBuiltinModule'], MemberExpression[property.value='getBuiltinModule']",
+          message: FS_MESSAGE,
+        },
+        {
+          selector: "MemberExpression[object.name='module'][property.name='require']",
+          message: FS_MESSAGE,
         },
       ],
     },

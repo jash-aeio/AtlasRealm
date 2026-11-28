@@ -2,7 +2,7 @@
 
 > **The handoff between sessions.** Read this first, every session. Update it before handing work back (`/ship` does it). Treat claims here as notes to verify against the code, not as facts.
 
-**Last updated:** 2026-11-27 · **Branch:** docs/61-merged-status (docs only, on main @ 1985bee)
+**Last updated:** 2026-11-28 · **Branch:** fix/142-path-policy-hardening (on main @ 673489d)
 
 ## Current milestone
 **M3 — Bundled resources and permission broker** (⏳ planned 2026-11-25; 24 issues: #111–#131 plus #61, #106, #108). Breakdown: `docs/pm/milestones/M3.md`; graph and lanes: `docs/pm/DEPENDENCIES.md#task-level-m3`.
@@ -234,6 +234,24 @@
   - `pathShapeProblem` refuses, before touching the disk: `..`, relative or other-drive paths, UNC, device paths (`\\.\`, `\\?\`, `CON`, `NUL.txt`), alternate data streams (`a.txt:hid`), trailing dots or spaces, and paths over 4096 characters.
   - `approveRoot` resolves the root with `realpath.native` and keeps both the given and the real path. `resolveInsideRoot` checks containment twice: on the path as written (ASCII case-insensitive) and on the real path Windows resolves (junctions and symlinks followed, compared per segment, so `Root2` is not inside `Root`).
   - `openInsideRoot(root, path, 'read' | 'create')`: `create` never overwrites (`O_EXCL`). After opening, `verifyHandleInsideRoot` re-resolves the path and compares volume + file ID with the open handle, so a link swapped between check and open is refused (`changed_during_use`).
+- **#142 path-policy hardening (in review, branch `fix/142-path-policy-hardening`, ADR-0035, lesson 045):** fixes every finding of the after-merge security review of #119. The module is now ready for callers (M3-12, M3-13, M3-16, M3-18).
+  - **Roots:** `ApprovedRoot` is a frozen class that only `approveRoot` can make (private `#state` plus a module-private token), so hand-built or copied roots are refused (`root_unavailable`). The root folder's volume + file ID are pinned, so a replaced root is refused.
+  - **Broad and sensitive folders (ADR-0035):**
+    - Need `approveRoot(root, { broad: true })`: a drive, home, Documents/Desktop/Downloads, OneDrive, Public, any folder containing one of those, and any folder inside AppData, LocalAppData, ProgramData, Windows or Program Files (`root_too_broad`).
+    - Always refused (`sensitive_folder`), even inside a broad root: credential folders, browser profiles and the Startup folders.
+    - Always refused (`sensitive_file`): `.git-credentials`, `.npmrc`, `.netrc`, `_netrc` and `.pypirc`.
+    - Folders are compared by their written and real forms. The list comes from `defaultSensitiveFolders()`.
+  - **Opening:**
+    - A dangling junction no longer lets `create` build its target outside (`lstat` the first missing name; only `ENOENT` is free).
+    - Files with more than one name are refused (`hard_link`).
+    - A refused create deletes its own file by real path and identity, or reports it through `onLeftover` (kind only, no path).
+    - A root approved by its 8.3 short name accepts long-form paths.
+  - **Building blocks:**
+    - `ensureDirInsideRoot`: one level at a time, re-checked.
+    - `listInsideRoot` and `walkInsideRoot`: `lstat` only. Links are listed as `link` and never entered, and both are bounded with `omittedCount` or `complete`.
+    - `writeFileInsideRoot`: temp file, flush, then a hard-link no-overwrite rename, re-checked.
+  - **Errors** keep only the OS error code (`errno`), never `cause` or a path.
+  - **Lint:** `no-restricted-imports/syntax/properties` in `eslint.config.js` ban `fs`, `original-fs`, `node:module`, `import('fs')` and `process.getBuiltinModule` in `src/main`. Exempt: `security/`, five named storage files, `index.ts`, `profile-service.ts` and `profile-session.ts`.
   - Refusals are `PathPolicyError` with one of 12 `PathRefusal` codes and a fixed message that never contains a path.
 - **Profile and world lists over their limits (#61, merged PR #138 1985bee, no ADR, no lesson):** a restored, imported or hand-edited profile with more than 50 profiles or 100 worlds used to make `profile.list` / `world.list` fail their own output check, and the app opened on an error screen.
   - Both outputs gain `omittedCount`. `profile.list` returns at most 50 in index order and always includes the active profile (`boundedProfiles`). `world.list` returns the first 100 by creation order. Nothing is deleted; create is still refused at the limit. The main log records counts only.
@@ -338,6 +356,7 @@
 
 ## Changed components
 - #61 (PR #138): `src/common/contracts/{profile,world}.ts` (`omittedCount`), `src/main/profiles/profile-service.ts` (`boundedProfiles`), `src/main/ipc/commands/{profile,world}.ts`, `src/renderer/state/{list-limits,session}.ts` (new / changed), `src/renderer/app/MainScreen.tsx`, `src/renderer/onboarding/ProfilePicker.tsx`, `app.css`. Tests: `tests/e2e/list-limits.spec.ts`, `tests/domain/list-limits.test.ts` (new); profile/world contract tests extended.
+- #142 (in review): `src/main/security/path-policy.ts`, `src/main/security/path-policy.test.ts`, `eslint.config.js` (main-process `fs` ban).
 - #119: `src/main/security/path-policy.ts` and `src/main/security/path-policy.test.ts` (new; the tests sit next to the module, as the issue named them).
 - #111: `src/common/security/capabilities.ts` and `src/common/contracts/resource-manifest.ts` (new); `src/common/contracts/display-name.ts` (`.max(…, { abort: true })`, so oversized names skip the character scans). Tests: `tests/security/capabilities.test.ts`, `tests/domain/resource-manifest.test.ts` (new).
 - #80:
@@ -411,6 +430,13 @@
 
 ## Verification
 - #61 (PR #138), 2026-11-27, per the PR: typecheck, lint, format:check pass. Unit/integration 1440/1440. Full E2E 117/117 locally (new: `list-limits.spec.ts`). CI green on the PR (includes E2E and packaged E2E). Reviews on 2026-11-27 (after the PR was opened): security-auditor found nothing blocking (two Low items, unbounded reads, filed as #140); invariant-reviewer re-ran typecheck, lint, 1440/1440, build and `list-limits.spec.ts` (1/1) on the branch: no code violations; the PR body and session log wrongly say omitted worlds can be reached "until others are archived" (no world archive command exists), wording fix requested on the PR but not made before merge; corrected on main afterwards (the session log keeps a dated correction).
+- #142, 2026-11-28, local Windows 11 (NTFS, no Developer Mode), branch `fix/142-path-policy-hardening` (main @ 1985bee):
+  - Checks: typecheck, lint and format:check pass. Unit/integration 1545 passed, 1 skipped.
+  - Path-policy tests: 105 passed, 1 skipped (the file-symlink test needs Developer Mode). The 8.3 tests ran on this machine.
+  - Mutation checks: 22 mutations, one per fix. All were caught except two that end in the same state anyway (the NaN limit clamp, and `ensureDirInsideRoot`'s upfront name check, whose cleanup gives the same result).
+  - security-auditor re-audit with probe scripts on real NTFS folders: all eight #119 findings fixed, no High or Medium. Its seven new Low findings were fixed (details in `docs/sessions/2026-11-27-path-policy-hardening.md`).
+  - Before the PR (2026-11-28): invariant-reviewer found no violations (it re-ran the tests: 105/1 skipped, lint, typecheck). A second security-auditor pass on the two commits made after the audit approved them. Its Low items were handled: the cleanup comment, test name and ADR now state the remaining delete race, and the lint rule also refuses computed `import()`, any `getBuiltinModule` access, `module.require` and `.tsx/.mts/.cts` files in main. Its two Info notes (script-carrying project files such as `.githooks` and `.vscode	asks.json`, and more token files) went to follow-up #145 (needs-decision, blocks M3-13 writes).
+  - No UI or IPC, so no E2E.
 - #119 (PR #137), 2026-11-27, per the PR: typecheck, lint, format:check pass. Unit/integration 1361/1361, 58 new, using real temp folders, junctions and symlinks (the symlink test skips with a reason where symlinks need admin). Mutation checks: removing the file-identity comparison fails the swap-back test; removing the real-path containment fails 4 link-escape tests. No UI or IPC, so no E2E. invariant-reviewer and security-auditor were not run before merge. **security-auditor run after merge (2026-11-27): not ready for callers.** 57 passed, 1 skipped (the symlink test, on a machine without Developer Mode). Probe scripts on real NTFS folders reproduced one High, four Medium and three Low findings; all are in #142.
 - #111, 2026-11-27, local Windows 11, main checkout on `feat/111-resource-manifest` (main @ 20d008f): typecheck, lint, format:check pass. Unit/integration 1431/1431 (128 new). Mutation checks: removing the device-name check failed 4 tests; untagging the path refinement failed 25; skipping the "needed but not declared" check failed 1; dropping `abort` failed the oversized-input test; dropping log escaping failed the log-injection test. All were restored. No UI or IPC change, so no E2E. Reviews: invariant-reviewer clean (it re-ran the tests itself). security-auditor approved with no Critical or High findings; M1 (manifest-asserted origin) and L1–L4 were all fixed before the PR (details in `docs/sessions/2026-11-27-resource-manifest.md`).
 - #108, 2026-11-25, local Windows 11, main checkout on `chore/108-world-hover-flake` (main @ bff3446): typecheck, lint, format:check pass. Unit/integration 1303/1303. `world.spec.ts --repeat-each=20` 380/380 (before the fix the graphics tests passed 140/140 at 20 repeats: the flake couldn't be forced). Root cause shown with a throwaway probe spec (not committed): restoring the window under a still cursor delivered a `pointermove` at the real cursor's window position (screen 528,816 minus content origin 328,173 = 200,643); with `setIgnoreMouseEvents(true)` no stray event arrived and Playwright's moves still updated the readout. Covering or minimizing the window did not drop test input. Full E2E not re-run (only `world.spec.ts` changed). security-auditor not run: one test file and docs.
@@ -595,13 +621,16 @@
 
 ## Known limitations
 - #61: worlds past the first 100 and profiles past the first 50 can't be opened or switched to from the UI (there is no world archive or profile delete yet), and the newest worlds are the ones cut off. Follow-up #139. `world.list` still reads every row before slicing, and `profiles-index.json` is read with no size cap (security Low items, follow-up #140). The over-limit warning is logged on every list call.
-- #119: **not ready for callers** (security review after merge, 2026-11-27; fixes tracked in #142, which blocks M3-12 #122, M3-13 #123, M3-16 #126 and M3-18 #128). Nothing calls the module yet, so nothing is exposed today.
-  - High: a dangling junction (a folder shortcut whose target doesn't exist yet) inside the root makes `create` build an object at the junction's target, outside the root, with no race needed. `resolveMissing` assumes a name `realpath` can't resolve doesn't exist.
-  - `create` opens with `O_CREAT | O_EXCL` before the re-check. If a folder is swapped for a junction in between, the re-check refuses, but the new empty file is left outside the root.
-  - Hard links aren't detected: a hard link inside the root to a file outside it passes `read` (same file ID, real path inside).
-  - `ApprovedRoot` is a plain interface, so any object literal `{ given, real }` passes as approved.
-  - Missing safe building blocks (mkdir, list/walk, temp-then-rename), so callers would fall back to raw `fs`.
-  - Low: the whole drive and the home folder can be approved; `PathPolicyError.cause` keeps full paths; the root's identity isn't pinned.
+- #119: the findings of its after-merge security review are fixed in #142 (in review). Until #142 merges, nothing should call the module.
+- #142:
+  - **Windows race:** a junction planted between the check and a create-only open can still make Windows create its target outside the root. Node can't open "without following links" on Windows. The call is refused (`changed_during_use`) and reported (`unknown_object_created`).
+  - **Listings:** folders can't be listed by handle, so a link swapped out and back during a listing could show names (never contents) from elsewhere.
+  - **Drives without hard links:** `writeFileInsideRoot` refuses on FAT32/exFAT (`inaccessible`).
+  - **Crashed writes:** they can leave `.atlas-*.tmp` files, and nothing sweeps them yet (M3-12).
+  - **Hard-linked files** (pnpm `node_modules`, `.git\objects`) and `.npmrc` can't be read by file tools.
+  - **Not yet wired:** `onLeftover` events aren't connected to an audit log yet (M3-10). Default sensitive folders come from environment variables. The main-process caller must add Electron's `app.getPath('documents'|'desktop'|'downloads')` (Windows folder redirection) and the app's database/secret files (ADR-0035).
+  - **Mixed short/long paths:** an absolute candidate written half in 8.3 short form and half in long form (for example `C:UsersRUNNER~1...atlas-long-name`) matches neither form of the root as written and is refused (`outside_root`). That is safe, but a caller that builds absolute paths should use the root as given or relative paths. CI hits this because its temp folder is `RUNNER~1`.
+  - **Skipped test:** the file-symlink test skips on machines without Developer Mode.
 - #111: the path check is text only. Links, junctions, case clashes and files swapped between check and use must be handled by the loader with `realpath` (M3-2, M3-9). `source` only allows `bundled`, so every imported manifest is refused until imports add their own source type. The scopes listed for capabilities that aren't built yet are best guesses. `manifest.json` size must be capped by the caller before `JSON.parse`.
 - #80: the list-view acceptance test doesn't cover undo, because the Undo/Redo controls (and Ctrl+Z) live in the world view; undo is covered with the world shown. §22.2 #3's "run history remains" can't be tested until runs exist (M4). Frame-gap numbers come from one machine with a ~144 Hz display.
 - #108: only `world.spec.ts` ignores the real mouse. Four other specs that use pointer input (`atlas.spec.ts`, `atlas-connections.spec.ts`, `m2-acceptance.spec.ts`, `placement.spec.ts`) can still be disturbed by someone moving the physical mouse over the test window during a run.
@@ -696,6 +725,7 @@
 
 ## Data/schema changes
 - #61: none (IPC output contracts gain `omittedCount`; no migration, nothing on disk changes).
+- #142: none.
 - #119: none.
 - #111: none (pure contract modules, no migration, no IPC).
 - #80: none.
@@ -723,6 +753,7 @@
 - `userData/profiles-index.json` (M1-2, not in SQLite): `{ schemaVersion: 1, profiles: [{ id, displayName }], lastUsedProfileId }`. Profile folders: `profiles/<default | uuid>/`.
 
 ## Decisions
+- [ADR-0035](../adr/0035-path-policy-hard-links-and-broad-roots.md) (#142): the path policy always refuses hard links; broad roots (drive, home, Documents, anything inside AppData/system folders) need an explicit `broad: true`; credential/browser/Startup folders and credential file names (`.npmrc`, `.git-credentials`, ...) are never usable
 - [ADR-0034](../adr/0034-manifest-version-ranges-and-unavailable-capabilities.md) (M3-1 #111): package references use exact or caret version ranges (our own parser, no dependency); a known capability that isn't built yet is accepted and shown as waiting; `process.execute` is refused in packages; the loader, not the manifest, says whether a package is bundled
 - [ADR-0033](../adr/0033-hidden-unicode-strict-input-lenient-read.md) (#60): names and goals refuse hidden Unicode on input (one shared rule in `src/common/text/hidden-characters.ts`, including the whole U+E0100–U+E01EF range); names read back stay lenient (`normalizeStoredName` for the profile index, `StoredDisplayName` in replies) so older data never locks anyone out
 - [ADR-0032](../adr/0032-connections-ring-layout-session-positions.md) (M2-13 #78): the Connections graph uses our own deterministic ring layout (placed outside, unplaced inside, inner ring turned half a step), no layout library; dragged node positions are session-only with a "Reset layout" button, so §30.6 "preserve manual positions" holds within a session until `graph_view_states` exists
@@ -760,7 +791,16 @@
 - [ADR-0003](../adr/0003-react-flow-realm-atlas.md) confirmed by the M0-5 spike: React Flow for Connections, with selection shared through one store
 
 ## Next task
-- After M3-9 (#119), for M3-12 #122, M3-13 and M3-16: go through `openInsideRoot` / `resolveInsideRoot`, never `fs` directly on a user path. **Do #142 (path-policy hardening) first**: it blocks M3-12, M3-13, M3-16 and M3-18 (see Known limitations). Then decide how `PathRefusal` codes map to IPC error codes and audit records.
+- After #142 (ADR-0035), for M3-12 #122, M3-13 #123, M3-16 #126 and M3-18 #128:
+  - **Use the building blocks, never raw `fs`:** `openInsideRoot`, `writeFileInsideRoot`, `ensureDirInsideRoot`, `listInsideRoot` and `walkInsideRoot`. `resolveInsideRoot` is check-only, and the lint rule bans `fs` in new main files.
+  - **Approve on every operation:** call `approveRoot` from the stored root each time and never store the `ApprovedRoot`.
+  - **Sensitive folders:** pass `sensitiveFolders` that add `app.getPath('documents'|'desktop'|'downloads')` to `broad`, and the app's database/secret files to `forbidden`.
+  - **App-managed folders under userData** are inside `%APPDATA%`, so they need `broad: true` from trusted code only, never from user input.
+  - **Audit:** wire `onLeftover` to the audit log (M3-10).
+  - **Errors:** decide how `PathRefusal` codes (now also `hard_link`, `root_too_broad`, `sensitive_folder`, `sensitive_file`, `not_a_folder`) map to IPC error codes and audit records.
+  - **M3-12:** sweep stale `.atlas-*.tmp` files.
+  - **Before M3-13 lets file tools write:** decide #145 (script-carrying project files such as `.githooks`, `.vscode	asks.json`, and more token files).
+  - **Imports (M3-16):** walk with `walkInsideRoot`, and report `link` and `hardLinked` entries instead of copying them.
 - After #61: any new list command for data that a restore or import can grow must be bounded the same way (limit + `omittedCount`, never fail the output check). Reaching hidden entries is #139.
 - After M3-1 (#111, ADR-0034):
   - **M3-2 #112:** call `parseResourceManifest(raw, 'bundled')` only for files in the app's own resources folder. Cap `manifest.json` at about 64 KiB before `JSON.parse`. Re-check every referenced path on disk with `realpath` and no links. Log `issues` in main only.
