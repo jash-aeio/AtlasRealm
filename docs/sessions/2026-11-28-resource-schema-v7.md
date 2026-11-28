@@ -34,3 +34,25 @@ which package versions a world has installed, and which agents, skills and tools
 
 - An app update that drops a bundled version a world still has installed shows as "missing" in readiness
   (M3-4/M3-5). Copying package files to `packages/<id>/<version>/` is not part of this task.
+
+## What was done
+
+- `24afd69` ADR-0036 and the DATA_MODEL §9.3 rows.
+- `30f585d` Migration 7: six STRICT tables. Composite foreign keys carry the package kind, so agents,
+  skills and tools stay in their own world and of the right kind, and uninstalling a used package is
+  refused by the database itself. Test `storage-migration-v7.test.ts` (16 tests, raw SQL) also checks
+  that no resource table has a secret/credential/token/vault column.
+- `a6d4829` Repositories `resource-package`, `resource-world`, `agent-instance`, `binding`, plus 19 integration
+  tests. Routine choices (no question asked): recording the same id@version with the same digest returns
+  the existing record (a second world installs it); `usersOf` lists what blocks an uninstall, so #115 can
+  name it; a stored capability the app no longer knows is dropped on read (ADR-0033 style); tool bindings
+  refuse capabilities that packages may not use (`process.execute`). The packaged-refusal check was found
+  by a failing test, not planned.
+- E2E: the storage spec also lists applied migrations, which I first missed (fixed in a follow-up commit).
+
+## Verification (2026-11-28, on this branch)
+
+- typecheck, lint, format:check: pass
+- unit/integration: 1580 passed, 1 skipped (70 files)
+- E2E: 117/117 (first run 116/117: the migrations-list miss above, fixed and re-run)
+- packaged E2E: 17/17
