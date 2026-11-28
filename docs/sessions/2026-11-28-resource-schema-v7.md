@@ -50,9 +50,21 @@ which package versions a world has installed, and which agents, skills and tools
   by a failing test, not planned.
 - E2E: the storage spec also lists applied migrations, which I first missed (fixed in a follow-up commit).
 
+## Reviews
+
+- invariant-reviewer: no violations.
+- security-auditor: approve with changes, no High or Critical. Fixed on the branch (`e91afd7`):
+  - M1: `builtin.*` reserved for bundled packages (database CHECK + repository); re-recording must match provenance.
+  - M2: blocked packages can't be installed, recruited or bound. Disabled ones can still be assigned, because DATA_MODEL §10.2 lists "disabled by user" as a readiness reason, not a refusal.
+  - L1: refused and repeated capabilities are dropped on read.
+  - L3: `source_revision` can't hold a URL.
+  - L4: forged non-string input becomes `invalid_input`.
+  - L2 and L5 are rules for later callers, written into ADR-0036 and the status doc's Next task.
+
 ## Verification (2026-11-28, on this branch)
 
 - typecheck, lint, format:check: pass
 - unit/integration: 1580 passed, 1 skipped (70 files)
 - E2E: 117/117 (first run 116/117: the migrations-list miss above, fixed and re-run)
 - packaged E2E: 17/17
+- after the security fixes: unit/integration 1588 passed, 1 skipped; two mutation checks caught; storage + M1 acceptance E2E 6/6 on a fresh build (full E2E and packaged ran before the fixes; CI runs both on the PR)

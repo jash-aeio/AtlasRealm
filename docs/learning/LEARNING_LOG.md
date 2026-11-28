@@ -49,6 +49,7 @@ Your personal trail of what you learned while building Atlas Realm. Each lesson 
 | 043 | [Manifests, allowlists, and "requests are not grants"](lessons/043-manifests-allowlists-and-requests-not-grants.md) | M3 | manifest, allowlist, strict schema, permission request vs grant, named refusal reasons |
 | 044 | [Real paths, junctions and re-checking at use](lessons/044-real-paths-junctions-and-re-checking-at-use.md) | M3 | real path, junction, alternate data stream, device names, TOCTOU re-check |
 | 045 | [Hard links, dangling links and unforgeable tokens](lessons/045-hard-links-dangling-links-and-unforgeable-tokens.md) | M3 | hard link (nlink), dangling link, lstat, capability object, cleanup by identity |
+| 046 | [Keys that carry rules, RESTRICT and CASCADE](lessons/046-keys-that-carry-rules-restrict-and-cascade.md) | M3 | natural vs surrogate key, kind-carrying foreign key, ON DELETE RESTRICT/CASCADE, child FK indexes |
 
 ## Suggested reading order for the docs
 1. `docs/README.md`: the map

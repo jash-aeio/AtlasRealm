@@ -72,6 +72,14 @@ Trashing or archiving a project is a status change, so its agents and bindings s
 reads the schema and fails if one appears. Provider and integration credentials belong to the vault
 and to their own tables (`provider_connections`, `integration_connections`), as opaque references.
 
+### Added after the security review (2026-11-28, before merge)
+Routine, stricter-only fixes (no question asked):
+- `builtin.*` IDs belong to bundled packages and only to them (`CHECK ((source = 'bundled') = (package_id GLOB 'builtin.*'))`, mirrored in the repository), so an imported package can't squat on or pose as a bundled one.
+- Recording an existing id@version must also match its `source` and `review_state`, so a caller can't inherit a trusted record by naming its digest. `source`, `review_state` and the digest must always be set by main (the loader or importer hashes the bytes), never taken from an IPC payload.
+- A `blocked` package can't be installed, recruited or bound. A disabled one can still be assigned and shows as not ready (DATA_MODEL §10.2).
+- `source_revision` is a commit or tag shape (no `:` or `@`), so a clone URL with a credential can't be stored.
+- Reading a tool binding drops unknown, refused (`process.execute`) and repeated capabilities.
+
 ## Consequences
 - Upgrading a world to a new package version is an explicit step that must update the installed row and
   its instances together, in one transaction with `PRAGMA defer_foreign_keys = ON` (the FKs are RESTRICT
@@ -82,6 +90,8 @@ and to their own tables (`provider_connections`, `integration_connections`), as 
   import has to use a new version (§10.4 updates).
 - Adding a new `kind` later means rebuilding `resource_packages` and every table that points at it.
   The `source` and `review_state` lists are already wide enough for imports.
+- A tool binding's `enabled_capabilities` is never authority: the broker (M3-10) authorizes from grants only and may use the binding only to narrow them (binding ∩ grant).
+- Runs (M4) must snapshot the agent and must not reference `agent_instances` with CASCADE. Dismissing an agent that has an active run must be refused by the service.
 - **Signals to revisit:** users want to undo a dismissal, or need two versions of one package in a world.
 
 ## Learning note
