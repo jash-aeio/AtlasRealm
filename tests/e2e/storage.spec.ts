@@ -83,6 +83,7 @@ test('the database lives under userData and its records survive a restart', asyn
       { version: 4 },
       { version: 5 },
       { version: 6 },
+      { version: 7 },
     ]);
   } finally {
     db.close();
