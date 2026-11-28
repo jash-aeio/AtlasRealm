@@ -305,9 +305,14 @@ describe('approveRoot and sensitive folders (SECURITY §13.4)', () => {
   it.skipIf(!IS_WINDOWS)(
     'refuses a temp folder by default (it is inside LOCALAPPDATA)',
     async (ctx) => {
+      // Compared in real (long) form: on CI the temp path is written as C:UsersRUNNER~1...
       const local = process.env['LOCALAPPDATA'];
       const insideLocal =
-        local !== undefined && rootDir.toLowerCase().startsWith(local.toLowerCase() + path.sep);
+        local !== undefined &&
+        realpathSync
+          .native(rootDir)
+          .toLowerCase()
+          .startsWith(realpathSync.native(local).toLowerCase() + path.sep);
       if (!insideLocal) ctx.skip('the temp folder is not inside LOCALAPPDATA on this machine');
       expect(await refusalOf(approveRoot(rootDir))).toBe('root_too_broad');
     },
@@ -698,7 +703,8 @@ describe('openInsideRoot', () => {
   });
 });
 
-describe.skipIf(!IS_WINDOWS)('8.3 short names', () => {
+// Asking PowerShell for a short name can take over 15 s the first time on a CI runner.
+describe.skipIf(!IS_WINDOWS)('8.3 short names', { timeout: 60_000 }, () => {
   /** The Windows short (8.3) form of a folder or file, or undefined if it has none. */
   function shortForm(folder: string, kind: 'Folder' | 'File' = 'Folder'): string | undefined {
     const out = execFileSync(
@@ -732,13 +738,17 @@ describe.skipIf(!IS_WINDOWS)('8.3 short names', () => {
     if (short === undefined) ctx.skip('this volume has no 8.3 short names');
     const shortRoot = await approveRoot(short ?? rootDir, { sensitiveFolders: NO_SENSITIVE });
     expect(shortRoot.given).toBe(path.resolve(short ?? rootDir));
-    const longCandidate = path.join(base, 'Root', 'a.txt');
+    // The fully long form. `base` itself may be partly short: on CI the temp folder is
+    // C:UsersRUNNER~1..., and a mixed short/long path is refused (as written it matches
+    // neither form of the root; safe, and a known limit).
+    const longBase = realpathSync.native(base);
+    const longCandidate = path.join(longBase, 'Root', 'a.txt');
     expect((await resolveInsideRoot(shortRoot, longCandidate)).real).toBe(
       path.join(root.real, 'a.txt'),
     );
-    expect(await refusalOf(resolveInsideRoot(shortRoot, path.join(base, 'Root2', 'x.txt')))).toBe(
-      'outside_root',
-    );
+    expect(
+      await refusalOf(resolveInsideRoot(shortRoot, path.join(longBase, 'Root2', 'x.txt'))),
+    ).toBe('outside_root');
   });
 });
 
