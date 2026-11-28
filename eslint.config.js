@@ -25,7 +25,7 @@ export default defineConfig(
     ],
   },
   {
-    files: ['**/*.{ts,tsx,js,mjs,cjs}'],
+    files: ['**/*.{ts,tsx,mts,cts,js,mjs,cjs}'],
     extends: [js.configs.recommended, tseslint.configs.strictTypeChecked],
     languageOptions: {
       globals: globals.node,
@@ -68,9 +68,9 @@ export default defineConfig(
     // real paths, links and the root at use (SECURITY §13.4, #142). Raw `fs` stays in the policy,
     // the app's own storage, and the few files that only touch app-owned paths.
     // This block replaces the one above for these files, so it repeats the Pixi pattern.
-    files: ['src/main/**/*.ts'],
+    files: ['src/main/**/*.{ts,tsx,mts,cts}'],
     ignores: [
-      'src/main/**/*.test.ts',
+      'src/main/**/*.test.{ts,tsx,mts,cts}',
       'src/main/security/**',
       // The app's own database and profile files (app-owned paths under userData).
       'src/main/storage/app-database.ts',
@@ -106,10 +106,21 @@ export default defineConfig(
             'ImportExpression[source.value=/^(node:)?(fs|module)([^a-z-]|$)|^original-fs$/]',
           message: FS_MESSAGE,
         },
-      ],
-      'no-restricted-properties': [
-        'error',
-        { object: 'process', property: 'getBuiltinModule', message: FS_MESSAGE },
+        {
+          // A computed import (template, concatenation, variable) can't be checked by name.
+          selector: "ImportExpression[source.type!='Literal']",
+          message: 'Main-process code imports modules by a fixed name only (#142).',
+        },
+        {
+          // process.getBuiltinModule('fs') however process is reached (alias, globalThis, ['x']).
+          selector:
+            "MemberExpression[property.name='getBuiltinModule'], MemberExpression[property.value='getBuiltinModule']",
+          message: FS_MESSAGE,
+        },
+        {
+          selector: "MemberExpression[object.name='module'][property.name='require']",
+          message: FS_MESSAGE,
+        },
       ],
     },
   },

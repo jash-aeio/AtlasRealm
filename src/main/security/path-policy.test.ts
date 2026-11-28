@@ -660,7 +660,7 @@ describe('openInsideRoot', () => {
       expect(JSON.stringify(onLeftover.mock.calls)).not.toContain(base);
     });
 
-    it("can't be redirected to delete someone else's file (audit finding 1)", async () => {
+    it('is not redirected by re-pointing the written-path junction (audit finding 1)', async () => {
       // The cleanup checks our file, then the junction is re-pointed before the delete. Deleting
       // by the real path (not through the junction again) still hits only our own file.
       const victim = path.join(base, 'victim');

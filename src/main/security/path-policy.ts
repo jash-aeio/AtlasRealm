@@ -643,10 +643,12 @@ async function isLink(target: string): Promise<boolean> {
  * Deletes a file this module just created, but only if `target` still leads to that exact
  * file (same volume and file ID); otherwise reports it. Used after a refused create (M1).
  *
- * The check and the delete both use the *real* path: every folder in it was a real folder,
- * not a link, when it was resolved. Deleting by the path as written would re-follow any
- * junction on the way, and a junction re-pointed between the check and the delete could
- * redirect the delete to someone else's file.
+ * The check and the delete both use the *real* path, so a junction on the path as written
+ * (for example inside the root) that is re-pointed after the check no longer redirects the
+ * delete. Known limit: Node can't delete through an open handle, so a process that swaps one
+ * of the real path's folders for a junction in the instant between the check and the delete
+ * can still redirect it. That needs exact timing and a process that could delete the file
+ * itself anyway (ADR-0035).
  */
 async function removeOwnFile(
   target: string,
